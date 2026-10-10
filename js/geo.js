@@ -1,0 +1,171 @@
+// Geometry helpers: distances, great-circle arcs, mercator math, polyline encoding.
+
+const R = 6371008.8; // mean Earth radius (m)
+const toRad = (d) => (d * Math.PI) / 180;
+const toDeg = (r) => (r * 180) / Math.PI;
+
+export function haversine(a, b) {
+  const [lng1, lat1] = a, [lng2, lat2] = b;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/** Make a list of [lng,lat] continuous across the antimeridian (no jumps > 180°). */
+export function unwrap(coords) {
+  if (!coords.length) return coords;
+  const out = [[coords[0][0], coords[0][1]]];
+  for (let i = 1; i < coords.length; i++) {
+    let lng = coords[i][0];
+    const prev = out[i - 1][0];
+    while (lng - prev > 180) lng -= 360;
+    while (lng - prev < -180) lng += 360;
+    out.push([lng, coords[i][1]]);
+  }
+  return out;
+}
+
+/** Great-circle arc between two points, n samples. */
+export function greatCircle(a, b, n = 96) {
+  const [lng1, lat1] = a.map(toRad), [lng2, lat2] = b.map(toRad);
+  const d = haversine(a, b) / R;
+  if (d < 1e-9) return [a, b];
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const f = i / n;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(lat1) * Math.cos(lng1) + B * Math.cos(lat2) * Math.cos(lng2);
+    const y = A * Math.cos(lat1) * Math.sin(lng1) + B * Math.cos(lat2) * Math.sin(lng2);
+    const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+    pts.push([toDeg(Math.atan2(y, x)), toDeg(Math.atan2(z, Math.sqrt(x * x + y * y)))]);
+  }
+  return unwrap(pts);
+}
+
+/** A gently curved arc (used for boat / "curve" style) via a quadratic bezier in mercator space. */
+export function curvedLine(a, b, bend = 0.18, n = 64) {
+  const p0 = toMerc(a), p2 = toMerc(unwrap([a, b])[1]);
+  const mx = (p0[0] + p2[0]) / 2, my = (p0[1] + p2[1]) / 2;
+  const dx = p2[0] - p0[0], dy = p2[1] - p0[1];
+  const p1 = [mx - dy * bend, my + dx * bend];
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    pts.push(fromMerc([
+      u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
+      u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1],
+    ]));
+  }
+  return unwrap(pts);
+}
+
+/** Web-mercator normalised coordinates (0..1 per world, x may exceed for unwrapped lng). */
+export function toMerc([lng, lat]) {
+  const clamped = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const x = (lng + 180) / 360;
+  const y = (180 - toDeg(Math.log(Math.tan(Math.PI / 4 + toRad(clamped) / 2)))) / 360;
+  return [x, y];
+}
+export function fromMerc([x, y]) {
+  const lng = x * 360 - 180;
+  const y2 = 180 - y * 360;
+  const lat = toDeg(2 * Math.atan(Math.exp(toRad(y2))) - Math.PI / 2);
+  return [lng, lat];
+}
+
+/** Precompute cumulative lengths for a path so we can sample it by fraction. */
+export function measure(coords) {
+  const cum = [0];
+  for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + haversine(coords[i - 1], coords[i]));
+  return { coords, cum, length: cum[cum.length - 1] || 0 };
+}
+
+/** Point + index at fraction f (0..1) along a measured path. */
+export function sampleAt(m, f) {
+  const { coords, cum, length } = m;
+  if (coords.length === 1 || length === 0) return { point: coords[0], index: 0 };
+  const target = Math.max(0, Math.min(1, f)) * length;
+  let lo = 0, hi = cum.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (cum[mid] <= target) lo = mid; else hi = mid;
+  }
+  const seg = cum[hi] - cum[lo];
+  const t = seg > 0 ? (target - cum[lo]) / seg : 0;
+  const a = coords[lo], b = coords[hi];
+  return { point: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], index: lo };
+}
+
+export function bounds(coords) {
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const [x, y] of coords) {
+    if (x < w) w = x; if (x > e) e = x;
+    if (y < s) s = y; if (y > n) n = y;
+  }
+  return [[w, s], [e, n]];
+}
+
+/** Douglas–Peucker simplification (tolerance in degrees). */
+export function simplify(coords, tol = 0.0002) {
+  if (coords.length <= 2) return coords;
+  const keep = new Uint8Array(coords.length);
+  keep[0] = keep[coords.length - 1] = 1;
+  const stack = [[0, coords.length - 1]];
+  const tol2 = tol * tol;
+  while (stack.length) {
+    const [s, e] = stack.pop();
+    let maxD = 0, idx = -1;
+    const [x1, y1] = coords[s], [x2, y2] = coords[e];
+    const dx = x2 - x1, dy = y2 - y1, len2 = dx * dx + dy * dy;
+    for (let i = s + 1; i < e; i++) {
+      const [px, py] = coords[i];
+      let t = len2 ? ((px - x1) * dx + (py - y1) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const ex = x1 + t * dx - px, ey = y1 + t * dy - py;
+      const d = ex * ex + ey * ey;
+      if (d > maxD) { maxD = d; idx = i; }
+    }
+    if (maxD > tol2 && idx > 0) {
+      keep[idx] = 1;
+      stack.push([s, idx], [idx, e]);
+    }
+  }
+  return coords.filter((_, i) => keep[i]);
+}
+
+/** Google polyline encoding (precision 5) for compact share links. */
+export function encodePolyline(coords) {
+  let out = '', pLat = 0, pLng = 0;
+  const enc = (v) => {
+    v = v < 0 ? ~(v << 1) : v << 1;
+    let s = '';
+    while (v >= 0x20) { s += String.fromCharCode((0x20 | (v & 0x1f)) + 63); v >>= 5; }
+    return s + String.fromCharCode(v + 63);
+  };
+  for (const [lng, lat] of coords) {
+    const la = Math.round(lat * 1e5), ln = Math.round(lng * 1e5);
+    out += enc(la - pLat) + enc(ln - pLng);
+    pLat = la; pLng = ln;
+  }
+  return out;
+}
+export function decodePolyline(str) {
+  const coords = [];
+  let i = 0, lat = 0, lng = 0;
+  const dec = () => {
+    let r = 0, s = 0, b;
+    do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << s; s += 5; } while (b >= 0x20);
+    return r & 1 ? ~(r >> 1) : r >> 1;
+  };
+  while (i < str.length) { lat += dec(); lng += dec(); coords.push([lng / 1e5, lat / 1e5]); }
+  return coords;
+}
+
+export function formatDistance(m) {
+  if (m < 1000) return `${Math.round(m)} m`;
+  if (m < 100000) return `${(m / 1000).toFixed(1)} km`;
+  return `${Math.round(m / 1000).toLocaleString()} km`;
+}

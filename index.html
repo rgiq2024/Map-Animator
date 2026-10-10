@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Map Animator — animated map videos of your trips</title>
+  <meta name="description" content="Make an animated map video of your trip in your browser. Add stops or a GPX track, choose how you travelled, add signs and camera moves, and download an MP4 up to 4K. Free, no account." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23e8553f'/%3E%3Cpath d='M14 46c8-20 14 4 22-12s10-14 14-16' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-dasharray='1 9'/%3E%3Ccircle cx='14' cy='46' r='5' fill='white'/%3E%3Ccircle cx='50' cy='18' r='6' fill='white'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel" id="panel">
+      <header class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="currentColor"/><path d="M14 46c8-20 14 4 22-12s10-14 14-16" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-dasharray="1 9"/><circle cx="14" cy="46" r="5" fill="#fff"/><circle cx="50" cy="18" r="6" fill="#fff"/></svg>
+        </div>
+        <div>
+          <h1>Map Animator</h1>
+          <p>Animated map videos of your trips</p>
+        </div>
+      </header>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="route" role="tab">Route</button>
+        <button class="tab" data-tab="look" role="tab">Look</button>
+        <button class="tab" data-tab="camera" role="tab">Camera</button>
+        <button class="tab" data-tab="video" role="tab">Video</button>
+      </nav>
+
+      <div class="panel-body">
+        <!-- ROUTE -->
+        <section class="tab-page active" data-page="route">
+          <div class="field-row two">
+            <label class="field"><span>Title</span><input id="title" type="text" maxlength="60" placeholder="My trip" /></label>
+            <label class="field"><span>Subtitle</span><input id="subtitle" type="text" maxlength="80" placeholder="Summer 2026" /></label>
+          </div>
+
+          <div class="search">
+            <svg class="search-ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="search" type="search" placeholder="Search a place to add a stop…" autocomplete="off" />
+            <ul class="results" id="results" hidden></ul>
+          </div>
+          <p class="hint">Or click the map to drop a stop. Drag pins to move them, drag cards to reorder.</p>
+
+          <ol class="stops" id="stops"></ol>
+          <div class="empty" id="empty" hidden>
+            <p>No stops yet.</p>
+            <p>Search for a place, click the map, or import a GPX track.</p>
+          </div>
+
+          <div class="route-actions">
+            <button class="btn ghost" id="btn-gpx">Import GPX</button>
+            <button class="btn ghost" id="btn-reverse" title="Reverse the order of stops">Reverse</button>
+            <button class="btn ghost danger" id="btn-clear">Clear</button>
+          </div>
+        </section>
+
+        <!-- LOOK -->
+        <section class="tab-page" data-page="look">
+          <h3>Map style</h3>
+          <div class="styles" id="styles"></div>
+
+          <h3>Route</h3>
+          <div class="field-row two">
+            <label class="field"><span>Line colour</span>
+              <div class="swatches" id="swatches"></div>
+            </label>
+            <label class="field"><span>Line width <output data-out="lineWidth"></output></span>
+              <input type="range" min="2" max="12" step="0.5" data-setting="lineWidth" />
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" data-setting="showUpcoming" /> Show the route ahead as a dashed line</label>
+          <label class="check"><input type="checkbox" data-setting="showIcon" /> Show travel icon (🚗 ✈️ 🚆 …)</label>
+
+          <h3>Signs</h3>
+          <div class="field-row two">
+            <label class="field"><span>Show</span>
+              <select data-setting="signs">
+                <option value="current">Latest stop only</option>
+                <option value="all">All visited stops</option>
+                <option value="none">No signs</option>
+              </select>
+            </label>
+            <label class="field"><span>Style</span>
+              <select data-setting="signStyle">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="color">Route colour</option>
+              </select>
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" data-setting="showTitle" /> Show title card at the start and end</label>
+        </section>
+
+        <!-- CAMERA -->
+        <section class="tab-page" data-page="camera">
+          <h3>Camera move</h3>
+          <div class="seg" id="cam-mode">
+            <button data-cam="follow"><b>Follow</b><small>Tracks the traveller, keeps the leg in view</small></button>
+            <button data-cam="close"><b>Close-up</b><small>Zoomed in on the traveller</small></button>
+            <button data-cam="fit"><b>Whole leg</b><small>Static view per leg</small></button>
+          </div>
+          <p class="hint">You can override the camera for a single leg on the Route tab.</p>
+          <label class="field"><span>Zoom <output data-out="zoomOffset"></output></span>
+            <input type="range" min="-3" max="3" step="0.25" data-setting="zoomOffset" />
+          </label>
+          <label class="field"><span>Tilt <output data-out="pitch"></output></span>
+            <input type="range" min="0" max="60" step="5" data-setting="pitch" />
+          </label>
+
+          <h3>Timing</h3>
+          <label class="field"><span>Travel speed <output data-out="speed"></output></span>
+            <input type="range" min="0.25" max="3" step="0.25" data-setting="speed" />
+          </label>
+          <div class="field-row three">
+            <label class="field"><span>Intro (s)</span><input type="number" min="0" max="10" step="0.5" data-setting="introSeconds" /></label>
+            <label class="field"><span>Each stop (s)</span><input type="number" min="0" max="10" step="0.1" data-setting="stopSeconds" /></label>
+            <label class="field"><span>Ending (s)</span><input type="number" min="0" max="10" step="0.5" data-setting="outroSeconds" /></label>
+          </div>
+        </section>
+
+        <!-- VIDEO -->
+        <section class="tab-page" data-page="video">
+          <h3>Format</h3>
+          <div class="aspects" id="aspects"></div>
+          <div class="field-row two">
+            <label class="field"><span>Resolution</span>
+              <select data-setting="resolution" id="res"></select>
+            </label>
+            <label class="field"><span>Frame rate</span>
+              <select data-setting="fps">
+                <option value="24">24 fps</option>
+                <option value="30">30 fps</option>
+                <option value="60">60 fps</option>
+              </select>
+            </label>
+          </div>
+          <p class="summary" id="video-summary"></p>
+          <button class="btn primary big" id="btn-export">
+            <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 19h16"/></svg>
+            Export video
+          </button>
+          <p class="hint">Rendering happens in your browser, frame by frame, so every frame is sharp. Keep this tab open while it runs.</p>
+
+          <h3>Project</h3>
+          <div class="route-actions">
+            <button class="btn ghost" id="btn-share">Copy share link</button>
+            <button class="btn ghost" id="btn-save">Save .json</button>
+            <button class="btn ghost" id="btn-open">Open file</button>
+          </div>
+        </section>
+      </div>
+
+      <footer class="credits">
+        Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors ·
+        Tiles <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>, Esri ·
+        Routing <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">FOSSGIS OSRM</a> ·
+        Search <a href="https://nominatim.org" target="_blank" rel="noopener">Nominatim</a>
+      </footer>
+    </aside>
+
+    <main class="main">
+      <div class="stage-wrap" id="stage-wrap">
+        <div class="stage" id="stage">
+          <div id="map"></div>
+          <canvas id="overlay"></canvas>
+        </div>
+        <div class="mode-pill" id="mode-pill" hidden>
+          <span>Preview</span>
+          <button id="btn-edit">Edit route</button>
+        </div>
+      </div>
+
+      <div class="transport">
+        <button class="icon-btn" id="btn-restart" title="Back to start">
+          <svg viewBox="0 0 24 24"><path d="M6 5v14M19 5 9 12l10 7z"/></svg>
+        </button>
+        <button class="icon-btn play" id="btn-play" title="Play (space)">
+          <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 4h4v16H7zM13 4h4v16h-4z"/></svg>
+        </button>
+        <div class="scrub">
+          <input type="range" id="scrub" min="0" max="1" step="0.01" value="0" />
+          <div class="markers" id="scrub-markers"></div>
+        </div>
+        <span class="time" id="time">0:00 / 0:00</span>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="export-dlg">
+    <div class="dlg">
+      <h2 id="exp-title">Rendering video…</h2>
+      <canvas id="exp-preview"></canvas>
+      <div class="bar"><div id="exp-bar"></div></div>
+      <p id="exp-status">Preparing…</p>
+      <div class="dlg-actions">
+        <button class="btn ghost" id="exp-cancel">Cancel</button>
+        <a class="btn primary" id="exp-download" hidden>Download</a>
+      </div>
+    </div>
+  </dialog>
+
+  <input type="file" id="file" accept=".gpx,.json,application/gpx+xml,application/json" hidden />
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
