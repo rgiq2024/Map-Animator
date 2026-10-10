@@ -1,6 +1,8 @@
-# Map Animator
+# GIS One Map Animator
 
-Turn your trip into an animated map video, right in the browser. Draw your route or drop in a GPX file, choose how you travelled each leg, add signs and a camera move, and download an MP4 — up to 4K. Free, no account, nothing uploaded.
+Turn your map into an animated map video, right in the browser. Draw your route or drop in a GPX file, choose how you travelled each leg, add signs and a camera move, and download an MP4 — up to 4K. Free, no account, nothing uploaded.
+
+Map creator by – **Rahul Gawai** · GIS One Mapping Lab
 
 **Live app:** https://rgiq2024.github.io/Map-Animator/
 

@@ -21,7 +21,7 @@ async function route() {
     if (!p) { toast('That project is not in this browser'); location.hash = '#/'; return; }
     home.hide();
     $('#editor').hidden = false;
-    document.title = `${p.name} — Map Animator`;
+    document.title = `${p.name} — GIS One Map Animator`;
     const opts = pendingOpts;
     pendingOpts = {};
     await editor.open(p, opts);

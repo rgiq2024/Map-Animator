@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 370 300">
+  <g font-family="Montserrat, Arial, sans-serif" font-weight="500" text-anchor="middle">
+    <rect x="24" y="10" width="100" height="86" fill="#fff"/><text x="74" y="83" font-size="78" fill="#111">G</text>
+    <rect x="135" y="10" width="100" height="86" fill="#fff"/><text x="185" y="83" font-size="78" fill="#111">I</text>
+    <rect x="246" y="10" width="100" height="86" fill="#fff"/><text x="296" y="83" font-size="78" fill="#111">S</text>
+  </g>
+  <g transform="translate(6 104) scale(1.12)">
+    <defs>
+      <mask id="gap2">
+        <rect width="128" height="128" fill="#fff"/>
+        <path d="M92 118C85 104 72 95 72 82a20 20 0 1 1 40 0c0 13-13 22-20 36z" fill="#000" stroke="#000" stroke-width="10" stroke-linejoin="round"/>
+      </mask>
+    </defs>
+    <g fill="none" stroke="#f2f2f2" stroke-width="7" mask="url(#gap2)">
+      <circle cx="58" cy="62" r="52"/>
+      <ellipse cx="58" cy="62" rx="24" ry="52"/>
+      <path d="M58 10v104M8 44h100M6 62h104M8 80h100"/>
+    </g>
+    <path fill="#f2f2f2" fill-rule="evenodd" d="M92 118C85 104 72 95 72 82a20 20 0 1 1 40 0c0 13-13 22-20 36zM92 74a8 8 0 1 0 0.01 0z"/>
+  </g>
+  <text x="152" y="244" font-family="Montserrat, Arial, sans-serif" font-weight="400" font-size="150" fill="#f2f2f2" letter-spacing="2">NE</text>
+  <text x="185" y="290" font-family="Montserrat, Arial, sans-serif" font-weight="400" font-size="26" fill="#f2f2f2" text-anchor="middle" letter-spacing="13">Mapping Lab</text>
+</svg>

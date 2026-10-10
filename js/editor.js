@@ -10,7 +10,7 @@ import { createTimeline } from './timeline-ui.js';
 import { gradeFilter, drawGradeWash, GRADE_PRESETS, presetGrade, defaultGrade } from './effects.js';
 import { NORTH_STYLES, NORTH_MODES, CORNERS, defaultNorth, defaultScaleBar } from './hud.js';
 import { EASE_NAMES } from './scene.js';
-import { parseCSVPoints } from './layers.js';
+import { parseCSVPoints, FONTS, loadFonts } from './layers.js';
 import { addAudioFile, mixProject, playFrom, stopPlayback, startRecording, stopRecording, isRecording } from './audio.js';
 import { projectFileJSON, deleteMedia } from './store.js';
 import { drawDepthOfField, drawVignette } from './effects.js';
@@ -1092,12 +1092,15 @@ export function createEditor() {
       if (s.marker === 'image') h += `<div class="btn-row"><button class="btn sm" data-act="markerImg">${s.image ? 'Change image…' : 'Choose image…'}</button><span class="muted small">PNG with see-through background works best</span></div>`;
       h += fRow('Colour', fColor('style.color', s.color)) + fRow('Size', fRange('style.size', s.size, 0.4, 3, 0.05)) + fRow('Effect', fSel('style.effect', s.effect, EFFECTS));
       h += `<label class="field"><span>Label</span>${fText('style.label', s.label, 'Optional text next to it')}</label>`;
+      h += fRow('Label font', fSel('style.font', s.font || '', FONTS));
     } else if (L.kind === 'label') {
       h += `<label class="field"><span>Text</span>${fText('style.text', s.text)}</label>`;
+      h += fRow('Font', fSel('style.font', s.font || '', FONTS));
       h += fRow('Size', fRange('style.size', s.size, 10, 90, 1)) + fRow('Colour', fColor('style.color', s.color)) + fRow('Outline', fColor('style.halo', s.halo || '#000000'));
       h += fRow('Weight', fSel('style.weight', s.weight, { 500: 'Regular', 700: 'Bold', 900: 'Black' })) + fRow('CAPITALS', fSw('style.upper', s.upper)) + fRow('Italic', fSw('style.italic', s.italic));
     } else if (L.kind === 'caption') {
       h += `<label class="field"><span>Text</span>${fText('style.text', s.text)}</label><label class="field"><span>Second line</span>${fText('style.sub', s.sub, 'Optional')}</label>`;
+      h += fRow('Font', fSel('style.font', s.font || '', FONTS));
       h += fRow('Layout', fSel('style.layout', s.layout, CAPTION_LAYOUTS));
       if (!['lowerThird', 'band'].includes(s.layout)) h += fRow('Position', fSel('style.position', s.position, POSITIONS));
       h += fRow('Accent', fColor('style.accent', s.accent)) + fRow('Size', fRange('style.size', s.size || 1, 0.6, 1.8, 0.05));
@@ -1141,6 +1144,7 @@ export function createEditor() {
       layerEditTimer = setTimeout(() => { L.duration = Math.max(0.05, +L.duration || 0.05); L.start = Math.max(0, +L.start || 0); L.hold = Math.max(0, +L.hold || 0); commitLayers(); }, 250);
       return;
     }
+    if (key === 'style.font') loadFonts(scene()).then(repaint);
     floods?.update(scene(), viewMode === 'play' ? time : null);
     renderLayerList();
     repaint();
@@ -1609,10 +1613,13 @@ export function createEditor() {
       $('#se-at-row').hidden = sg.appear !== 'time';
       $('#se-at').value = (+sg.at || model.signTimes[i] || 0).toFixed(2);
       $('#se-type').value = sg.type;
+      $('#se-font').value = sg.font || '';
     }
     renderSignList();
     repaint();
   }
+  $('#se-font').innerHTML = Object.entries(FONTS).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
+  $('#se-font').addEventListener('change', (e) => { editSign((sg) => { if (e.target.value) sg.font = e.target.value; else delete sg.font; }, true); loadFonts(scene()).then(repaint); });
   $('#se-type').innerHTML = Object.entries(SIGN_TYPES).map(([k, t]) => `<option value="${k}">${t.name}</option>`).join('');
   const editSign = (fn, undoable = false) => {
     const sg = scene().signs[selSign];
@@ -2236,7 +2243,7 @@ export function createEditor() {
     try {
       const blob = await renderStill({
         map, width, height,
-        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); await preloadSignImages(s2.signs); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
+        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 }); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2) => gradeFilter(s2.look.grade),
         drawFrame: (ctx, s2, m, tt) => {
@@ -2313,6 +2320,7 @@ export function createEditor() {
           floods.clear();
           await floods.sync(sc);
           await preloadSignImages(sc.signs);
+          await loadFonts(sc);
           bldFactor = null;
           expScene = sc;
           return buildScene(sc, frame.w, frame.h);
@@ -2416,6 +2424,7 @@ export function createEditor() {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(tick);
       floods.sync(scene()).then(() => applyTimeEffects(null));
+      loadFonts(scene()).then(repaint);
       renderCamSelects();
       if (opts.importFile) await importRoute(opts.importFile);
       return this;

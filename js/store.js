@@ -74,7 +74,7 @@ export function newProject(name) {
 
 /** Validate/normalise a project loaded from a file. */
 export function normalizeProject(p) {
-  if (!p || !Array.isArray(p.scenes)) throw new Error('This is not a Map Animator project file');
+  if (!p || !Array.isArray(p.scenes)) throw new Error('This is not a GIS One Map Animator project file');
   const base = newProject(p.name);
   const out = { ...base, ...p, id: newId() };
   out.scenes = p.scenes.map((sc, i) => {

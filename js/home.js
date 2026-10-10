@@ -199,7 +199,7 @@ export function createHome({ open }) {
   function stopDemo() { running = false; cancelAnimationFrame(raf); }
 
   return {
-    show() { $('#home').hidden = false; renderProjects(); startDemo(); document.title = 'Map Animator — animated map videos of your trips'; },
+    show() { $('#home').hidden = false; renderProjects(); startDemo(); document.title = 'GIS One Map Animator — animated map videos'; },
     hide() { $('#home').hidden = true; stopDemo(); },
   };
 }

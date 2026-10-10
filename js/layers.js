@@ -20,6 +20,26 @@ const bounceOut = (u) => {
   return n * (u -= 2.625 / d) * u + 0.984375;
 };
 
+// ------------------------------------------------------------------ fonts
+export const FONTS = {
+  '': 'Default',
+  Archivo: 'Archivo', Inter: 'Inter', Montserrat: 'Montserrat', Poppins: 'Poppins', Raleway: 'Raleway', 'Space Grotesk': 'Space Grotesk',
+  Oswald: 'Oswald (condensed)', 'Bebas Neue': 'Bebas Neue (tall caps)', Anton: 'Anton (heavy)',
+  'Playfair Display': 'Playfair Display (serif)', Merriweather: 'Merriweather (serif)', Lora: 'Lora (serif)', 'Roboto Slab': 'Roboto Slab', Cinzel: 'Cinzel (classic)',
+  Lobster: 'Lobster (script)', Pacifico: 'Pacifico (script)', 'Dancing Script': 'Dancing Script', Caveat: 'Caveat (handwritten)', 'Permanent Marker': 'Permanent Marker', 'Special Elite': 'Special Elite (typewriter)',
+  Cairo: 'Cairo (العربية)', Tajawal: 'Tajawal (العربية)', 'Noto Sans Devanagari': 'Noto Sans Devanagari (हिन्दी / मराठी)', 'Noto Sans': 'Noto Sans (many scripts)',
+};
+/** CSS font-family for a chosen font, with a sensible fallback. */
+export const fam = (font, fallback) => (font ? `"${font}", ${fallback}` : fallback);
+/** Make sure every font used in a scene is downloaded before drawing it on canvas. */
+export async function loadFonts(scene) {
+  if (!document.fonts?.load) return;
+  const want = new Set(['Archivo', 'Inter', 'Caveat']);
+  for (const L of scene.layers || []) if (L.style?.font) want.add(L.style.font);
+  for (const sg of scene.signs || []) if (sg.font) want.add(sg.font);
+  await Promise.all([...want].flatMap((f) => [`400 24px "${f}"`, `700 24px "${f}"`, `900 24px "${f}"`].map((spec) => document.fonts.load(spec).catch(() => {}))));
+}
+
 // ------------------------------------------------------------------ catalogue
 export const LAYER_KINDS = {
   boundary: { name: 'Boundary', icon: '⬡', geom: 'polygon', desc: 'Outline of a country, city or any region' },
@@ -572,7 +592,7 @@ function drawPointLayer(ctx, L, tm, proj, unit) {
   if (s.label) {
     ctx.save();
     ctx.globalAlpha = alpha * (L.anim === 'none' || tm.edit ? 1 : clamp((tm.u - 0.3) / 0.7, 0, 1));
-    ctx.font = `700 ${15 * size}px ${UI}`;
+    ctx.font = `700 ${15 * size}px ${fam(s.font, UI)}`;
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
     const lx = px + (m === 'emoji' ? 20 : m === 'target' ? 30 : 16) * size, ly = py + dy + (m === 'pin' ? -20 * size : 0);
@@ -605,7 +625,7 @@ function drawLabelLayer(ctx, L, tm, proj, unit, tokens) {
   ctx.globalAlpha = alpha;
   ctx.translate(x, y + dy);
   ctx.scale(scale, scale);
-  ctx.font = `${s.italic ? 'italic ' : ''}${s.weight || 800} ${(+s.size || 24) * unit}px ${DISPLAY}`;
+  ctx.font = `${s.italic ? 'italic ' : ''}${s.weight || 800} ${(+s.size || 24) * unit}px ${fam(s.font, DISPLAY)}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
@@ -642,11 +662,12 @@ function drawCaption(ctx, L, tm, frame, unit, tokens) {
   if (alpha <= 0) return;
   const layout = s.layout || 'lowerThird';
   const M = 34 * unit;
+  const D = fam(s.font, DISPLAY), U = fam(s.font, UI);
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textBaseline = 'alphabetic';
   if (layout === 'lowerThird') {
-    const f1 = `800 ${30 * k * unit}px ${DISPLAY}`, f2 = `500 ${17 * k * unit}px ${UI}`;
+    const f1 = `800 ${30 * k * unit}px ${D}`, f2 = `500 ${17 * k * unit}px ${U}`;
     ctx.font = f1; const w1 = ctx.measureText(text).width;
     ctx.font = f2; const w2 = sub ? ctx.measureText(sub).width : 0;
     const w = Math.max(w1, w2) + 44 * unit, h = (sub ? 82 : 58) * k * unit;
@@ -673,14 +694,14 @@ function drawCaption(ctx, L, tm, frame, unit, tokens) {
     ctx.fillRect(frame.x + (frame.w - ww) / 2, y, ww, h);
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
-    ctx.font = `800 ${30 * k * unit}px ${DISPLAY}`;
+    ctx.font = `800 ${30 * k * unit}px ${D}`;
     ctx.fillText(text, frame.x + frame.w / 2, y + 42 * k * unit);
-    if (sub) { ctx.font = `500 ${17 * k * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText(sub, frame.x + frame.w / 2, y + 72 * k * unit); }
+    if (sub) { ctx.font = `500 ${17 * k * unit}px ${U}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText(sub, frame.x + frame.w / 2, y + 72 * k * unit); }
   } else {
     // title / card / plain at a position
     const big = layout === 'title';
-    const f1 = `${big ? 900 : 800} ${(big ? 58 : 30) * k * unit}px ${DISPLAY}`;
-    const f2 = `500 ${(big ? 22 : 16) * k * unit}px ${UI}`;
+    const f1 = `${big ? 900 : 800} ${(big ? 58 : 30) * k * unit}px ${D}`;
+    const f2 = `500 ${(big ? 22 : 16) * k * unit}px ${U}`;
     ctx.font = f1; const w1 = ctx.measureText(text).width;
     ctx.font = f2; const w2 = sub ? ctx.measureText(sub).width : 0;
     const lh1 = (big ? 62 : 34) * k * unit, lh2 = sub ? (big ? 32 : 24) * k * unit : 0;

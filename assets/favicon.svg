@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="26" fill="#1e1e1e"/>
+  <g transform="translate(10 8) scale(0.86)">
+    <defs><mask id="g"><rect width="128" height="128" fill="#fff"/><path d="M92 118C85 104 72 95 72 82a20 20 0 1 1 40 0c0 13-13 22-20 36z" fill="#000" stroke="#000" stroke-width="10" stroke-linejoin="round"/></mask></defs>
+    <g fill="none" stroke="#f2f2f2" stroke-width="7" mask="url(#g)"><circle cx="58" cy="62" r="52"/><ellipse cx="58" cy="62" rx="24" ry="52"/><path d="M58 10v104M8 44h100M6 62h104M8 80h100"/></g>
+    <path fill="#ff6b35" fill-rule="evenodd" d="M92 118C85 104 72 95 72 82a20 20 0 1 1 40 0c0 13-13 22-20 36zM92 74a8 8 0 1 0 0.01 0z"/>
+  </g>
+</svg>

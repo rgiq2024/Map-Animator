@@ -20,7 +20,8 @@ export const SIGN_TYPES = {
   custom:   { name: 'Your own',        desc: 'Your own picture standing on the map: an SVG, or a PNG with a see-through background', text: '', image: true },
 };
 
-const UI = '"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif';
+const UI0 = '"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif';
+let UI = UI0; // replaced by the sign's own font while it is drawn
 const HAND = '"Caveat","Segoe Print","Bradley Hand",cursive';
 const SERIF = 'Georgia,"Times New Roman",serif';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -440,6 +441,7 @@ const DRAW = {
 export function drawSign(ctx, sg, x, y, s, k = 1) {
   const fn = DRAW[sg.type] || DRAW.board;
   if (k <= 0) return null;
+  UI = sg.font ? `"${sg.font}", ${UI0}` : UI0;
   ctx.save();
   if (k < 1) {
     const sc = Math.max(0.001, easeOutBack(k));
@@ -450,6 +452,7 @@ export function drawSign(ctx, sg, x, y, s, k = 1) {
   }
   const bbox = fn(ctx, sg, x, y, s);
   ctx.restore();
+  UI = UI0;
   return bbox;
 }
 

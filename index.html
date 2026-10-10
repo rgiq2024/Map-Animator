@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Map Animator — animated map videos of your trips</title>
-  <meta name="description" content="Make an animated map video of your trip in your browser. Draw your route or use a GPX file, add signs, legs and camera moves, and download an MP4 up to 4K. Free, no account." />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ff6b35'/%3E%3Cpath d='M12 48C22 20 34 44 52 16' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M44 14l10 1-3 10z' fill='white'/%3E%3C/svg%3E" />
+  <title>GIS One Map Animator — animated map videos</title>
+  <meta name="description" content="GIS One Map Animator — make an animated map video in your browser. Draw your route or use a GPX file, add signs, legs and camera moves, and download an MP4 up to 4K. Free, no account." />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&family=Caveat:wght@600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&family=Caveat:wght@600;700&family=Montserrat:wght@400;500;700;900&family=Poppins:wght@400;600;800&family=Oswald:wght@400;600&family=Bebas+Neue&family=Anton&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Merriweather:wght@400;700&family=Lora:ital,wght@0,500;0,700;1,500&family=Roboto+Slab:wght@400;700&family=Raleway:wght@400;700;900&family=Space+Grotesk:wght@500;700&family=Cinzel:wght@500;800&family=Lobster&family=Pacifico&family=Dancing+Script:wght@600;700&family=Permanent+Marker&family=Special+Elite&family=Cairo:wght@400;700;900&family=Tajawal:wght@400;700;900&family=Noto+Sans+Devanagari:wght@400;700&family=Noto+Sans:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="css/app.css" />
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
@@ -19,21 +19,20 @@
 <div id="home" class="view home">
   <header class="site-header">
     <a class="brand" href="#/">
-      <span class="brand-mark"><svg viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="currentColor"/><path d="M12 48C22 20 34 44 52 16" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M44 14l10 1-3 10z" fill="#fff"/></svg></span>
-      <span>Map Animator</span>
+      <img class="brand-logo" src="assets/logo-transparent.svg" alt="GIS One Mapping Lab" />
+      <span class="brand-text"><b>GIS One</b> Map Animator</span>
     </a>
     <nav>
       <button class="link" data-modal="help-modal">How to</button>
       <button class="link" data-modal="faq-modal">FAQ</button>
       <button class="link" data-modal="about-modal">About</button>
-      <a class="link" href="https://github.com/rgiq2024/Map-Animator" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </header>
 
   <section class="hero">
     <div class="hero-copy">
       <p class="eyebrow">Animated map videos for travel films</p>
-      <h1>Turn your trip into an animated map video</h1>
+      <h1>Turn your map into an animated map video</h1>
       <p class="lede">Draw your route or drop in a GPX file, add signs and a camera move, and download it as an MP4 video, up to 4K, ready for your editor.</p>
       <form class="create" id="create-form" autocomplete="off">
         <input id="create-name" type="text" maxlength="60" placeholder="Name your project, e.g. Alps by motorcycle" />
@@ -43,6 +42,7 @@
       <ul class="checks">
         <li>Free</li><li>No account</li><li>MP4 video up to 4K</li>
       </ul>
+      <p class="credit">Map creator by – <b>Rahul Gawai</b></p>
     </div>
     <div class="hero-demo">
       <div class="demo-frame">
@@ -69,6 +69,7 @@
   </section>
 
   <footer class="site-footer">
+    <p class="credit">GIS One Map Animator · Map creator by – <b>Rahul Gawai</b></p>
     Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · Tiles <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · Imagery Esri · Terrain AWS Terrain Tiles · Search <a href="https://nominatim.org" target="_blank" rel="noopener">Nominatim</a> · Routing <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">FOSSGIS OSRM</a>
   </footer>
   <div class="drop-veil" id="drop-veil"><div>Drop your project or route file</div></div>
@@ -78,7 +79,7 @@
 <div id="editor" class="view editor" hidden>
   <header class="ed-top">
     <div class="ed-project">
-      <a class="back" href="#/">← Projects</a>
+      <a class="back" href="#/"><img class="ed-logo" src="assets/favicon.svg" alt="" /> ← Projects</a>
       <input id="project-name" class="project-name" maxlength="60" aria-label="Project name" />
     </div>
     <div class="ed-scenes">
@@ -275,6 +276,7 @@
             <div class="btn-row"><button class="btn sm" id="se-image-btn">Choose image…</button><span class="muted small" id="se-image-name"></span></div>
           </div>
           <label class="field"><span>Style</span><select id="se-type"></select></label>
+          <label class="field"><span>Font</span><select id="se-font"></select></label>
           <label class="row" id="se-flip-row"><span>Point left</span><input type="checkbox" class="switch" id="se-flip" /></label>
           <label class="row" id="se-at-row"><span>Appears at (s)</span><input type="number" step="0.1" min="0" id="se-at" /></label>
           <label class="field"><span>Appears</span>
@@ -608,8 +610,9 @@
 <dialog class="modal" id="about-modal">
   <div class="modal-head"><h3>About</h3><button class="icon-x" data-close>✕</button></div>
   <div class="prose">
-    <p>Map Animator is an open-source tool for making animated travel maps. It runs entirely in your browser using MapLibre GL, OpenStreetMap data via OpenFreeMap, Esri imagery, AWS terrain tiles, Nominatim search and FOSSGIS OSRM routing.</p>
-    <p>Source code: <a href="https://github.com/rgiq2024/Map-Animator" target="_blank" rel="noopener">github.com/rgiq2024/Map-Animator</a></p>
+    <p class="about-logo"><img src="assets/logo.svg" alt="GIS One Mapping Lab" width="200" /></p>
+    <p><b>GIS One Map Animator</b> is a tool for making animated maps. It runs entirely in your browser using MapLibre GL, OpenStreetMap data via OpenFreeMap, Esri imagery, AWS terrain tiles, Nominatim search and FOSSGIS OSRM routing.</p>
+    <p>Map creator by – <b>Rahul Gawai</b> · GIS One Mapping Lab</p>
   </div>
 </dialog>
 
