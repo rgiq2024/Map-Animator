@@ -169,3 +169,58 @@ export function formatDistance(m) {
   if (m < 100000) return `${(m / 1000).toFixed(1)} km`;
   return `${Math.round(m / 1000).toLocaleString()} km`;
 }
+
+/**
+ * Smooth path through control points [{lng,lat,sharp}] (Catmull-Rom in mercator space).
+ * Sharp points get straight lines on both sides. Air legs use great-circle arcs.
+ * Returns { coords, seg } where seg[i] is the control-segment index of coords[i].
+ */
+export function smoothPath(points, { air = false, smooth = true } = {}) {
+  if (!points.length) return { coords: [], seg: [] };
+  const ll = unwrap(points.map((p) => [p.lng, p.lat]));
+  if (points.length === 1) return { coords: [ll[0]], seg: [0] };
+  const coords = [ll[0]];
+  const seg = [0];
+  if (air) {
+    for (let i = 0; i < ll.length - 1; i++) {
+      const gc = greatCircle(ll[i], ll[i + 1], 64);
+      // keep continuity with already-unwrapped coordinates
+      const shift = Math.round((ll[i][0] - gc[0][0]) / 360) * 360;
+      for (let k = 1; k < gc.length; k++) { coords.push([gc[k][0] + shift, gc[k][1]]); seg.push(i); }
+    }
+    return { coords, seg };
+  }
+  const m = ll.map(toMerc);
+  const n = m.length;
+  for (let i = 0; i < n - 1; i++) {
+    const p1 = m[i], p2 = m[i + 1];
+    const straight = !smooth || (points[i].sharp && points[i + 1].sharp);
+    if (straight) { coords.push(ll[i + 1]); seg.push(i); continue; }
+    const p0 = i > 0 && !points[i].sharp ? m[i - 1] : [2 * p1[0] - p2[0], 2 * p1[1] - p2[1]];
+    const p3 = i < n - 2 && !points[i + 1].sharp ? m[i + 2] : [2 * p2[0] - p1[0], 2 * p2[1] - p1[1]];
+    const steps = 24;
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps, t2 = t * t, t3 = t2 * t;
+      const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      coords.push(s === steps ? ll[i + 1] : fromMerc([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]));
+      seg.push(i);
+    }
+  }
+  return { coords, seg };
+}
+
+/** Length of a path in web-mercator units (for screen-proportional timing). */
+export function mercLength(coords) {
+  let s = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const a = toMerc(coords[i - 1]), b = toMerc(coords[i]);
+    s += Math.hypot(b[0] - a[0], b[1] - a[1]);
+  }
+  return s;
+}
+
+/** Heading in degrees (screen, 0 = east, clockwise) between two lng/lat points. */
+export function screenHeading(a, b) {
+  const ma = toMerc(a), mb = toMerc(b);
+  return (Math.atan2(mb[1] - ma[1], mb[0] - ma[0]) * 180) / Math.PI;
+}
