@@ -1,11 +1,12 @@
 // Draws a scene (route line, travel symbol, signs, compass, editing handles) on a 2D canvas over the map.
 import { sampleAt } from './geo.js';
 import { drawSign } from './signs.js';
+import { drawLayers, layerHandles } from './layers.js';
 
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-function projector(map, px, ox = 0, oy = 0) {
+export function projector(map, px, ox = 0, oy = 0) {
   const c = map.getCenter().lng;
   const worldPx = 512 * 2 ** map.getZoom() * px;
   const fn = ([lng, lat]) => {
@@ -144,6 +145,19 @@ function drawCompass(ctx, frame, bearing, unit) {
   ctx.restore();
 }
 
+/** Values for {km} / {mi} in texts: distance travelled so far. */
+export function tokensAt(model, time) {
+  const st = time == null ? null : model.stateAt(time);
+  const m = st ? st.drawn : model.routeLen;
+  return { km: (m / 1000).toFixed(m < 100000 ? 1 : 0), mi: (m / 1609.344).toFixed(m < 160934 ? 1 : 0) };
+}
+
+/** On-screen captions (drawn last, above lens effects). */
+export function renderCaptions(ctx, o) {
+  const proj = projector(o.map, o.px, o.ox || 0, o.oy || 0);
+  drawLayers(ctx, { scene: o.scene, proj, unit: o.unit, time: o.time, frame: o.frame, tokens: tokensAt(o.model, o.time) }, 'captions');
+}
+
 /**
  * @param o.map MapLibre map, already positioned
  * @param o.model buildScene() result
@@ -161,8 +175,11 @@ export function renderScene(ctx, o) {
   const proj = projector(map, px, o.ox || 0, o.oy || 0);
   const w = (+look.lineWidth || 5) * unit;
   const st = time == null ? null : model.stateAt(time);
-  const out = { signBoxes: [], legBadges: [], handles: [] };
+  const out = { signBoxes: [], legBadges: [], handles: [], layerHandles: [], proj };
   const edit = o.edit;
+  const tokens = o.tokens || tokensAt(model, time);
+  const lo = { scene, proj, unit, time, frame: o.frame, tokens };
+  drawLayers(ctx, lo, 'below');
 
   // ---- route lines ----
   for (const L of model.drawable) {
@@ -232,6 +249,49 @@ export function renderScene(ctx, o) {
         out.handles.push({ li, i, x, y });
       });
     });
+  }
+
+  drawLayers(ctx, lo, 'above');
+
+  // ---- editing: handles of the selected layer ----
+  if (edit && edit.step === 'layers' && edit.selLayer) {
+    const L = (scene.layers || []).find((x) => x.id === edit.selLayer);
+    const dpr = edit.dpr || 1;
+    for (const h of layerHandles(L, proj)) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(h.p[0] - 5 * dpr, h.p[1] - 5 * dpr, 10 * dpr, 10 * dpr);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.lineWidth = 2 * dpr;
+      ctx.strokeStyle = '#2d7ff9';
+      ctx.stroke();
+      ctx.restore();
+      out.layerHandles.push({ id: L.id, ring: h.ring, i: h.i, x: h.p[0], y: h.p[1] });
+    }
+  }
+  // drawing in progress
+  if (edit && edit.drawing && edit.drawing.coords.length) {
+    const dpr = edit.dpr || 1;
+    const pts = edit.drawing.coords.map(proj);
+    if (edit.drawing.hover) pts.push(proj(edit.drawing.hover));
+    ctx.save();
+    ctx.setLineDash([6 * dpr, 4 * dpr]);
+    ctx.strokeStyle = '#2d7ff9';
+    ctx.lineWidth = 2.5 * dpr;
+    ctx.fillStyle = 'rgba(45,127,249,0.12)';
+    ctx.beginPath();
+    pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    if (edit.drawing.polygon && pts.length > 2) { ctx.closePath(); ctx.fill(); }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    edit.drawing.coords.forEach((c, i) => {
+      const p = proj(c);
+      ctx.beginPath(); ctx.arc(p[0], p[1], (i === 0 ? 6 : 4.5) * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = i === 0 ? '#2d7ff9' : '#fff'; ctx.fill();
+      ctx.strokeStyle = '#2d7ff9'; ctx.lineWidth = 2 * dpr; ctx.stroke();
+    });
+    ctx.restore();
   }
 
   // ---- signs ----

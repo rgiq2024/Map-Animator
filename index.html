@@ -95,11 +95,18 @@
   <div class="ed-bar">
     <nav class="stepper" id="stepper">
       <button data-step="route"><i>1</i>Route</button>
-      <button data-step="look"><i>2</i>Look</button>
-      <button data-step="signs"><i>3</i>Signs</button>
-      <button data-step="camera"><i>4</i>Camera</button>
-      <button data-step="export"><i>5</i>Preview &amp; export</button>
+      <button data-step="layers"><i>2</i>Layers</button>
+      <button data-step="look"><i>3</i>Look</button>
+      <button data-step="signs"><i>4</i>Signs</button>
+      <button data-step="camera"><i>5</i>Camera</button>
+      <button data-step="export"><i>6</i>Preview &amp; export</button>
     </nav>
+    <div class="bar-right">
+    <label class="res-select" title="Video resolution">
+      <select id="resolution-top">
+        <option value="480">SD 480p</option><option value="720">HD 720p</option><option value="1080">Full HD 1080p</option><option value="1440">2K 1440p</option><option value="2160">4K 2160p</option>
+      </select>
+    </label>
     <label class="aspect-select">
       <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/></svg>
       <select id="aspect">
@@ -111,6 +118,7 @@
         <option value="21:9">21:9 Cinema</option>
       </select>
     </label>
+    </div>
   </div>
 
   <div class="ed-main">
@@ -152,6 +160,31 @@
         </details>
       </section>
 
+      <!-- LAYERS -->
+      <section class="step-page" data-page="layers">
+        <h2>Add map layers</h2>
+        <p class="sub">Boundaries, areas, floods, lines, points and text — each animates on its own time.</p>
+        <span class="label-caps">Draw or place</span>
+        <div class="add-grid" id="add-layer">
+          <button data-add="boundary"><i>⬡</i>Boundary</button>
+          <button data-add="area"><i>▰</i>Area</button>
+          <button data-add="flood"><i>🌊</i>Flood</button>
+          <button data-add="line"><i>╱</i>Line</button>
+          <button data-add="point"><i>◉</i>Point</button>
+          <button data-add="symbol"><i>✨</i>Animated symbol</button>
+          <button data-add="label"><i>T</i>Text on map</button>
+          <button data-add="caption"><i>▭</i>Caption</button>
+        </div>
+        <span class="label-caps">Bring in</span>
+        <div class="btn-row bring">
+          <button class="btn sm" id="find-boundary">Find a boundary…</button>
+          <button class="btn sm" id="import-layers">Import GeoJSON / KML…</button>
+        </div>
+        <div class="layer-editor" id="layer-editor" hidden></div>
+        <div class="list-head"><span class="label-caps">Layers</span><b id="layer-count">0</b></div>
+        <ul class="layer-list" id="layer-list"></ul>
+      </section>
+
       <!-- LOOK -->
       <section class="step-page" data-page="look">
         <h2>Choose the look</h2>
@@ -170,6 +203,8 @@
           <label class="row"><span>States and regions</span><input type="checkbox" class="switch" data-look="states" /></label>
           <label class="row"><span>3D mountains</span><input type="checkbox" class="switch" data-look="terrain" /></label>
           <label class="row sub-row" id="terrain-row"><span>Height</span><input type="range" min="1" max="3" step="0.1" data-look="terrainExaggeration" /></label>
+          <label class="row"><span>3D buildings</span><input type="checkbox" class="switch" data-look="buildings3d" /></label>
+          <label class="row sub-row" id="bld-row"><span>Grow up at the start</span><input type="checkbox" class="switch" data-look="buildingsRise" /></label>
         </div>
         <div class="group">
           <h4>Line and symbol</h4>
@@ -253,7 +288,25 @@
           <input type="range" min="0" max="60" step="1" id="tilt" />
           <div class="slider-foot"><span>Flat</span><span>Tilted</span></div>
         </div>
-        <p class="note small">Tilt gives a flyover feel. Turn on 3D mountains in the Look step to raise the terrain.</p>
+        <p class="note small">Tilt gives a flyover feel. Turn on 3D mountains or 3D buildings in the Look step.</p>
+        <div class="group">
+          <h4>Start &amp; end moves</h4>
+          <label class="field"><span>At the start, zoom in from</span><select id="cam-intro"></select></label>
+          <label class="row sub-row" id="intro-secs-row"><span>Move takes</span><select id="cam-intro-secs"></select></label>
+          <label class="field"><span>At the end, zoom to</span><select id="cam-outro"></select></label>
+          <label class="row sub-row" id="outro-secs-row"><span>Move takes</span><select id="cam-outro-secs"></select></label>
+        </div>
+        <div class="group">
+          <h4>Lens</h4>
+          <label class="row"><span>Depth of field</span><input type="checkbox" class="switch" id="dof" /></label>
+          <div id="dof-opts">
+            <label class="row sub-row"><span>Blur</span><input type="range" min="1" max="16" step="0.5" id="dof-blur" /></label>
+            <label class="row sub-row"><span>Focus position</span><input type="range" min="0.1" max="0.9" step="0.01" id="dof-focus" /></label>
+            <label class="row sub-row"><span>Focus size</span><input type="range" min="0.1" max="0.8" step="0.01" id="dof-band" /></label>
+            <label class="row sub-row"><span>Keep the arrow sharp</span><input type="checkbox" class="switch" id="dof-follow" /></label>
+          </div>
+          <label class="row"><span>Vignette</span><input type="range" min="0" max="1" step="0.05" id="vignette" /></label>
+        </div>
       </section>
 
       <!-- EXPORT -->
@@ -267,7 +320,7 @@
           <label class="field"><span class="label-caps">Still at end</span>
             <select id="still-end"><option value="0">None</option><option value="0.5">0.5 s</option><option value="1">1 s</option><option value="1.5">1.5 s</option><option value="2">2 s</option><option value="3">3 s</option><option value="5">5 s</option></select></label>
           <label class="field"><span class="label-caps">Resolution <i class="dot"></i></span>
-            <select id="resolution"><option value="720">720p</option><option value="1080">1080p</option><option value="1440">2K (1440p)</option><option value="2160">4K (2160p)</option></select></label>
+            <select id="resolution"><option value="480">SD 480p</option><option value="720">HD 720p</option><option value="1080">Full HD 1080p</option><option value="1440">2K 1440p</option><option value="2160">4K 2160p</option></select></label>
           <label class="field"><span class="label-caps">Frame rate <i class="dot"></i></span>
             <select id="fps"><option value="24">24 fps</option><option value="25">25 fps</option><option value="30">30 fps</option><option value="50">50 fps</option><option value="60">60 fps</option></select></label>
           <label class="field span2" id="join-row"><span class="label-caps">Joining scenes <i class="dot"></i></span>
@@ -328,11 +381,12 @@
       <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
     </button>
     <div class="tl-time" id="tl-time">0:00.0 / 0:00</div>
-    <div class="tl-labels"><span>Camera</span><span>Line</span><span>Signs</span></div>
+    <div class="tl-labels"><span>Camera</span><span>Line</span><span>Layers</span><span>Signs</span></div>
     <div class="tl-tracks" id="tl-tracks">
       <div class="tl-ruler" id="tl-ruler"></div>
       <div class="tl-row" id="tl-cam"></div>
       <div class="tl-row" id="tl-line"></div>
+      <div class="tl-row" id="tl-layers"></div>
       <div class="tl-row" id="tl-signs"></div>
       <div class="tl-head" id="tl-head"></div>
     </div>
@@ -365,6 +419,33 @@
   <div class="sign-grid" id="sign-grid"></div>
 </dialog>
 
+<dialog class="modal wide" id="symbols-modal">
+  <div class="modal-head"><h3>Add an animated symbol</h3><button class="icon-x" data-close>✕</button></div>
+  <div class="sign-grid" id="symbol-grid"></div>
+</dialog>
+
+<dialog class="modal" id="boundary-modal">
+  <div class="modal-head"><h3>Find a boundary</h3><button class="icon-x" data-close>✕</button></div>
+  <div class="prose">
+    <p class="small">Search a country, region, city, district, park or lake. Its outline comes from OpenStreetMap.</p>
+    <input id="boundary-q" type="search" placeholder="e.g. Sharjah, Kerala, Lake Geneva…" autocomplete="off" />
+    <ul class="boundary-results" id="boundary-results"></ul>
+  </div>
+</dialog>
+
+<dialog class="modal" id="import-modal">
+  <div class="modal-head"><h3 id="import-title">Import shapes</h3><button class="icon-x" data-close>✕</button></div>
+  <div class="prose">
+    <p id="import-info" class="small"></p>
+    <p>Show the areas as:</p>
+    <div class="import-choices">
+      <button class="btn" data-as="boundary">⬡ Boundary outline</button>
+      <button class="btn" data-as="area">▰ Filled area</button>
+      <button class="btn" data-as="flood">🌊 Flood</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog class="modal" id="render-modal">
   <div class="modal-head"><h3 id="render-title">Rendering video…</h3></div>
   <div class="render-body">
@@ -384,6 +465,7 @@
     <ol>
       <li><b>Route.</b> Click on the map to place points, or load a GPX / KML / KMZ / IGC file. The line curves smoothly through your points. Click the line to add a point, double-click a point for a sharp corner, drag points to move them, and click a point to pause there or split the leg.</li>
       <li><b>Legs.</b> Each leg has a way of travelling — walk, car, train, ferry, plane and more — with its own symbol and line style. Use <i>+ New leg</i> to switch.</li>
+      <li><b>Layers.</b> Draw or import boundaries, areas, floods, lines, points, animated symbols, text and captions. Each has its own animation and timing — trace a boundary, spread a flood from a point, raise water over real terrain, pulse a symbol, type out a caption.</li>
       <li><b>Look.</b> Pick a map theme, place names, 3D mountains, line colour and symbol.</li>
       <li><b>Signs.</b> Add boards, flags, photos and more. They pop up when the line reaches them.</li>
       <li><b>Camera.</b> Film a fixed view, glide from a start view to an end view, or follow the line.</li>
@@ -415,6 +497,7 @@
 <input type="file" id="file-project" accept=".json,.mapanim,application/json,.gpx,.kml,.kmz,.igc,.geojson" hidden />
 <input type="file" id="file-route" accept=".gpx,.kml,.kmz,.igc,.geojson,.json" hidden />
 <input type="file" id="file-image" accept="image/*" hidden />
+<input type="file" id="file-layers" accept=".geojson,.json,.kml,.kmz,.gpx" hidden />
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/app.js"></script>

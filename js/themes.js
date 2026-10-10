@@ -234,6 +234,23 @@ export async function buildStyle(look) {
       },
     });
   }
+  // 3D buildings (our own extrusion so every theme gets matching colours and the "grow up" animation)
+  for (let i = layers.length - 1; i >= 0; i--) if (layers[i].id === 'building-3d') layers.splice(i, 1);
+  if (look.buildings3d) {
+    const col = theme.satellite ? '#d9d4cc' : theme.pal ? theme.pal.building : '#dcd3c6';
+    const firstSym = layers.findIndex((l) => l.type === 'symbol');
+    layers.splice(firstSym < 0 ? layers.length : firstSym, 0, {
+      id: 'ma-buildings', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 13,
+      filter: ['!=', ['get', 'hide_3d'], true],
+      paint: {
+        'fill-extrusion-color': col,
+        'fill-extrusion-height': ['*', ['coalesce', ['get', 'render_height'], 8], 1],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+        'fill-extrusion-opacity': 0.92,
+        'fill-extrusion-vertical-gradient': true,
+      },
+    });
+  }
   st.layers = layers;
   if (look.terrain) {
     st.sources.terrain = { type: 'raster-dem', tiles: DEM_TILES, tileSize: 256, maxzoom: 14, encoding: 'terrarium' };

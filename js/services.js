@@ -39,3 +39,13 @@ export async function snapRoute(profile, points) {
   cache.set(key, coords);
   return coords;
 }
+
+/** Search places and return their boundary polygons (administrative areas, parks, lakes…). */
+export async function searchBoundaries(q) {
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&polygon_geojson=1&polygon_threshold=0.0003&limit=8&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, { headers: { 'Accept-Language': navigator.language || 'en' } });
+  if (!res.ok) throw new Error('Search failed');
+  return (await res.json())
+    .filter((r) => r.geojson && /Polygon/.test(r.geojson.type))
+    .map((r) => ({ name: r.name || r.display_name.split(',')[0], detail: `${r.type || r.class || ''} · ${r.display_name}`, geometry: r.geojson }));
+}

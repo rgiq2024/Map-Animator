@@ -3,10 +3,13 @@ import { MODE_GROUPS, MODES, LINE_STYLES, modeOf } from './modes.js';
 import { THEMES, MAIN_THEMES, MORE_THEMES, buildStyle, themeAttribution, themeSwatchSVG } from './themes.js';
 import { SIGN_TYPES, drawSignPreview, preloadSignImages } from './signs.js';
 import { buildScene, newScene, legId, zoomFor, zoomRefFor, fitCamera, routeStats, pointsKey } from './scene.js';
-import { renderScene } from './renderer.js';
+import { renderScene, renderCaptions, projector } from './renderer.js';
+import { LAYER_KINDS, ANIMS, EFFECTS, MARKERS, CAPTION_LAYOUTS, POSITIONS, SYMBOL_PRESETS, newLayer, layersFromGeoJSON, layerBounds, layerTiming, hitLayer, drawLayers, centroid } from './layers.js';
+import { TerrainFloods } from './flood.js';
+import { drawDepthOfField, drawVignette } from './effects.js';
 import { exportVideo } from './export.js';
-import { readRouteFile } from './importers.js';
-import { geocode, snapRoute } from './services.js';
+import { readRouteFile, readLayerFile } from './importers.js';
+import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
 import { simplify, formatDistance, bounds } from './geo.js';
 
@@ -15,8 +18,8 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ASPECTS = { '16:9': 16 / 9, '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '4:3': 4 / 3, '21:9': 21 / 9 };
-const STEPS = ['route', 'look', 'signs', 'camera', 'export'];
-const NEXT_LABEL = { route: 'Next: choose the look →', look: 'Next: add signs →', signs: 'Next: set up the camera →', camera: 'Next: preview & export →', export: 'Render video' };
+const STEPS = ['route', 'layers', 'look', 'signs', 'camera', 'export'];
+const NEXT_LABEL = { route: 'Next: add map layers →', layers: 'Next: choose the look →', look: 'Next: add signs →', signs: 'Next: set up the camera →', camera: 'Next: preview & export →', export: 'Render video' };
 const COLORS = ['#ff4a2b', '#ff9f1c', '#ffd23f', '#2fbf71', '#2d7ff9', '#8b5cf6', '#ec4899', '#111827', '#ffffff'];
 
 export function videoSize(aspect, res) {
@@ -75,6 +78,8 @@ export function createEditor() {
   let saveTimer = null;
   let rafId = 0;
   let dpr = window.devicePixelRatio || 1;
+  let selLayer = null, drawing = null, pickOrigin = null;
+  let floods = null, bldFactor = null;
 
   const scene = () => project.scenes[sceneIdx];
 
@@ -89,6 +94,7 @@ export function createEditor() {
       fadeDuration: 0, maxPitch: 70, doubleClickZoom: false,
     });
     map.on('render', drawOverlay);
+    floods = new TerrainFloods(map, (L) => { if (selLayer === L.id) renderLayerEditor(); rebuild(); save(); });
     map.on('error', (e) => console.warn('map:', e?.error?.message || e));
     map.on('movestart', (e) => {
       if (e.originalEvent && viewMode === 'play' && !exporting) setViewMode('edit');
@@ -106,8 +112,8 @@ export function createEditor() {
   }
 
   function lookKey(look) {
-    const { theme, placeNames, lang, states, terrain, terrainExaggeration } = look;
-    return JSON.stringify({ theme, placeNames, lang, states, terrain, terrainExaggeration: terrain ? terrainExaggeration : 0 });
+    const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d } = look;
+    return JSON.stringify({ theme, placeNames, lang, states, terrain, buildings3d: !!buildings3d, terrainExaggeration: terrain ? terrainExaggeration : 0 });
   }
   function applyLook(sc) {
     const key = lookKey(sc.look);
@@ -124,6 +130,9 @@ export function createEditor() {
         map.once('style.load', done);
         map.setStyle(st, { diff: false });
       });
+      bldFactor = null;
+      floods?.attach();
+      applyTimeEffects(viewMode === 'play' ? time : null);
     })();
     return stylePromise;
   }
@@ -201,10 +210,19 @@ export function createEditor() {
     const px = W / stage.clientWidth;
     const unit = (Math.min(frame.w, frame.h) / 720) * px;
     const fr = { x: frame.x * px, y: frame.y * px, w: frame.w * px, h: frame.h * px };
+    const t = viewMode === 'play' ? time : null;
+    const lens = lensFor(scene(), model, t, (ll) => { const q = map.project(ll); return (q.y - frame.y) / frame.h; });
+    if (lens?.dof) {
+      const mc = map.getCanvas();
+      const k = mc.width / stage.clientWidth;
+      drawDepthOfField(octx, mc, frame.x * k, frame.y * k, frame.w * k, frame.h * k, fr, lens, unit);
+    }
     hits = renderScene(octx, {
-      map, model, scene: scene(), time: viewMode === 'play' ? time : null, px, unit, frame: fr,
-      edit: viewMode === 'edit' ? { step, activeLeg, selPoint, hoverPoint, selSign, dpr: px } : null,
+      map, model, scene: scene(), time: t, px, unit, frame: fr,
+      edit: viewMode === 'edit' ? { step, activeLeg, selPoint, hoverPoint, selSign, selLayer, drawing, dpr: px } : null,
     });
+    drawVignette(octx, fr, +scene().camera.lens?.vignette || 0);
+    renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr });
     // dim everything outside the video frame
     octx.save();
     octx.fillStyle = 'rgba(30,32,38,0.58)';
@@ -226,16 +244,17 @@ export function createEditor() {
   }
   function pushUndo() {
     const sc = scene();
-    undoStack.push(JSON.stringify({ legs: sc.legs, signs: sc.signs }));
+    undoStack.push(JSON.stringify({ legs: sc.legs, signs: sc.signs, layers: sc.layers || [] }));
     if (undoStack.length > 80) undoStack.shift();
     updateUndo();
   }
   function undo() {
     const snap = undoStack.pop();
     if (!snap) { toast('Nothing to undo'); return; }
-    const { legs, signs } = JSON.parse(snap);
+    const { legs, signs, layers } = JSON.parse(snap);
     scene().legs = legs;
     scene().signs = signs;
+    if (layers) { scene().layers = layers; if (!layers.some((l) => l.id === selLayer)) selLayer = null; renderLayerList(); renderLayerEditor(); floods?.sync(scene()); }
     selPoint = null; selSign = null;
     activeLeg = Math.min(activeLeg, legs.length - 1);
     closePops();
@@ -348,6 +367,14 @@ export function createEditor() {
     if (exporting || e.originalEvent.button !== 0) return;
     if (viewMode === 'play') { setViewMode('edit'); showEditView(); return; }
     const p = toCanvas(e.point);
+    if (step === 'layers' && !drawing && !pickOrigin) {
+      const r = 9 * (overlay.width / stage.clientWidth);
+      const h = hits.layerHandles.find((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
+      if (h) { e.preventDefault(); startDrag({ kind: 'vertex', id: h.id, ring: h.ring, i: h.i }, e); return; }
+      const id = hitLayer(octx, scene().layers || [], hits.proj, p, unitNow());
+      const L = id && layerById(id);
+      if (L && L.geom?.type === 'Point') { e.preventDefault(); startDrag({ kind: 'lpoint', id }, e); return; }
+    }
     if (step === 'route') {
       const h = hitHandle(p);
       if (h) { e.preventDefault(); startDrag({ kind: 'point', li: h.li, i: h.i }, e); return; }
@@ -362,14 +389,16 @@ export function createEditor() {
   function startDrag(target, e) {
     map.dragPan.disable();
     const rect = stage.getBoundingClientRect();
-    const snapshot = JSON.stringify({ legs: scene().legs, signs: scene().signs });
+    const snapshot = JSON.stringify({ legs: scene().legs, signs: scene().signs, layers: scene().layers || [] });
     dragging = { ...target, moved: false, x0: e.originalEvent.clientX, y0: e.originalEvent.clientY };
     stage.classList.add('dragging');
     const move = (ev) => {
       if (!dragging.moved && Math.hypot(ev.clientX - dragging.x0, ev.clientY - dragging.y0) < 3) return;
       dragging.moved = true;
       const ll = map.unproject([ev.clientX - rect.left, ev.clientY - rect.top]);
-      if (dragging.kind === 'point') {
+      if (dragging.kind === 'vertex' || dragging.kind === 'lpoint') {
+        moveLayerVertex(dragging, [+ll.lng.toFixed(6), +ll.lat.toFixed(6)]);
+      } else if (dragging.kind === 'point') {
         const leg = scene().legs[dragging.li];
         const pt = leg.points[dragging.i];
         pt.lng = ll.lng; pt.lat = ll.lat;
@@ -393,6 +422,10 @@ export function createEditor() {
       setTimeout(() => { suppressClick = false; }, 0);
       const d = dragging;
       dragging = null;
+      if ((d.kind === 'vertex' || d.kind === 'lpoint')) {
+        if (d.moved) { undoStack.push(snapshot); updateUndo(); commitLayers(); } else selectLayer(d.id);
+        return;
+      }
       if (d.moved) {
         undoStack.push(snapshot);
         updateUndo();
@@ -450,7 +483,14 @@ export function createEditor() {
 
   function onMouseMove(e) {
     if (dragging || viewMode !== 'edit' || exporting) return;
+    if (drawing) { drawing.hover = [e.lngLat.lng, e.lngLat.lat]; repaint(); return; }
     const p = toCanvas(e.point);
+    if (step === 'layers') {
+      const r = 9 * (overlay.width / stage.clientWidth);
+      const onH = hits.layerHandles.some((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
+      stage.classList.toggle('on-handle', onH || !!hitLayer(octx, scene().layers || [], hits.proj, p, unitNow()));
+      return;
+    }
     let onHandle = false, onLine = false;
     if (step === 'route') {
       const h = hitHandle(p) || null;
@@ -470,6 +510,7 @@ export function createEditor() {
     if (suppressClick || exporting || viewMode !== 'edit') return;
     const p = toCanvas(e.point);
     if (placing) { addSign(e.lngLat); return; }
+    if (step === 'layers') { onLayerClick(e, p); return; }
     if (step === 'route') {
       const b = hitBadge(p);
       if (b) { activeLeg = b.li; openLegPop(); renderLegs(); repaint(); return; }
@@ -485,6 +526,12 @@ export function createEditor() {
 
   function onDblClick(e) {
     e.preventDefault();
+    if (step === 'layers' && drawing && !drawing.single) {
+      const c = drawing.coords;
+      if (c.length > 1 && Math.abs(c.at(-1)[0] - c.at(-2)[0]) < 1e-5 && Math.abs(c.at(-1)[1] - c.at(-2)[1]) < 1e-5) c.pop();
+      finishDrawing();
+      return;
+    }
     if (step !== 'route' || viewMode !== 'edit') return;
     const h = hitHandle(toCanvas(e.point));
     if (!h) return;
@@ -822,6 +869,425 @@ export function createEditor() {
     else { userIntent = true; map.easeTo({ center: [r.lng, r.lat], zoom: 11, duration: 700 }); }
   });
 
+  // ---------------------------------------------------------------- layers
+  const layersOf = () => scene().layers || (scene().layers = []);
+  const layerById = (id) => layersOf().find((l) => l.id === id);
+  const unitNow = () => (Math.min(frame.w, frame.h) / 720) * (overlay.width / stage.clientWidth);
+  const newStart = () => +((viewMode === 'play' && time > 0.05 ? time : model.drawStart) || 0).toFixed(2);
+  const HINTS = {
+    polygon: 'Click to outline the area · click the first point or double-click to finish · Enter to finish · Esc to cancel',
+    line: 'Click to draw the line · double-click or Enter to finish · Esc to cancel',
+    point: 'Click the map where it goes · Esc to cancel',
+  };
+  function showHint(text) { const h = $('#stage-hint'); h.textContent = text; h.hidden = false; }
+
+  function startAdd(kind, preset = null) {
+    cancelDrawing();
+    if (kind === 'symbol') { openSymbols(); return; }
+    if (kind === 'caption') { addLayer(newLayer('caption', null, { start: newStart() })); return; }
+    setViewMode('edit');
+    const g = LAYER_KINDS[kind].geom;
+    drawing = { kind, coords: [], polygon: g === 'polygon', single: g === 'point', preset };
+    stage.classList.add('placing');
+    showHint(HINTS[g]);
+    $$('#add-layer [data-add]').forEach((b) => b.classList.toggle('active', b.dataset.add === (preset ? 'symbol' : kind)));
+  }
+  function cancelDrawing() {
+    if (!drawing && !pickOrigin) return;
+    drawing = null; pickOrigin = null;
+    stage.classList.remove('placing');
+    $('#stage-hint').hidden = true;
+    $$('#add-layer [data-add]').forEach((b) => b.classList.remove('active'));
+    repaint();
+  }
+  function finishDrawing() {
+    const d = drawing;
+    if (!d) return;
+    let geom;
+    if (d.polygon) {
+      if (d.coords.length < 3) { toast('Add at least 3 points'); return; }
+      geom = { type: 'Polygon', coordinates: [[...d.coords, d.coords[0]]] };
+    } else if (!d.single) {
+      if (d.coords.length < 2) { toast('Add at least 2 points'); return; }
+      geom = { type: 'LineString', coordinates: d.coords };
+    } else geom = { type: 'Point', coordinates: d.coords[0] };
+    const L = newLayer(d.kind, geom, { start: newStart(), preset: d.preset });
+    cancelDrawing();
+    addLayer(L);
+  }
+  function addLayer(L) {
+    pushUndo();
+    layersOf().push(L);
+    selLayer = L.id;
+    commitLayers();
+    renderLayerEditor();
+    if (L.kind === 'label' || L.kind === 'caption') setTimeout(() => { const i = $('#layer-editor [data-b="style.text"]'); i?.focus(); i?.select(); }, 30);
+  }
+  function commitLayers() {
+    rebuild();
+    renderLayerList();
+    renderCamSelects();
+    floods?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); renderFloodInfo(); });
+    save();
+  }
+  function onLayerClick(e, p) {
+    const ll = [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)];
+    if (pickOrigin) {
+      const L = layerById(pickOrigin);
+      if (L) { pushUndo(); L.origin = ll; }
+      cancelDrawing();
+      commitLayers();
+      toast('The water will start there');
+      return;
+    }
+    if (drawing) {
+      if (drawing.single) { drawing.coords = [ll]; finishDrawing(); return; }
+      if (drawing.polygon && drawing.coords.length >= 3) {
+        const f = map.project(drawing.coords[0]);
+        if (Math.hypot(f.x - e.point.x, f.y - e.point.y) < 11) { finishDrawing(); return; }
+      }
+      drawing.coords.push(ll);
+      repaint();
+      return;
+    }
+    selectLayer(hitLayer(octx, layersOf(), hits.proj, p, unitNow()));
+  }
+  function moveLayerVertex(d, ll) {
+    const L = layerById(d.id);
+    if (!L?.geom) return;
+    const g = L.geom;
+    if (g.type === 'Point') { g.coordinates = ll; return; }
+    const rings = g.type === 'Polygon' ? g.coordinates : g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : g.coordinates.flat();
+    const ring = rings[d.ring];
+    if (!ring) return;
+    ring[d.i] = ll;
+    if ((g.type === 'Polygon' || g.type === 'MultiPolygon') && d.i === 0) ring[ring.length - 1] = ll;
+  }
+  function selectLayer(id) {
+    selLayer = id || null;
+    renderLayerEditor();
+    renderLayerList();
+    renderTimeline();
+    repaint();
+  }
+  function deleteLayer(id) {
+    pushUndo();
+    scene().layers = layersOf().filter((l) => l.id !== id);
+    if (selLayer === id) selLayer = null;
+    for (const k of ['intro', 'outro']) if (scene().camera[k] === `feature:${id}`) scene().camera[k] = 'none';
+    renderLayerEditor();
+    commitLayers();
+  }
+  function zoomToLayer(L) {
+    const b = layerBounds(L);
+    if (!b) return;
+    setViewMode('edit');
+    if (L.geom.type === 'Point') { userIntent = true; map.easeTo({ center: L.geom.coordinates, zoom: Math.max(map.getZoom(), 12), duration: 700 }); }
+    else flyToBounds(b, 0.16);
+  }
+
+  // list
+  function renderLayerList() {
+    const ls = layersOf();
+    $('#layer-count').textContent = ls.length;
+    $('#layer-list').innerHTML = ls.length ? ls.map((L) => `
+      <li data-id="${L.id}" class="${L.id === selLayer ? 'active' : ''} ${L.hidden ? 'off' : ''}">
+        <span class="ki">${L.kind === 'point' && L.style.marker === 'emoji' ? L.style.emoji : LAYER_KINDS[L.kind].icon}</span>
+        <span class="nm">${esc(L.kind === 'caption' || L.kind === 'label' ? (L.style.text || L.name) : L.name)}</span>
+        <small>${(+L.start).toFixed(1)}s</small>
+        <button class="mini" data-eye title="${L.hidden ? 'Show' : 'Hide'}">${L.hidden ? '◌' : '◉'}</button>
+      </li>`).join('') : '<li class="empty">No layers yet. Draw one, find a boundary, or import a file.</li>';
+  }
+  $('#layer-list').addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-id]');
+    if (!li) return;
+    const L = layerById(li.dataset.id);
+    if (e.target.closest('[data-eye]')) { pushUndo(); L.hidden = !L.hidden; commitLayers(); return; }
+    selectLayer(L.id);
+  });
+  $('#add-layer').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+
+  // editor form
+  const fRow = (label, inner, cls = '') => `<label class="row ${cls}"><span>${label}</span>${inner}</label>`;
+  const fColor = (b, v) => `<input type="color" data-b="${b}" value="${esc(v || '#ffffff')}">`;
+  const fRange = (b, v, min, max, step) => `<input type="range" data-b="${b}" min="${min}" max="${max}" step="${step}" value="${v}">`;
+  const fSel = (b, v, opts) => `<select data-b="${b}">${Object.entries(opts).map(([k, t]) => `<option value="${k}" ${String(k) === String(v) ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+  const fSw = (b, v) => `<input type="checkbox" class="switch" data-b="${b}" ${v ? 'checked' : ''}>`;
+  const fText = (b, v, ph = '') => `<input type="text" data-b="${b}" value="${esc(v || '')}" placeholder="${esc(ph)}">`;
+  const fNum = (b, v, step = 0.1) => `<input type="number" data-b="${b}" step="${step}" value="${v ?? ''}">`;
+  const DASH = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted' };
+
+  function renderLayerEditor() {
+    const box = $('#layer-editor');
+    const L = selLayer && layerById(selLayer);
+    if (!L) { box.hidden = true; box.innerHTML = ''; return; }
+    const s = L.style;
+    let h = `<div class="le-head">${fText('name', L.name)}<button class="icon-x" data-act="close" title="Done">✕</button></div>`;
+    h += fRow('Animation', fSel('anim', L.anim, ANIMS[L.kind]));
+    h += `<div class="time3"><label>Starts at (s)${fNum('start', L.start)}</label><label>Animates for (s)${fNum('duration', L.duration)}</label><label>Then stays (s)${fNum('hold', L.hold || 0)}</label></div>`;
+    h += `<p class="hint-line">“Then stays” 0 = until the end of the scene. <button class="link strong" data-act="atPlayhead">Start at the playhead</button></p>`;
+    if (L.kind === 'boundary' || L.kind === 'area') {
+      h += '<h5>Outline</h5>' + fRow('Colour', fColor('style.stroke', s.stroke)) + fRow('Width', fRange('style.width', s.width, 0, 14, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Glow', fSw('style.glow', s.glow));
+      h += '<h5>Fill</h5>' + fRow('Colour', fColor('style.fill', s.fill)) + fRow('Opacity', fRange('style.fillOpacity', s.fillOpacity, 0, 1, 0.05));
+      h += fRow('Darken outside', fRange('style.maskOutside', s.maskOutside || 0, 0, 0.85, 0.05));
+    } else if (L.kind === 'flood') {
+      h += '<h5>Water</h5>' + fRow('Colour', fColor('style.color', s.color)) + fRow('Opacity', fRange('style.opacity', s.opacity, 0.1, 1, 0.05));
+      if (L.anim !== 'terrain') h += fRow('Waves', fSw('style.waves', s.waves !== false)) + fRow('Edge line', fSw('style.outline', s.outline !== false));
+      if (L.anim === 'spread') h += `<p class="hint-line">The water spreads from ${L.origin ? 'the point you chose' : 'the middle of the area'}.</p><button class="btn sm" data-act="origin">Choose where the water starts</button>`;
+      if (L.anim === 'wipe') h += fRow('Comes from', fSel('style.dir', s.dir || 'W', { W: 'The west', E: 'The east', N: 'The north', S: 'The south' }));
+      if (L.anim === 'terrain') {
+        h += '<h5>Water level (metres above sea level)</h5>' + fRow('Starts at', fNum('style.levelFrom', s.levelFrom, 0.5)) + fRow('Rises to', fNum('style.levelTo', s.levelTo, 0.5));
+        h += '<p class="hint-line" id="flood-info">Loading elevation for this area…</p><button class="btn sm" data-act="autoLevel">Pick levels automatically</button>';
+        h += '<p class="hint-line">Low ground floods first, using real elevation data. Turn on 3D mountains and tilt the camera for a 3D look.</p>';
+      }
+    } else if (L.kind === 'line') {
+      h += '<h5>Line</h5>' + fRow('Colour', fColor('style.color', s.color)) + fRow('Width', fRange('style.width', s.width, 1, 16, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Arrow at the end', fSw('style.arrow', s.arrow)) + fRow('Glow', fSw('style.glow', s.glow));
+    } else if (L.kind === 'point') {
+      h += '<h5>Symbol</h5>' + fRow('Marker', fSel('style.marker', s.marker, MARKERS));
+      if (s.marker === 'emoji') h += fRow('Emoji', fText('style.emoji', s.emoji, '📍'));
+      h += fRow('Colour', fColor('style.color', s.color)) + fRow('Size', fRange('style.size', s.size, 0.4, 3, 0.05)) + fRow('Effect', fSel('style.effect', s.effect, EFFECTS));
+      h += `<label class="field"><span>Label</span>${fText('style.label', s.label, 'Optional text next to it')}</label>`;
+    } else if (L.kind === 'label') {
+      h += `<label class="field"><span>Text</span>${fText('style.text', s.text)}</label>`;
+      h += fRow('Size', fRange('style.size', s.size, 10, 90, 1)) + fRow('Colour', fColor('style.color', s.color)) + fRow('Outline', fColor('style.halo', s.halo || '#000000'));
+      h += fRow('Weight', fSel('style.weight', s.weight, { 500: 'Regular', 700: 'Bold', 900: 'Black' })) + fRow('CAPITALS', fSw('style.upper', s.upper)) + fRow('Italic', fSw('style.italic', s.italic));
+    } else if (L.kind === 'caption') {
+      h += `<label class="field"><span>Text</span>${fText('style.text', s.text)}</label><label class="field"><span>Second line</span>${fText('style.sub', s.sub, 'Optional')}</label>`;
+      h += fRow('Layout', fSel('style.layout', s.layout, CAPTION_LAYOUTS));
+      if (!['lowerThird', 'band'].includes(s.layout)) h += fRow('Position', fSel('style.position', s.position, POSITIONS));
+      h += fRow('Accent', fColor('style.accent', s.accent)) + fRow('Size', fRange('style.size', s.size || 1, 0.6, 1.8, 0.05));
+      h += '<p class="hint-line">Use {km} or {mi} to show the distance travelled so far.</p>';
+    }
+    h += `<div class="btn-row">${L.geom ? '<button class="btn sm" data-act="zoom">Zoom to</button>' : ''}<button class="btn sm" data-act="up">Up</button><button class="btn sm" data-act="down">Down</button><button class="btn sm" data-act="dup">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>`;
+    box.innerHTML = h;
+    box.hidden = false;
+    renderFloodInfo();
+  }
+  function renderFloodInfo() {
+    const el = $('#flood-info');
+    if (!el || !selLayer) return;
+    const it = floods?.items.get(selLayer);
+    if (it?.grid) {
+      const st = it.grid.stats;
+      el.textContent = `Ground in this area: lowest ${st.min.toFixed(1)} m · typical ${st.p40.toFixed(0)}–${st.p60.toFixed(0)} m · highest ${st.max.toFixed(0)} m.`;
+    } else if (it?.loading) el.textContent = 'Loading elevation for this area…';
+    else el.textContent = 'Elevation could not be loaded for this area.';
+  }
+  function setPath(obj, path, v) {
+    const ks = path.split('.');
+    let o = obj;
+    for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
+    o[ks.at(-1)] = v;
+  }
+  let layerEditTimer = null;
+  function onLayerField(e, final) {
+    const el = e.target.closest('[data-b]');
+    const L = selLayer && layerById(selLayer);
+    if (!el || !L) return;
+    const key = el.dataset.b;
+    let v = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.type === 'range' || el.type === 'number') v = v === '' ? null : +v;
+    if (key === 'style.weight') v = +v;
+    if (final) pushUndo();
+    setPath(L, key, v);
+    if (key === 'anim' || key === 'style.marker' || key === 'style.layout') { renderLayerEditor(); commitLayers(); return; }
+    if (['start', 'duration', 'hold', 'style.levelFrom', 'style.levelTo'].includes(key) || key === 'name') {
+      clearTimeout(layerEditTimer);
+      layerEditTimer = setTimeout(() => { L.duration = Math.max(0.05, +L.duration || 0.05); L.start = Math.max(0, +L.start || 0); L.hold = Math.max(0, +L.hold || 0); commitLayers(); }, 250);
+      return;
+    }
+    floods?.update(scene(), viewMode === 'play' ? time : null);
+    renderLayerList();
+    repaint();
+    save();
+  }
+  $('#layer-editor').addEventListener('input', (e) => onLayerField(e, false));
+  $('#layer-editor').addEventListener('change', (e) => { if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') onLayerField(e, true); });
+  $('#layer-editor').addEventListener('click', (e) => {
+    const a = e.target.closest('[data-act]')?.dataset.act;
+    const L = selLayer && layerById(selLayer);
+    if (!a || !L) return;
+    const ls = layersOf();
+    const i = ls.indexOf(L);
+    if (a === 'close') selectLayer(null);
+    if (a === 'zoom') zoomToLayer(L);
+    if (a === 'del') deleteLayer(L.id);
+    if (a === 'dup') { const c = JSON.parse(JSON.stringify(L)); c.id = `ly_${Math.random().toString(36).slice(2, 9)}`; c.name = `${L.name} copy`; addLayer(c); }
+    if (a === 'up' && i < ls.length - 1) { pushUndo(); [ls[i], ls[i + 1]] = [ls[i + 1], ls[i]]; commitLayers(); }
+    if (a === 'down' && i > 0) { pushUndo(); [ls[i], ls[i - 1]] = [ls[i - 1], ls[i]]; commitLayers(); }
+    if (a === 'atPlayhead') { pushUndo(); L.start = +time.toFixed(2); renderLayerEditor(); commitLayers(); }
+    if (a === 'origin') { cancelDrawing(); pickOrigin = L.id; setViewMode('edit'); stage.classList.add('placing'); showHint('Click where the water starts · Esc to cancel'); }
+    if (a === 'autoLevel') {
+      const st = floods?.items.get(L.id)?.grid?.stats;
+      if (!st) { toast('Elevation is not loaded yet'); return; }
+      pushUndo();
+      L.style.levelFrom = Math.round(st.min * 10) / 10;
+      L.style.levelTo = Math.round(Math.max(st.p40, st.min + 2) * 10) / 10;
+      renderLayerEditor(); commitLayers();
+    }
+  });
+
+  // animated symbol gallery (live previews)
+  let symRaf = 0;
+  function openSymbols() {
+    const grid = $('#symbol-grid');
+    if (!grid.childElementCount) {
+      grid.innerHTML = Object.entries(SYMBOL_PRESETS).map(([k, p]) => `<button class="sign-card" data-preset="${k}"><canvas width="300" height="192"></canvas><b>${p.name}</b><small>${EFFECTS[p.effect]}</small></button>`).join('');
+    }
+    $('#symbols-modal').showModal();
+    const cards = $$('#symbol-grid [data-preset]');
+    const t0 = performance.now();
+    const loop = () => {
+      if (!$('#symbols-modal').open) return;
+      symRaf = requestAnimationFrame(loop);
+      const t = (performance.now() - t0) / 1000;
+      for (const c of cards) {
+        const cv = $('canvas', c);
+        const ctx = cv.getContext('2d');
+        ctx.fillStyle = '#ece8df';
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        const L = newLayer('point', { type: 'Point', coordinates: [0, 0] }, { preset: c.dataset.preset, start: 0 });
+        L.anim = 'none';
+        drawLayers(ctx, { scene: { layers: [L] }, proj: () => [cv.width / 2, cv.height * 0.56], unit: 1.6, time: 1 + t, frame: null }, 'above');
+      }
+    };
+    cancelAnimationFrame(symRaf);
+    loop();
+  }
+  $('#symbol-grid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-preset]');
+    if (!b) return;
+    $('#symbols-modal').close();
+    startAdd('point', b.dataset.preset);
+  });
+
+  // boundary search
+  let bTimer = null, bSeq = 0, bResults = [];
+  $('#find-boundary').onclick = () => { $('#boundary-modal').showModal(); $('#boundary-q').focus(); };
+  $('#boundary-q').addEventListener('input', (e) => {
+    clearTimeout(bTimer);
+    const q = e.target.value.trim();
+    if (q.length < 3) return;
+    bTimer = setTimeout(() => runBoundarySearch(q), 600);
+  });
+  $('#boundary-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(bTimer); runBoundarySearch(e.target.value.trim()); } });
+  async function runBoundarySearch(q) {
+    if (!q) return;
+    const seq = ++bSeq;
+    const ul = $('#boundary-results');
+    ul.innerHTML = '<li class="small muted">Searching…</li>';
+    try {
+      bResults = await searchBoundaries(q);
+      if (seq !== bSeq) return;
+      ul.innerHTML = bResults.length ? bResults.map((r, i) => `<li data-i="${i}"><b>${esc(r.name)}</b><small>${esc(r.detail)}</small></li>`).join('') : '<li class="small muted">No boundaries found. Try a broader name.</li>';
+    } catch { ul.innerHTML = '<li class="small muted">Search is unavailable right now.</li>'; }
+  }
+  $('#boundary-results').addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-i]');
+    if (!li) return;
+    const r = bResults[+li.dataset.i];
+    $('#boundary-modal').close();
+    const [L] = layersFromGeoJSON(r.geometry, 'boundary', newStart());
+    if (!L) return;
+    L.name = r.name;
+    addLayer(L);
+    zoomToLayer(L);
+  });
+
+  // import
+  let pendingImport = null;
+  $('#import-layers').onclick = () => $('#file-layers').click();
+  $('#file-layers').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    let obj;
+    try { obj = await readLayerFile(f); } catch (err) { toast(err.message || 'Could not read that file'); return; }
+    const probe = layersFromGeoJSON(obj, 'area', 0);
+    if (!probe.length) { toast('No shapes found in that file'); return; }
+    const polys = probe.filter((l) => l.kind === 'area').length;
+    pendingImport = { obj, name: f.name };
+    if (polys) {
+      $('#import-title').textContent = `Import ${f.name}`;
+      $('#import-info').textContent = `${probe.length} shape${probe.length === 1 ? '' : 's'} found, ${polys} of them area${polys === 1 ? '' : 's'}.`;
+      $('#import-modal').showModal();
+    } else finishImport('boundary');
+  });
+  $('#import-modal').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-as]');
+    if (!b) return;
+    $('#import-modal').close();
+    finishImport(b.dataset.as);
+  });
+  function finishImport(as) {
+    if (!pendingImport) return;
+    let ls = layersFromGeoJSON(pendingImport.obj, as, newStart());
+    // many shapes → merge into one layer per kind to stay fast and tidy
+    const merge = (kind, type, multi) => {
+      const group = ls.filter((l) => l.kind === kind);
+      if (group.length <= 30) return;
+      const coords = group.flatMap((l) => (l.geom.type === type ? [l.geom.coordinates] : l.geom.coordinates));
+      const one = group[0];
+      one.geom = { type: multi, coordinates: coords };
+      one.name = pendingImport.name.replace(/\.[^.]+$/, '');
+      ls = ls.filter((l) => l.kind !== kind || l === one);
+    };
+    merge(as, 'Polygon', 'MultiPolygon');
+    merge('line', 'LineString', 'MultiLineString');
+    const pts = ls.filter((l) => l.kind === 'point');
+    if (pts.length > 80) ls = ls.filter((l) => l.kind !== 'point' || pts.indexOf(l) < 80);
+    pushUndo();
+    layersOf().push(...ls);
+    selLayer = ls[0]?.id || null;
+    commitLayers();
+    renderLayerEditor();
+    const all = ls.map(layerBounds).filter(Boolean);
+    if (all.length) flyToBounds([[Math.min(...all.map((b) => b[0][0])), Math.min(...all.map((b) => b[0][1]))], [Math.max(...all.map((b) => b[1][0])), Math.max(...all.map((b) => b[1][1]))]]);
+    toast(`Imported ${ls.length} layer${ls.length === 1 ? '' : 's'}`);
+    pendingImport = null;
+  }
+
+  // ---------------------------------------------------------------- camera: start & end moves, lens
+  const SECS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8];
+  function renderCamSelects() {
+    const cam = scene().camera;
+    const feats = layersOf().filter((l) => l.geom && !l.hidden).map((l) => [`feature:${l.id}`, `Layer: ${l.kind === 'label' ? l.style.text : l.name}`]);
+    const opt = (pairs, v) => pairs.map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${esc(t)}</option>`).join('');
+    $('#cam-intro').innerHTML = opt([['none', 'No zoom'], ['world', 'The whole world'], ['wide', 'A wide view'], ['routeStart', 'Close to the route start'], ...feats], cam.intro || 'none');
+    $('#cam-outro').innerHTML = opt([['none', 'No zoom'], ['overview', 'Everything (route and layers)'], ['wide', 'A wide view'], ['world', 'The whole world'], ['routeEnd', 'Close to the route end'], ...feats], cam.outro || 'none');
+    $('#cam-intro-secs').innerHTML = SECS.map((v) => `<option value="${v}" ${v === +cam.introSeconds ? 'selected' : ''}>${v} s</option>`).join('');
+    $('#cam-outro-secs').innerHTML = SECS.map((v) => `<option value="${v}" ${v === +cam.outroSeconds ? 'selected' : ''}>${v} s</option>`).join('');
+    $('#intro-secs-row').hidden = !cam.intro || cam.intro === 'none';
+    $('#outro-secs-row').hidden = !cam.outro || cam.outro === 'none';
+    const lens = cam.lens;
+    $('#dof').checked = !!lens.dof;
+    $('#dof-opts').hidden = !lens.dof;
+    $('#dof-blur').value = lens.blur;
+    $('#dof-focus').value = lens.focus;
+    $('#dof-band').value = lens.band;
+    $('#dof-follow').checked = !!lens.followArrow;
+    $('#vignette').value = lens.vignette || 0;
+  }
+  const camChanged = (preview) => {
+    rebuild();
+    renderCamSelects();
+    save();
+    if (preview === 'start') { setViewMode('play'); setPlaying(false); time = 0; applyCamera(0); updatePlayhead(); }
+    if (preview === 'end') { setViewMode('play'); setPlaying(false); time = model.total; applyCamera(time); updatePlayhead(); }
+    repaint();
+  };
+  $('#cam-intro').addEventListener('change', (e) => { scene().camera.intro = e.target.value; camChanged('start'); });
+  $('#cam-outro').addEventListener('change', (e) => { scene().camera.outro = e.target.value; camChanged('end'); });
+  $('#cam-intro-secs').addEventListener('change', (e) => { scene().camera.introSeconds = +e.target.value; camChanged(); });
+  $('#cam-outro-secs').addEventListener('change', (e) => { scene().camera.outroSeconds = +e.target.value; camChanged(); });
+  const lensField = (id, key, num = true) => $(id).addEventListener('input', (e) => {
+    scene().camera.lens[key] = e.target.type === 'checkbox' ? e.target.checked : num ? +e.target.value : e.target.value;
+    if (key === 'dof') $('#dof-opts').hidden = !e.target.checked;
+    save();
+    repaint();
+  });
+  lensField('#dof', 'dof'); lensField('#dof-blur', 'blur'); lensField('#dof-focus', 'focus'); lensField('#dof-band', 'band'); lensField('#dof-follow', 'followArrow'); lensField('#vignette', 'vignette');
+
   // ---------------------------------------------------------------- look
   function renderThemes() {
     const look = scene().look;
@@ -859,6 +1325,7 @@ export function createEditor() {
       if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
     });
     $('#terrain-row').hidden = !look.terrain;
+    $('#bld-row').hidden = !look.buildings3d;
     const cur = look.lineColor;
     $('#swatches').innerHTML = COLORS.map((c) => `<button class="swatch ${c === cur ? 'active' : ''}" data-color="${c}" style="background:${c}"></button>`).join('') +
       `<label class="swatch-custom" title="Custom colour"><input type="color" value="${cur}"/></label>`;
@@ -874,7 +1341,14 @@ export function createEditor() {
       $('#terrain-row').hidden = !v;
       if (v && !(+scene().camera.tilt)) { scene().camera.tilt = 45; renderCamera(); if (viewMode === 'edit') map.easeTo({ pitch: 45 }); toast('Tilted the camera so the mountains show'); }
     }
-    if (['placeNames', 'lang', 'states', 'terrain', 'terrainExaggeration'].includes(key)) applyLook(scene());
+    if (key === 'buildings3d') {
+      $('#bld-row').hidden = !v;
+      if (v) {
+        if (!(+scene().camera.tilt)) { scene().camera.tilt = 50; renderCamera(); if (viewMode === 'edit') map.easeTo({ pitch: 50 }); }
+        if (map.getZoom() < 13.5) toast('3D buildings show when you zoom in to street level (zoom 14+)', 3600);
+      }
+    }
+    if (['placeNames', 'lang', 'states', 'terrain', 'terrainExaggeration', 'buildings3d'].includes(key)) applyLook(scene());
     rebuild();
     renderLegs();
     save();
@@ -1013,6 +1487,7 @@ export function createEditor() {
     follow: 'The camera travels with the arrow along the route.',
   };
   function renderCamera() {
+    renderCamSelects();
     const cam = scene().camera;
     $$('#cam-cards [data-cam]').forEach((b) => b.classList.toggle('active', b.dataset.cam === cam.mode));
     $$('.cam-opts').forEach((d) => d.classList.toggle('active', d.dataset.camOpts === cam.mode));
@@ -1089,7 +1564,9 @@ export function createEditor() {
   }
   $('#still-start').addEventListener('change', (e) => { scene().stillStart = +e.target.value; rebuild(); save(); });
   $('#still-end').addEventListener('change', (e) => { scene().stillEnd = +e.target.value; rebuild(); save(); });
-  $('#resolution').addEventListener('change', (e) => { project.resolution = +e.target.value; layout(true); save(); });
+  const setResolution = (v) => { project.resolution = +v; $('#resolution').value = String(v); $('#resolution-top').value = String(v); layout(true); updateEstimate(); save(); };
+  $('#resolution').addEventListener('change', (e) => setResolution(e.target.value));
+  $('#resolution-top').addEventListener('change', (e) => setResolution(e.target.value));
   $('#fps').addEventListener('change', (e) => { project.fps = +e.target.value; updateEstimate(); save(); });
   $('#join').addEventListener('change', (e) => { project.join = e.target.value; save(); });
   $('#play-preview').onclick = () => { time = 0; setViewMode('play'); setPlaying(true); };
@@ -1121,6 +1598,8 @@ export function createEditor() {
     $('#toolbar').hidden = s !== 'route';
     $('#legs-panel').hidden = s !== 'route';
     if (s !== 'route') closePops();
+    if (s !== 'layers') cancelDrawing();
+    if (s === 'layers') { renderLayerList(); renderLayerEditor(); }
     if (s !== 'signs') { stopPlacing(); selSign = null; $('#sign-editor').hidden = true; }
     stage.classList.toggle('tool-draw', tool === 'draw' && s === 'route');
     const next = $('#next-step');
@@ -1147,12 +1626,24 @@ export function createEditor() {
   function applyCamera(t) {
     const c = model.cameraAt(t);
     map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 });
+    applyTimeEffects(t);
+  }
+  /** Things inside the map that change with time: terrain floods and growing 3D buildings. */
+  function applyTimeEffects(t, sc = scene(), m = model) {
+    if (!map || !sc) return;
+    floods?.update(sc, t);
+    const f = t == null || !m ? 1 : m.buildingsAt(t);
+    const q = Math.round(f * 200) / 200;
+    if (q !== bldFactor && map.getLayer && map.getLayer('ma-buildings')) {
+      bldFactor = q;
+      map.setPaintProperty('ma-buildings', 'fill-extrusion-height', ['*', ['coalesce', ['get', 'render_height'], 8], Math.max(0.001, q)]);
+    }
   }
   function setViewMode(m) {
     if (m === viewMode) return;
     viewMode = m;
-    if (m === 'edit') setPlaying(false);
-    if (m === 'play') { closePops(); stopPlacing(); }
+    if (m === 'edit') { setPlaying(false); applyTimeEffects(null); }
+    if (m === 'play') { closePops(); stopPlacing(); cancelDrawing(); }
     repaint();
   }
   function setPlaying(p) {
@@ -1193,6 +1684,11 @@ export function createEditor() {
     $('#tl-cam').innerHTML = `<div class="bar" style="left:${pct(a)};width:${pct(b - a)}"><span>${camLabel[0]}</span><span>${camLabel[1]}</span></div>`;
     const pauses = model.runs.filter((r) => r.pauseAfter > 0 && r !== model.runs.at(-1)).map((r) => `<div class="pause" style="left:${pct(r.end)};width:${pct(r.pauseAfter)}"></div>`).join('');
     $('#tl-line').innerHTML = model.drawable.length ? `<div class="bar" style="left:${pct(a)};width:${pct(b - a)}"><span>Line draws</span></div>${pauses}` : '';
+    $('#tl-layers').innerHTML = layersOf().filter((L) => !L.hidden).map((L, i) => {
+      const d = Math.max(0.05, +L.duration || 0.05);
+      const tail = L.hold > 0 ? L.hold : Math.max(0, total - L.start - d);
+      return `<div class="lb ${i % 2 ? 'a' : 'b'} ${L.id === selLayer ? 'sel' : ''}" data-id="${L.id}" title="${esc(L.name)}" style="left:${pct(L.start)};width:${pct(d)};--tail:${((tail / d) * 100).toFixed(1)}%"></div>`;
+    }).join('');
     $('#tl-signs').innerHTML = model.signTimes.map((t, i) => `<div class="sig" style="left:${pct(t)}" title="${esc(scene().signs[i]?.text || '')}">${i + 1}</div>`).join('');
     updatePlayhead();
     updateSpeed();
@@ -1204,6 +1700,8 @@ export function createEditor() {
   const tracks = $('#tl-tracks');
   tracks.addEventListener('pointerdown', (e) => {
     if (exporting) return;
+    const lb = e.target.closest('.lb');
+    if (lb) { if (step !== 'layers') setStep('layers'); selectLayer(lb.dataset.id); return; }
     tracks.setPointerCapture(e.pointerId);
     const seek = (ev) => {
       const r = tracks.getBoundingClientRect();
@@ -1327,7 +1825,10 @@ export function createEditor() {
     closePops();
     time = 0;
     viewMode = 'edit';
+    selLayer = null; cancelDrawing();
+    floods.clear();
     applyLook(scene());
+    floods.sync(scene()).then(() => applyTimeEffects(null));
     rebuild();
     showEditView();
     renderScenes();
@@ -1347,18 +1848,20 @@ export function createEditor() {
   document.addEventListener('keydown', (e) => {
     if ($('#editor').hidden || exporting) return;
     const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName) && document.activeElement.type !== 'range' && document.activeElement.type !== 'checkbox';
-    if (e.key === 'Escape') { stopPlacing(); closePops(); selPoint = null; selectSign(null); repaint(); return; }
+    if (e.key === 'Escape') { stopPlacing(); cancelDrawing(); closePops(); selPoint = null; selectSign(null); repaint(); return; }
+    if (e.key === 'Enter' && drawing && !typing) { e.preventDefault(); finishDrawing(); return; }
     if (typing) return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (step === 'route' && selPoint) { e.preventDefault(); deletePoint(selPoint.li, selPoint.i); }
+      else if (step === 'layers' && selLayer) { e.preventDefault(); deleteLayer(selLayer); }
       else if (step === 'signs' && selSign != null) { e.preventDefault(); deleteSign(selSign); }
     }
   });
 
   // ---------------------------------------------------------------- export
-  let exportAbort = null, exportUrl = null;
+  let exportAbort = null, exportUrl = null, expScene = null;
   async function startExport() {
     if (exporting) return;
     if (!project.scenes.some((sc) => buildScene(sc, frame.w, frame.h).drawable.length || sc.signs.length)) { toast('Draw a route first'); return; }
@@ -1400,12 +1903,26 @@ export function createEditor() {
         durationOf: (sc) => buildScene(sc, frame.w, frame.h).total,
         prepareScene: async (sc) => {
           await applyLook(sc);
+          floods.clear();
+          await floods.sync(sc);
           await preloadSignImages(sc.signs);
+          bldFactor = null;
+          expScene = sc;
           return buildScene(sc, frame.w, frame.h);
         },
-        applyCamera: (m, t) => { const c = m.cameraAt(t); map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 }); },
+        applyCamera: (m, t) => {
+          const c = m.cameraAt(t);
+          map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 });
+          applyTimeEffects(t, expScene, m);
+        },
         drawFrame: (ctx, sc, m, t) => {
-          renderScene(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: { x: 0, y: 0, w: width, h: height } });
+          const full = { x: 0, y: 0, w: width, h: height };
+          const mc = map.getCanvas();
+          const lens = lensFor(sc, m, t, (ll) => map.project(ll).y / frame.h);
+          if (lens?.dof) drawDepthOfField(ctx, mc, 0, 0, mc.width, mc.height, full, lens, unit);
+          renderScene(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full });
+          drawVignette(ctx, full, +sc.camera.lens?.vignette || 0);
+          renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full });
           drawAttribution(ctx, themeAttribution(sc.look), unit, width, height);
         },
         onStatus: (s) => { $('#render-status').textContent = s; },
@@ -1444,6 +1961,8 @@ export function createEditor() {
       map.setPixelRatio(window.devicePixelRatio || 1);
       sceneIdx = origIdx;
       applyLook(scene());
+      floods.clear();
+      floods.sync(scene()).then(() => applyTimeEffects(null));
       layout();
       viewMode = 'edit';
       showEditView();
@@ -1457,6 +1976,10 @@ export function createEditor() {
     async open(p, opts = {}) {
       if (!map) initMap();
       project = p;
+      project.scenes.forEach(migrateScene);
+      selLayer = null; drawing = null; pickOrigin = null;
+      floods.clear();
+      $('#resolution-top').value = String(project.resolution);
       sceneIdx = 0;
       activeLeg = scene().legs.length - 1;
       selPoint = selSign = null;
@@ -1480,6 +2003,8 @@ export function createEditor() {
       if (!scene().camera.fixed && model.fit && scene().camera.mode === 'fixed') scene().camera.fixed = { ...model.fit };
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(tick);
+      floods.sync(scene()).then(() => applyTimeEffects(null));
+      renderCamSelects();
       if (opts.importFile) await importRoute(opts.importFile);
       return this;
     },
@@ -1494,6 +2019,30 @@ export function createEditor() {
     startExport,
     importRoute,
   };
+}
+
+/** Bring scenes saved by older versions up to date. */
+function migrateScene(sc) {
+  sc.layers ||= [];
+  const c = sc.camera || (sc.camera = {});
+  c.intro ||= 'none';
+  c.introSeconds ??= 2.5;
+  c.outro ||= 'none';
+  c.outroSeconds ??= 2.5;
+  c.lens = { dof: false, blur: 6, focus: 0.55, band: 0.35, followArrow: false, vignette: 0, ...(c.lens || {}) };
+  sc.look.buildings3d ??= false;
+  sc.look.buildingsRise ??= false;
+}
+
+/** Lens settings for a frame; with "keep the arrow sharp" the focus band follows the traveller. */
+export function lensFor(sc, model, t, toFrameY) {
+  const lens = sc.camera?.lens;
+  if (!lens?.dof) return lens;
+  if (lens.followArrow && t != null && model.drawable.length) {
+    const st = model.stateAt(t);
+    if (st.point) return { ...lens, focusY: Math.max(0.05, Math.min(0.95, toFrameY(st.point))) };
+  }
+  return lens;
 }
 
 export function drawAttribution(ctx, text, unit, W, H) {

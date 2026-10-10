@@ -159,6 +159,7 @@ export function createHome({ open }) {
       });
       buildStyle(sc.look).then((st) => demoMap.setStyle(st)).catch(() => {});
       demoMap.on('render', drawDemo);
+      demoMap.on('error', () => {});
       new ResizeObserver(() => { if (!el.clientWidth || !el.clientHeight) return; demoMap.resize(); layoutDemo(); }).observe(el);
       layoutDemo();
     }

@@ -1,6 +1,7 @@
 // Scene model → geometry, timeline, camera and per-frame state. Pure functions, no DOM.
 import { smoothPath, unwrap, measure, sampleAt, bounds, toMerc, fromMerc, mercLength, screenHeading, haversine } from './geo.js';
 import { modeOf, lineStyleOf } from './modes.js';
+import { layerCoords, layerBounds, layerEnd } from './layers.js';
 
 const TILE = 512;
 export const REF_W = 1000; // camera zooms are stored for a 1000-px-wide frame
@@ -115,6 +116,9 @@ export function buildScene(scene, fw, fh) {
   });
   const drawable = legs.filter((L) => L.coords.length > 1);
   const all = legs.flatMap((L) => L.coords);
+  const layers = (scene.layers || []).filter((L) => !L.hidden);
+  const layerPts = layers.filter((L) => L.kind !== 'caption').flatMap(layerCoords);
+  const everything = all.concat(layerPts);
 
   // ---- fit view ----
   let fit;
@@ -123,6 +127,13 @@ export function buildScene(scene, fw, fh) {
     fit = { center: c.center, zoomRef: zoomRefFor(c.zoom, fw), bearing: 0, pitch: 0 };
   } else if (all.length === 1) fit = { center: all[0], zoomRef: zoomRefFor(10, fw), bearing: 0, pitch: 0 };
   else fit = null;
+  // overview: route + layers
+  let overview = fit;
+  if (everything.length > 1) {
+    const c = fitCamera(bounds(everything), fw, fh);
+    overview = { center: c.center, zoomRef: zoomRefFor(c.zoom, fw), bearing: 0, pitch: 0 };
+  } else if (!fit && everything.length === 1) overview = { center: everything[0], zoomRef: zoomRefFor(11, fw), bearing: 0, pitch: 0 };
+  if (!fit) fit = overview;
 
   // ---- runs (pieces of line between pauses / leg ends) ----
   const runs = [];
@@ -149,16 +160,21 @@ export function buildScene(scene, fw, fh) {
   const wsum = runs.reduce((s, r) => s + r.weight, 0) || 1;
   const stillStart = Math.max(0, +scene.stillStart || 0);
   const stillEnd = Math.max(0, +scene.stillEnd || 0);
-  let t = stillStart + firstPause;
+  const cam0 = scene.camera || {};
+  const I = cam0.intro && cam0.intro !== 'none' ? Math.max(0.3, +cam0.introSeconds || 2.5) : 0;
+  const O = cam0.outro && cam0.outro !== 'none' ? Math.max(0.3, +cam0.outroSeconds || 2.5) : 0;
+  let t = I + stillStart + firstPause;
   for (const r of runs) {
     r.dur = (lineSeconds * r.weight) / wsum;
     r.start = t;
     r.end = t + r.dur;
     t = r.end + r.pauseAfter;
   }
-  const drawStart = stillStart;
-  const drawEnd = runs.length ? t : stillStart;
-  const total = Math.max(0.5, drawEnd + stillEnd);
+  const drawStart = I + stillStart;
+  const drawEnd = runs.length ? t : drawStart;
+  const featEnd = layers.reduce((m, L) => Math.max(m, layerEnd(L)), 0);
+  const mainEnd = Math.max(drawEnd, featEnd, drawStart) + stillEnd;
+  const total = Math.max(0.5, mainEnd + O);
 
   // cumulative offsets so progress is one number across legs
   let off = 0;
@@ -210,7 +226,7 @@ export function buildScene(scene, fw, fh) {
   const followZoom = zoomFor(cam.followZoomRef ?? ((fit?.zoomRef ?? 3) + 2), fw);
   let smoothBearing = null;
 
-  function cameraAt(time) {
+  function baseCam(time) {
     if (cam.mode === 'startEnd') {
       const u = drawEnd > drawStart ? easeInOut((time - drawStart) / (drawEnd - drawStart)) : (time > drawStart ? 1 : 0);
       return interpView(startV, endV, u);
@@ -232,9 +248,47 @@ export function buildScene(scene, fw, fh) {
     return fixedV;
   }
 
+  // ---- intro / outro moves ("zoom to a feature at the start and end") ----
+  const worldZoom = Math.log2(fw / 512) + 0.15;
+  const viewOf = (spec, ref, isEnd) => {
+    if (!spec || spec === 'none') return null;
+    if (spec === 'world') return { center: [ref.center[0], clamp(ref.center[1], -45, 55)], zoom: worldZoom, bearing: 0, pitch: 0 };
+    if (spec === 'wide') return { center: ref.center, zoom: Math.max(worldZoom, ref.zoom - 5), bearing: 0, pitch: 0 };
+    if (spec === 'overview' && overview) return { center: overview.center, zoom: zoomFor(overview.zoomRef, fw), bearing: 0, pitch: tilt };
+    if ((spec === 'routeStart' || spec === 'routeEnd') && all.length) {
+      const p = spec === 'routeStart' ? all[0] : all.at(-1);
+      return { center: p, zoom: clamp(zoomFor(fit.zoomRef, fw) + 2.5, 2, 16), bearing: 0, pitch: tilt };
+    }
+    if (spec.startsWith('feature:')) {
+      const L = layers.find((x) => x.id === spec.slice(8));
+      const b = L && layerBounds(L);
+      if (b) {
+        if (L.geom.type === 'Point') return { center: L.geom.coordinates, zoom: 13, bearing: 0, pitch: tilt };
+        const c = fitCamera(b, fw, fh, 0.16);
+        return { center: c.center, zoom: c.zoom, bearing: 0, pitch: tilt };
+      }
+    }
+    return isEnd ? null : null;
+  };
+  const introFrom = I ? viewOf(cam.intro, baseCam(I), false) : null;
+  const introTo = I ? baseCam(I) : null;
+  const introPath = introFrom ? flyPath(introFrom, introTo, fw, fh) : null;
+  const outroFrom = O ? baseCam(mainEnd) : null;
+  const outroTo = O ? viewOf(cam.outro, outroFrom, true) : null;
+  const outroPath = outroTo ? flyPath(outroFrom, outroTo, fw, fh) : null;
+
+  function cameraAt(time) {
+    if (introPath && time < I) return introPath(easeInOut(time / I));
+    if (outroPath && time > mainEnd) return outroPath(easeInOut((time - mainEnd) / O));
+    return baseCam(Math.min(time, mainEnd));
+  }
+
+  // 3D buildings growing up at the start of the scene
+  const buildingsAt = (time) => (scene.look?.buildingsRise ? easeInOut((time - I) / 2.5) : 1);
+
   // ---- signs: when do they appear? ----
   const signTimes = (scene.signs || []).map((sg) => {
-    if (sg.appear === 'start' || !drawable.length) return 0;
+    if (sg.appear === 'start' || !drawable.length) return I;
     if (sg.appear === 'end') return drawEnd;
     // nearest point on the route
     const mp = toMerc([sg.lng, sg.lat]);
@@ -260,7 +314,18 @@ export function buildScene(scene, fw, fh) {
     return Math.max(drawStart, hi - 0.15);
   });
 
-  return { legs, drawable, runs, total, drawStart, drawEnd, stillStart, stillEnd, routeLen, fit, stateAt, cameraAt, signTimes, fw, fh };
+  return { legs, drawable, runs, total, drawStart, drawEnd, stillStart, stillEnd, routeLen, fit, overview, stateAt, cameraAt, signTimes, fw, fh, intro: I, outro: O, mainEnd, layers, buildingsAt };
+}
+
+/** Like interpView, but zooms out in the middle when the two views are far apart (flyTo feel). */
+export function flyPath(c0, c1, vw, vh) {
+  const m0 = toMerc(c0.center), m1 = toMerc(c1.center);
+  const dist = Math.hypot(m1[0] - m0[0], m1[1] - m0[1]) * TILE * 2 ** Math.min(c0.zoom, c1.zoom);
+  if (dist < Math.max(vw, vh) * 1.3) return (u) => interpView(c0, c1, u);
+  const b = [[Math.min(c0.center[0], c1.center[0]), Math.min(c0.center[1], c1.center[1])], [Math.max(c0.center[0], c1.center[0]), Math.max(c0.center[1], c1.center[1])]];
+  const mid = { ...fitCamera(b, vw, vh, 0.25), bearing: 0, pitch: 0 };
+  mid.zoom = Math.min(mid.zoom, c0.zoom, c1.zoom);
+  return (u) => (u < 0.5 ? interpView(c0, mid, u * 2) : interpView(mid, c1, (u - 0.5) * 2));
 }
 
 /** Default scene settings. */
@@ -272,7 +337,8 @@ export function newScene(name = 'Scene 1', look) {
     look: look ? JSON.parse(JSON.stringify(look)) : defaultLook(),
     signs: [],
     signSize: 1,
-    camera: { mode: 'fixed', fixed: null, start: null, end: null, followZoomRef: null, followRotate: false, tilt: 0 },
+    camera: { mode: 'fixed', fixed: null, start: null, end: null, followZoomRef: null, followRotate: false, tilt: 0, intro: 'none', introSeconds: 2.5, outro: 'none', outroSeconds: 2.5, lens: { dof: false, blur: 6, focus: 0.55, band: 0.35, followArrow: false, vignette: 0 } },
+    layers: [],
     lineSeconds: 5,
     stillStart: 0.5,
     stillEnd: 1.5,
@@ -282,6 +348,6 @@ export const legId = () => `lg_${Math.random().toString(36).slice(2, 9)}`;
 export function defaultLook() {
   return {
     theme: 'classic', placeNames: true, lang: 'default', states: false, terrain: false, terrainExaggeration: 1.4,
-    lineColor: '#ff4a2b', lineWidth: 5, outline: true, symbol: 'auto', symbolSize: 1, symbol3d: true, compass: false,
+    lineColor: '#ff4a2b', lineWidth: 5, outline: true, symbol: 'auto', symbolSize: 1, symbol3d: true, compass: false, buildings3d: false, buildingsRise: false,
   };
 }

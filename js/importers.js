@@ -136,3 +136,46 @@ export async function readRouteFile(file) {
   res.name ||= file.name.replace(/\.[^.]+$/, '');
   return res;
 }
+
+/** KML placemarks → GeoJSON features (polygons, lines and points). */
+export function kmlToGeoJSON(text) {
+  const doc = parseXML(text);
+  const feats = [];
+  const coordsOf = (s) => s.trim().split(/\s+/).map((t) => t.split(',').map(Number)).map(([x, y]) => [x, y]).filter(ok);
+  for (const pm of byTag(doc, 'Placemark')) {
+    const props = { name: firstText(pm, 'name') };
+    for (const pg of byTag(pm, 'Polygon')) {
+      const outer = pg.getElementsByTagName('outerBoundaryIs')[0];
+      const rings = [];
+      if (outer) rings.push(coordsOf(firstText(outer, 'coordinates')));
+      for (const inner of byTag(pg, 'innerBoundaryIs')) rings.push(coordsOf(firstText(inner, 'coordinates')));
+      if (rings[0]?.length > 3) feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: rings } });
+    }
+    for (const ls of byTag(pm, 'LineString')) {
+      const c = coordsOf(firstText(ls, 'coordinates'));
+      if (c.length > 1) feats.push({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: c } });
+    }
+    const pt = pm.getElementsByTagName('Point')[0];
+    if (pt) { const c = coordsOf(firstText(pt, 'coordinates'))[0]; if (c) feats.push({ type: 'Feature', properties: props, geometry: { type: 'Point', coordinates: c } }); }
+  }
+  return { type: 'FeatureCollection', features: feats };
+}
+
+/** Read any supported file as GeoJSON for map layers. */
+export async function readLayerFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.kmz')) return kmlToGeoJSON(await unzipFirst(await file.arrayBuffer(), (n) => n.toLowerCase().endsWith('.kml')));
+  const text = await file.text();
+  if (name.endsWith('.kml') || text.includes('<kml')) return kmlToGeoJSON(text);
+  if (name.endsWith('.gpx') || text.includes('<gpx')) {
+    const g = parseGPX(text);
+    return { type: 'FeatureCollection', features: [
+      ...g.tracks.map((t) => ({ type: 'Feature', properties: { name: g.name }, geometry: { type: 'LineString', coordinates: t } })),
+      ...g.waypoints.map((w) => ({ type: 'Feature', properties: { name: w.name }, geometry: { type: 'Point', coordinates: [w.lng, w.lat] } })),
+    ] };
+  }
+  const obj = JSON.parse(text);
+  if (obj.type === 'Topology') throw new Error('TopoJSON is not supported — please export it as GeoJSON');
+  if (!obj.type) throw new Error('Not a GeoJSON file');
+  return obj;
+}
