@@ -1,5 +1,5 @@
 // Home page: create/open projects, the list of saved projects, and the live demo.
-import { listProjects, saveProject, deleteProject, newProject, normalizeProject, demoProject } from './store.js';
+import { listProjects, saveProject, deleteProject, newProject, normalizeProject, demoProject, projectFileJSON, importProjectMedia } from './store.js';
 import { buildStyle } from './themes.js';
 import { buildScene } from './scene.js';
 import { renderScene } from './renderer.js';
@@ -81,7 +81,7 @@ export function createHome({ open }) {
         return;
       }
       if (e.target.closest('[data-dl]')) {
-        downloadBlob(new Blob([JSON.stringify(p)], { type: 'application/json' }), `${(p.name || 'trip').replace(/[^\w-]+/g, '-')}.mapanim.json`);
+        downloadBlob(new Blob([await projectFileJSON(p)], { type: 'application/json' }), `${(p.name || 'trip').replace(/[^\w-]+/g, '-')}.mapanim.json`);
         return;
       }
       open(p.id);
@@ -118,6 +118,7 @@ export function createHome({ open }) {
         open(p.id, { importFile: file });
         return;
       }
+      if (json.scenes) await importProjectMedia(json);
       const p = normalizeProject(json);
       await saveProject(p);
       toast('Project opened');

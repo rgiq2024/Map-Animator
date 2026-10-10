@@ -30,7 +30,7 @@ export const THEMES = {
     pal: P({ land: '#3b4d63', water: '#1f2d40', waterLine: '#26364b', wood: '#3a5064', grass: '#3d5268', park: '#3b5167', urban: '#44566c', sand: '#4a5a6e', ice: '#5a6c80', building: '#4b5d73', motorway: '#8fa6c0', roadMajor: '#7088a3', roadMid: '#5f7690', roadMinor: '#53697f', casing: '#2f3e51', rail: '#5c7088', border: '#9db1c8', stateBorder: '#6e849c', label: '#e3ecf5', halo: '#2b3a4d', waterLabel: '#8ca4be' }),
     shade: { shadow: '#18222f', highlight: '#7d93ad', accent: '#2a394c', strength: 0.4 }, swatch: ['#3b4d63', '#1f2d40', '#ffb347'],
   },
-  satellite: { name: 'Satellite', desc: 'Aerial imagery with optional names', satellite: true, line: '#ffd23f', dark: true, swatch: ['#3f5a3a', '#1f3b5c', '#ffd23f'] },
+  satellite: { name: 'Satellite', desc: 'Esri World Imagery with optional names and roads', satellite: true, line: '#ffd23f', dark: true, swatch: ['#3f5a3a', '#1f3b5c', '#ffd23f'] },
   treasure: {
     name: 'Treasure', desc: 'Parchment and ink, like an old treasure map', line: '#b3261e',
     pal: P({ land: '#ead9b0', water: '#c9d6c2', waterLine: '#9fb39a', wood: '#d9c993', grass: '#e2d3a3', park: '#dccc96', urban: '#dfcca0', sand: '#efdfb5', ice: '#f3ead2', building: '#cfb98a', motorway: '#8a5a32', roadMajor: '#9c6d43', roadMid: '#b08458', roadMinor: '#c6a274', casing: '#ead9b0', rail: '#8a6a45', border: '#7a4a2a', stateBorder: '#a6805c', label: '#4a2e17', halo: '#efe2bf', waterLabel: '#55714f' }),
@@ -77,8 +77,37 @@ export const THEMES = {
     pal: P({ land: '#2f6466', water: '#123c4a', waterLine: '#1a4b5a', wood: '#2b5d5f', grass: '#326a6b', park: '#2f6566', urban: '#356c6d', sand: '#3e7473', ice: '#5c8f8e', building: '#3b7273', motorway: '#d8f3ef', roadMajor: '#a6dcd6', roadMid: '#7fc2bb', roadMinor: '#5aa29b', casing: '#2f6466', rail: '#7fb0aa', border: '#d8f3ef', stateBorder: '#7fb0aa', label: '#e6fbf8', halo: '#24504f', waterLabel: '#7fb7c4' }),
     shade: { shadow: '#0f2c2d', highlight: '#7fb7b4', accent: '#1d4546', strength: 0.4 }, swatch: ['#2f6466', '#123c4a', '#d8f3ef'] },
 };
+// ---- Free raster base maps (imagery and classic map tiles) ----
+const ESRI = (svc) => [`https://server.arcgisonline.com/ArcGIS/rest/services/${svc}/MapServer/tile/{z}/{y}/{x}`];
+const R = (o) => ({ more: true, raster: true, satellite: true, ...o });
+Object.assign(THEMES, {
+  sentinel: R({ group: 'imagery', name: 'Sentinel-2 cloudless', desc: 'Cloud-free Sentinel-2 mosaic by EOX (non-commercial use)', tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/g/{z}/{y}/{x}.jpg'], maxzoom: 15, attribution: 'Sentinel-2 cloudless – s2maps.eu by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2021)', line: '#ffd23f', swatch: ['#5d7046', '#24435c', '#ffd23f'] }),
+  bluemarble: R({ group: 'imagery', name: 'Blue Marble', desc: 'NASA Blue Marble with shaded relief and ocean floor — great for world views', tiles: ['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg'], maxzoom: 8, attribution: 'NASA Blue Marble · NASA EOSDIS GIBS', line: '#ffd23f', swatch: ['#3d6b3a', '#0d2a55', '#ffd23f'] }),
+  citylights: R({ group: 'imagery', name: 'Earth at night', desc: 'NASA city lights from space', tiles: ['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_CityLights_2012/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg'], maxzoom: 8, attribution: 'NASA Earth Observatory / NOAA NGDC · NASA EOSDIS GIBS', line: '#36d1ff', swatch: ['#05070d', '#e0b04a', '#36d1ff'] }),
+  usgs: R({ group: 'imagery', name: 'USGS imagery (USA)', desc: 'High-resolution aerial photos of the United States', tiles: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}'], maxzoom: 16, attribution: 'USGS The National Map', line: '#ffd23f', swatch: ['#56684a', '#2b4256', '#ffd23f'] }),
+  esritopo: R({ group: 'base', name: 'Esri Topographic', desc: 'Detailed topographic map', tiles: ESRI('World_Topo_Map'), maxzoom: 19, labels: true, attribution: 'Tiles © Esri — Esri, HERE, Garmin, FAO, NOAA, USGS, © OpenStreetMap contributors', line: '#e8553f', satellite: false, swatch: ['#f1efe4', '#a6cbe3', '#e8553f'] }),
+  esristreet: R({ group: 'base', name: 'Esri Streets', desc: 'Classic street map', tiles: ESRI('World_Street_Map'), maxzoom: 19, labels: true, attribution: 'Tiles © Esri — Esri, HERE, Garmin, USGS, © OpenStreetMap contributors', line: '#2d7ff9', satellite: false, swatch: ['#f5f2ea', '#a9cbe6', '#2d7ff9'] }),
+  natgeo: R({ group: 'base', name: 'National Geographic', desc: 'National Geographic style world map', tiles: ESRI('NatGeo_World_Map'), maxzoom: 16, labels: true, attribution: 'Tiles © Esri — National Geographic, Esri, Garmin, HERE, UNEP-WCMC, USGS, NASA, ESA, METI, NRCAN, GEBCO, NOAA, iPC', line: '#c0392b', satellite: false, swatch: ['#e9e3cd', '#9fc4d8', '#c0392b'] }),
+  ocean: R({ group: 'base', name: 'Ocean', desc: 'Sea floor depths and coastlines', tiles: ESRI('Ocean/World_Ocean_Base'), maxzoom: 13, attribution: 'Tiles © Esri — GEBCO, NOAA, CHS, OSU, UNH, CSUMB, National Geographic, DeLorme, NAVTEQ, Esri', line: '#ff7a1a', satellite: false, swatch: ['#d9d6cc', '#6f9fc8', '#ff7a1a'] }),
+  relief: R({ group: 'base', name: 'Shaded relief', desc: 'Mountains and valleys, no labels', tiles: ESRI('World_Shaded_Relief'), maxzoom: 13, attribution: 'Tiles © Esri — Source: Esri', line: '#e8553f', satellite: false, swatch: ['#cfcfcf', '#bdbdbd', '#e8553f'] }),
+  terrainbase: R({ group: 'base', name: 'Terrain', desc: 'Natural terrain colours, no labels', tiles: ESRI('World_Terrain_Base'), maxzoom: 13, attribution: 'Tiles © Esri — Source: USGS, Esri, TANA, DeLorme, NPS', line: '#e8553f', satellite: false, swatch: ['#d8d4b8', '#a9c3cf', '#e8553f'] }),
+  lightgray: R({ group: 'base', name: 'Light gray canvas', desc: 'Quiet light gray base', tiles: ESRI('Canvas/World_Light_Gray_Base'), maxzoom: 16, attribution: 'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors', line: '#ff4a2b', satellite: false, swatch: ['#ececec', '#cfd5d9', '#ff4a2b'] }),
+  darkgray: R({ group: 'base', name: 'Dark gray canvas', desc: 'Quiet dark base', tiles: ESRI('Canvas/World_Dark_Gray_Base'), maxzoom: 16, attribution: 'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors', line: '#ff6a3d', dark: true, satellite: false, swatch: ['#2b2b2b', '#1a1a1a', '#ff6a3d'] }),
+  opentopo: R({ group: 'base', name: 'OpenTopoMap', desc: 'Topographic map with contour lines', tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://c.tile.opentopomap.org/{z}/{x}/{y}.png'], maxzoom: 17, labels: true, attribution: 'Map © OpenTopoMap (CC-BY-SA) · Data © OpenStreetMap contributors, SRTM', line: '#e8553f', satellite: false, swatch: ['#eef0d8', '#9cc6e6', '#e8553f'] }),
+  osm: R({ group: 'base', name: 'OpenStreetMap', desc: 'The standard OpenStreetMap', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], maxzoom: 19, labels: true, attribution: '© OpenStreetMap contributors', line: '#2d7ff9', satellite: false, swatch: ['#f2efe9', '#aad3df', '#2d7ff9'] }),
+  cartolight: R({ group: 'base', name: 'CARTO Positron', desc: 'Light, minimal', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}@2x.png', 'https://b.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}@2x.png'], maxzoom: 19, labels: true, attribution: '© CARTO © OpenStreetMap contributors', line: '#ff4a2b', satellite: false, swatch: ['#fafaf8', '#d4dadc', '#ff4a2b'] }),
+  cartodark: R({ group: 'base', name: 'CARTO Dark Matter', desc: 'Dark, minimal', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png', 'https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png'], maxzoom: 19, labels: true, attribution: '© CARTO © OpenStreetMap contributors', line: '#ff6a3d', dark: true, satellite: false, swatch: ['#262626', '#121212', '#ff6a3d'] }),
+  cartovoyager: R({ group: 'base', name: 'CARTO Voyager', desc: 'Colourful and clear', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', 'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], maxzoom: 19, labels: true, attribution: '© CARTO © OpenStreetMap contributors', line: '#e8553f', satellite: false, swatch: ['#f5f3ef', '#a8d1e7', '#e8553f'] }),
+});
+THEMES.satellite.tiles = SAT_TILES;
+THEMES.satellite.maxzoom = 19;
+THEMES.satellite.attribution = 'Imagery © Esri, Maxar, Earthstar Geographics';
+
 export const MAIN_THEMES = Object.keys(THEMES).filter((k) => !THEMES[k].more);
-export const MORE_THEMES = Object.keys(THEMES).filter((k) => THEMES[k].more);
+export const MORE_THEMES = Object.keys(THEMES).filter((k) => THEMES[k].more && !THEMES[k].raster);
+export const IMAGERY_THEMES = Object.keys(THEMES).filter((k) => THEMES[k].raster && THEMES[k].group === 'imagery');
+export const BASE_THEMES = Object.keys(THEMES).filter((k) => THEMES[k].raster && THEMES[k].group === 'base');
+const isRaster = (t) => !!t.tiles;
 
 export const ATTRIBUTION = {
   base: '© OpenFreeMap © OpenMapTiles · Data © OpenStreetMap contributors',
@@ -148,11 +177,22 @@ export async function buildStyle(look) {
   const layers = [];
   const field = nameField(look.lang);
 
-  if (theme.satellite) {
-    st.sources.sat = { type: 'raster', tiles: SAT_TILES, tileSize: 256, maxzoom: 19, attribution: ATTRIBUTION.satellite };
-    layers.push({ id: 'background', type: 'background', paint: { 'background-color': '#1b2a1f' } });
+  if (isRaster(theme)) {
+    st.sources.sat = { type: 'raster', tiles: theme.tiles, tileSize: 256, maxzoom: theme.maxzoom || 19, attribution: theme.attribution };
+    layers.push({ id: 'background', type: 'background', paint: { 'background-color': theme.dark || theme.satellite ? '#1b2124' : '#e9e7e1' } });
     layers.push({ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 0 } });
+    const wantLabels = look.rasterLabels !== false && !theme.labels;
+    if (look.rasterRoads && theme.satellite) {
+      for (const l of base.layers) {
+        if (l.type === 'line' && /^road_(motorway|trunk_primary|secondary_tertiary)$/.test(l.id)) {
+          const c = clone(l);
+          c.paint = { ...(c.paint || {}), 'line-color': 'rgba(255,236,170,0.75)' };
+          layers.push(c);
+        }
+      }
+    }
     for (const l of base.layers) {
+      if (!wantLabels) break;
       if (l.type === 'symbol' && PLACE_LAYERS.test(l.id)) {
         const c = clone(l);
         c.paint = { ...(c.paint || {}), 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.75)', 'text-halo-width': 1.4 };
@@ -213,7 +253,7 @@ export async function buildStyle(look) {
       layers.push(c);
     }
   }
-  if (theme.satellite) {
+  if (isRaster(theme)) {
     for (const c of layers) {
       if (c.type === 'symbol' && !look.placeNames) c.layout = { ...(c.layout || {}), visibility: 'none' };
       if (c.type === 'symbol' && field) c.layout = { ...(c.layout || {}), 'text-field': field };
@@ -237,7 +277,7 @@ export async function buildStyle(look) {
   // 3D buildings (our own extrusion so every theme gets matching colours and the "grow up" animation)
   for (let i = layers.length - 1; i >= 0; i--) if (layers[i].id === 'building-3d') layers.splice(i, 1);
   if (look.buildings3d) {
-    const col = theme.satellite ? '#d9d4cc' : theme.pal ? theme.pal.building : '#dcd3c6';
+    const col = isRaster(theme) ? '#d9d4cc' : theme.pal ? theme.pal.building : '#dcd3c6';
     const firstSym = layers.findIndex((l) => l.type === 'symbol');
     layers.splice(firstSym < 0 ? layers.length : firstSym, 0, {
       id: 'ma-buildings', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building', minzoom: 13,
@@ -263,7 +303,7 @@ export async function buildStyle(look) {
 
 export function themeAttribution(look) {
   const t = THEMES[look.theme] || THEMES.classic;
-  let a = t.satellite ? ATTRIBUTION.satellite : ATTRIBUTION.base;
+  let a = t.tiles ? `${t.attribution}${look.rasterLabels !== false && !t.labels ? ' · © OpenStreetMap' : ''}` : ATTRIBUTION.base;
   if (t.shade || look.terrain) a += ` · ${ATTRIBUTION.terrain}`;
   return a;
 }

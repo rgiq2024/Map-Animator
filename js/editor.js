@@ -1,13 +1,20 @@
 // The editor: scenes, the five steps, map interaction, timeline and export.
 import { MODE_GROUPS, MODES, LINE_STYLES, modeOf } from './modes.js';
-import { THEMES, MAIN_THEMES, MORE_THEMES, buildStyle, themeAttribution, themeSwatchSVG } from './themes.js';
+import { THEMES, MAIN_THEMES, MORE_THEMES, IMAGERY_THEMES, BASE_THEMES, buildStyle, themeAttribution, themeSwatchSVG } from './themes.js';
 import { SIGN_TYPES, drawSignPreview, preloadSignImages } from './signs.js';
 import { buildScene, newScene, legId, zoomFor, zoomRefFor, fitCamera, routeStats, pointsKey } from './scene.js';
 import { renderScene, renderCaptions, projector } from './renderer.js';
 import { LAYER_KINDS, ANIMS, EFFECTS, MARKERS, CAPTION_LAYOUTS, POSITIONS, SYMBOL_PRESETS, newLayer, layersFromGeoJSON, layerBounds, layerTiming, hitLayer, drawLayers, centroid } from './layers.js';
 import { TerrainFloods } from './flood.js';
+import { createTimeline } from './timeline-ui.js';
+import { gradeFilter, drawGradeWash, GRADE_PRESETS, presetGrade, defaultGrade } from './effects.js';
+import { NORTH_STYLES, NORTH_MODES, CORNERS, defaultNorth, defaultScaleBar } from './hud.js';
+import { EASE_NAMES } from './scene.js';
+import { parseCSVPoints } from './layers.js';
+import { addAudioFile, mixProject, playFrom, stopPlayback, startRecording, stopRecording, isRecording } from './audio.js';
+import { projectFileJSON, deleteMedia } from './store.js';
 import { drawDepthOfField, drawVignette } from './effects.js';
-import { exportVideo } from './export.js';
+import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
@@ -112,8 +119,8 @@ export function createEditor() {
   }
 
   function lookKey(look) {
-    const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d } = look;
-    return JSON.stringify({ theme, placeNames, lang, states, terrain, buildings3d: !!buildings3d, terrainExaggeration: terrain ? terrainExaggeration : 0 });
+    const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d, rasterLabels, rasterRoads } = look;
+    return JSON.stringify({ theme, placeNames, lang, states, terrain, buildings3d: !!buildings3d, rasterLabels: rasterLabels !== false, rasterRoads: !!rasterRoads, terrainExaggeration: terrain ? terrainExaggeration : 0 });
   }
   function applyLook(sc) {
     const key = lookKey(sc.look);
@@ -132,6 +139,7 @@ export function createEditor() {
       });
       bldFactor = null;
       floods?.attach();
+      $('#map').style.filter = gradeFilter(scene().look.grade);
       applyTimeEffects(viewMode === 'play' ? time : null);
     })();
     return stylePromise;
@@ -212,11 +220,13 @@ export function createEditor() {
     const fr = { x: frame.x * px, y: frame.y * px, w: frame.w * px, h: frame.h * px };
     const t = viewMode === 'play' ? time : null;
     const lens = lensFor(scene(), model, t, (ll) => { const q = map.project(ll); return (q.y - frame.y) / frame.h; });
+    const gf = gradeFilter(scene().look.grade);
     if (lens?.dof) {
       const mc = map.getCanvas();
       const k = mc.width / stage.clientWidth;
-      drawDepthOfField(octx, mc, frame.x * k, frame.y * k, frame.w * k, frame.h * k, fr, lens, unit);
+      drawDepthOfField(octx, mc, frame.x * k, frame.y * k, frame.w * k, frame.h * k, fr, { ...lens, filter: gf }, unit);
     }
+    drawGradeWash(octx, { x: 0, y: 0, w: W, h: H }, scene().look.grade);
     hits = renderScene(octx, {
       map, model, scene: scene(), time: t, px, unit, frame: fr,
       edit: viewMode === 'edit' ? { step, activeLeg, selPoint, hoverPoint, selSign, selLayer, drawing, dpr: px } : null,
@@ -244,21 +254,24 @@ export function createEditor() {
   }
   function pushUndo() {
     const sc = scene();
-    undoStack.push(JSON.stringify({ legs: sc.legs, signs: sc.signs, layers: sc.layers || [] }));
+    undoStack.push(JSON.stringify({ scene: sc, audio: project.audio || [] }));
     if (undoStack.length > 80) undoStack.shift();
     updateUndo();
   }
   function undo() {
     const snap = undoStack.pop();
     if (!snap) { toast('Nothing to undo'); return; }
-    const { legs, signs, layers } = JSON.parse(snap);
-    scene().legs = legs;
-    scene().signs = signs;
-    if (layers) { scene().layers = layers; if (!layers.some((l) => l.id === selLayer)) selLayer = null; renderLayerList(); renderLayerEditor(); floods?.sync(scene()); }
+    const snapObj = JSON.parse(snap);
+    project.scenes[sceneIdx] = snapObj.scene;
+    project.audio = snapObj.audio || [];
+    const sc = scene();
+    if (!(sc.layers || []).some((l) => l.id === selLayer)) selLayer = null;
     selPoint = null; selSign = null;
-    activeLeg = Math.min(activeLeg, legs.length - 1);
+    activeLeg = Math.min(activeLeg, sc.legs.length - 1);
     closePops();
-    commit();
+    applyLook(sc);
+    floods?.sync(sc);
+    commitAll();
     updateUndo();
   }
   function updateUndo() {
@@ -367,6 +380,7 @@ export function createEditor() {
     if (exporting || e.originalEvent.button !== 0) return;
     if (viewMode === 'play') { setViewMode('edit'); showEditView(); return; }
     const p = toCanvas(e.point);
+    if (step === 'layers' && drawing?.freehand) { e.preventDefault(); startFreehand(e); return; }
     if (step === 'layers' && !drawing && !pickOrigin) {
       const r = 9 * (overlay.width / stage.clientWidth);
       const h = hits.layerHandles.find((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
@@ -389,7 +403,7 @@ export function createEditor() {
   function startDrag(target, e) {
     map.dragPan.disable();
     const rect = stage.getBoundingClientRect();
-    const snapshot = JSON.stringify({ legs: scene().legs, signs: scene().signs, layers: scene().layers || [] });
+    const snapshot = JSON.stringify({ scene: scene(), audio: project.audio || [] });
     dragging = { ...target, moved: false, x0: e.originalEvent.clientX, y0: e.originalEvent.clientY };
     stage.classList.add('dragging');
     const move = (ev) => {
@@ -885,12 +899,42 @@ export function createEditor() {
     cancelDrawing();
     if (kind === 'symbol') { openSymbols(); return; }
     if (kind === 'caption') { addLayer(newLayer('caption', null, { start: newStart() })); return; }
+    if (kind === 'freehand' || kind === 'freearea') {
+      setViewMode('edit');
+      drawing = { kind: kind === 'freearea' ? 'area' : 'line', coords: [], polygon: kind === 'freearea', freehand: true };
+      stage.classList.add('placing');
+      showHint('Hold the mouse button and draw on the map · Esc to cancel');
+      $$('#add-layer [data-add]').forEach((b) => b.classList.toggle('active', b.dataset.add === kind));
+      return;
+    }
     setViewMode('edit');
     const g = LAYER_KINDS[kind].geom;
     drawing = { kind, coords: [], polygon: g === 'polygon', single: g === 'point', preset };
     stage.classList.add('placing');
     showHint(HINTS[g]);
     $$('#add-layer [data-add]').forEach((b) => b.classList.toggle('active', b.dataset.add === (preset ? 'symbol' : kind)));
+  }
+  function startFreehand(e) {
+    map.dragPan.disable();
+    const rect = stage.getBoundingClientRect();
+    const pts = [];
+    const add = (cx, cy) => { const ll = map.unproject([cx - rect.left, cy - rect.top]); pts.push([+ll.lng.toFixed(6), +ll.lat.toFixed(6)]); drawing.coords = pts; repaint(); };
+    add(e.originalEvent.clientX, e.originalEvent.clientY);
+    const move = (ev) => add(ev.clientX, ev.clientY);
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      map.dragPan.enable();
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+      const tol = (2.5 * 360) / (512 * 2 ** map.getZoom());
+      let c = simplify(pts, tol);
+      if (c.length < (drawing.polygon ? 3 : 2)) { toast('Draw a longer stroke'); drawing.coords = []; repaint(); return; }
+      drawing.coords = c;
+      finishDrawing();
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   }
   function cancelDrawing() {
     if (!drawing && !pickOrigin) return;
@@ -1045,6 +1089,7 @@ export function createEditor() {
     } else if (L.kind === 'point') {
       h += '<h5>Symbol</h5>' + fRow('Marker', fSel('style.marker', s.marker, MARKERS));
       if (s.marker === 'emoji') h += fRow('Emoji', fText('style.emoji', s.emoji, '📍'));
+      if (s.marker === 'image') h += `<div class="btn-row"><button class="btn sm" data-act="markerImg">${s.image ? 'Change image…' : 'Choose image…'}</button><span class="muted small">PNG with see-through background works best</span></div>`;
       h += fRow('Colour', fColor('style.color', s.color)) + fRow('Size', fRange('style.size', s.size, 0.4, 3, 0.05)) + fRow('Effect', fSel('style.effect', s.effect, EFFECTS));
       h += `<label class="field"><span>Label</span>${fText('style.label', s.label, 'Optional text next to it')}</label>`;
     } else if (L.kind === 'label') {
@@ -1110,6 +1155,7 @@ export function createEditor() {
     const ls = layersOf();
     const i = ls.indexOf(L);
     if (a === 'close') selectLayer(null);
+    if (a === 'markerImg') $('#file-marker').click();
     if (a === 'zoom') zoomToLayer(L);
     if (a === 'del') deleteLayer(L.id);
     if (a === 'dup') { const c = JSON.parse(JSON.stringify(L)); c.id = `ly_${Math.random().toString(36).slice(2, 9)}`; c.name = `${L.name} copy`; addLayer(c); }
@@ -1126,6 +1172,58 @@ export function createEditor() {
       renderLayerEditor(); commitLayers();
     }
   });
+
+  $('#file-marker').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    const L = selLayer && layerById(selLayer);
+    if (!f || !L) return;
+    try {
+      pushUndo();
+      L.style.image = await imageToDataURL(f, 256, false);
+      await preloadSignImages([{ image: L.style.image }]);
+      renderLayerEditor(); repaint(); save();
+    } catch { toast('Could not read that image'); }
+  });
+
+  // CSV points
+  let csvData = null;
+  $('#import-csv').onclick = () => $('#file-csv').click();
+  $('#file-csv').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try { csvData = parseCSVPoints(await f.text()); } catch (err) { toast(err.message); return; }
+    csvData.file = f.name;
+    $('#csv-info').textContent = `${csvData.rows.length} rows with coordinates in ${f.name}${csvData.rows.length > 300 ? ' — the first 300 will be used' : ''}.`;
+    $('#csv-name').innerHTML = '<option value="-1">No labels</option>' + csvData.header.map((h, i) => `<option value="${i}" ${i === csvData.name ? 'selected' : ''}>${esc(h)}</option>`).join('');
+    $('#csv-preset').innerHTML = Object.entries(SYMBOL_PRESETS).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join('');
+    $('#csv-modal').showModal();
+  });
+  $('#csv-go').onclick = () => {
+    if (!csvData) return;
+    $('#csv-modal').close();
+    const nameCol = +$('#csv-name').value, preset = $('#csv-preset').value, stagger = +$('#csv-stagger').value;
+    const start = newStart();
+    const rows = csvData.rows.slice(0, 300);
+    const ls = rows.map((r, i) => {
+      const L = newLayer('point', { type: 'Point', coordinates: [+r[csvData.lon], +r[csvData.lat]] }, { start: +(start + i * stagger).toFixed(2), preset });
+      if (nameCol >= 0) { L.style.label = r[nameCol] || ''; L.name = r[nameCol] || L.name; }
+      return L;
+    });
+    if ($('#csv-line').checked && rows.length > 1) {
+      const line = newLayer('line', { type: 'LineString', coordinates: rows.map((r) => [+r[csvData.lon], +r[csvData.lat]]) }, { start, name: csvData.file.replace(/\.[^.]+$/, '') });
+      line.duration = Math.max(1, rows.length * Math.max(stagger, 0.2));
+      ls.unshift(line);
+    }
+    pushUndo();
+    layersOf().push(...ls);
+    selLayer = null;
+    commitLayers();
+    const b = bounds(rows.map((r) => [+r[csvData.lon], +r[csvData.lat]]));
+    if (rows.length > 1) flyToBounds(b); else zoomToLayer(ls[0]);
+    toast(`Added ${rows.length} point${rows.length === 1 ? '' : 's'} from ${csvData.file}`);
+  };
 
   // animated symbol gallery (live previews)
   let symRaf = 0;
@@ -1291,11 +1389,17 @@ export function createEditor() {
   // ---------------------------------------------------------------- look
   function renderThemes() {
     const look = scene().look;
-    const isMore = MORE_THEMES.includes(look.theme);
+    const isMore = MORE_THEMES.includes(look.theme) || IMAGERY_THEMES.includes(look.theme) || BASE_THEMES.includes(look.theme);
     $('#themes').innerHTML = MAIN_THEMES.map((k) => `<button class="theme-btn ${look.theme === k ? 'active' : ''}" data-theme="${k}">${themeSwatchSVG(k)}${THEMES[k].name}</button>`).join('') +
       `<button class="theme-btn ${isMore ? 'active' : ''}" data-more>${isMore ? themeSwatchSVG(look.theme) : '<span class="more-ico">▦</span>'}${isMore ? THEMES[look.theme].name : 'More'}</button>`;
     $('#theme-desc').textContent = THEMES[look.theme]?.desc || '';
-    $('#more-themes').innerHTML = MORE_THEMES.map((k) => `<button class="theme-card ${look.theme === k ? 'active' : ''}" data-theme="${k}">${themeSwatchSVG(k)}<b>${THEMES[k].name}</b><small>${THEMES[k].desc}</small></button>`).join('');
+    const card = (k) => `<button class="theme-card ${look.theme === k ? 'active' : ''}" data-theme="${k}">${themeSwatchSVG(k)}<b>${THEMES[k].name}</b><small>${THEMES[k].desc}</small></button>`;
+    $('#more-themes').innerHTML = MORE_THEMES.map(card).join('');
+    $('#imagery-themes').innerHTML = IMAGERY_THEMES.map(card).join('');
+    $('#base-themes').innerHTML = BASE_THEMES.map(card).join('');
+    const th = THEMES[look.theme] || {};
+    $('#rlabels-row').hidden = !(th.tiles && !th.labels);
+    $('#rroads-row').hidden = !(th.tiles && th.satellite);
   }
   function setTheme(k) {
     const look = scene().look;
@@ -1314,7 +1418,7 @@ export function createEditor() {
     if (b) setTheme(b.dataset.theme);
     if (e.target.closest('[data-more]')) $('#themes-modal').showModal();
   });
-  $('#more-themes').addEventListener('click', (e) => {
+  $('#themes-modal').addEventListener('click', (e) => {
     const b = e.target.closest('[data-theme]');
     if (b) { setTheme(b.dataset.theme); $('#themes-modal').close(); }
   });
@@ -1326,10 +1430,94 @@ export function createEditor() {
     });
     $('#terrain-row').hidden = !look.terrain;
     $('#bld-row').hidden = !look.buildings3d;
+    const opt = (o, v) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${t}</option>`).join('');
+    const n = look.north;
+    $('#north-style').innerHTML = opt(NORTH_STYLES, n.style);
+    $('#north-mode').innerHTML = opt(NORTH_MODES, n.mode);
+    $('#north-pos').innerHTML = opt(CORNERS, n.position);
+    $('#north-size').value = n.size;
+    $('#north-spin').checked = !!n.spinIn;
+    $('#north-smooth').checked = n.smooth !== false;
+    $('#north-opts').hidden = n.style === 'none';
+    const sb = look.scaleBar;
+    $('#scale-on').checked = !!sb.on;
+    $('#scale-units').value = sb.units;
+    $('#scale-pos').innerHTML = opt(CORNERS, sb.position);
+    $('#scale-opts').hidden = !sb.on;
+    const g = look.grade;
+    $('#grade-preset').innerHTML = opt({ ...Object.fromEntries(Object.entries(GRADE_PRESETS).map(([k, v]) => [k, v.name])), custom: 'Custom' }, g.preset || 'none');
+    $$('[data-grade]').forEach((el) => { const v = g[el.dataset.grade]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v ?? (el.dataset.grade === 'warmth' || el.dataset.grade === 'fade' ? 0 : 1); });
+    renderTemplates();
     const cur = look.lineColor;
     $('#swatches').innerHTML = COLORS.map((c) => `<button class="swatch ${c === cur ? 'active' : ''}" data-color="${c}" style="background:${c}"></button>`).join('') +
       `<label class="swatch-custom" title="Custom colour"><input type="color" value="${cur}"/></label>`;
   }
+  // north arrow / scale bar / grade
+  const lookChanged = () => { repaint(); save(); };
+  $('#north-style').addEventListener('change', (e) => { scene().look.north.style = e.target.value; $('#north-opts').hidden = e.target.value === 'none'; lookChanged(); });
+  $('#north-mode').addEventListener('change', (e) => { scene().look.north.mode = e.target.value; lookChanged(); });
+  $('#north-pos').addEventListener('change', (e) => { scene().look.north.position = e.target.value; lookChanged(); });
+  $('#north-size').addEventListener('input', (e) => { scene().look.north.size = +e.target.value; lookChanged(); });
+  $('#north-spin').addEventListener('change', (e) => { scene().look.north.spinIn = e.target.checked; lookChanged(); });
+  $('#north-smooth').addEventListener('change', (e) => { scene().look.north.smooth = e.target.checked; lookChanged(); });
+  $('#scale-on').addEventListener('change', (e) => { scene().look.scaleBar.on = e.target.checked; $('#scale-opts').hidden = !e.target.checked; lookChanged(); });
+  $('#scale-units').addEventListener('change', (e) => { scene().look.scaleBar.units = e.target.value; lookChanged(); });
+  $('#scale-pos').addEventListener('change', (e) => { scene().look.scaleBar.position = e.target.value; lookChanged(); });
+  const applyGrade = () => { $('#map').style.filter = gradeFilter(scene().look.grade); repaint(); save(); };
+  $('#grade-preset').addEventListener('change', (e) => {
+    if (e.target.value === 'custom') return;
+    scene().look.grade = presetGrade(e.target.value);
+    renderLookControls();
+    applyGrade();
+  });
+  $$('[data-grade]').forEach((el) => el.addEventListener('input', () => {
+    const g = scene().look.grade;
+    g[el.dataset.grade] = el.type === 'checkbox' ? el.checked : +el.value;
+    g.preset = 'custom';
+    $('#grade-preset').value = 'custom';
+    applyGrade();
+  }));
+  // look templates (saved in this browser)
+  const TPL_KEY = 'map-animator:templates';
+  const loadTpls = () => { try { return JSON.parse(localStorage.getItem(TPL_KEY) || '[]'); } catch { return []; } };
+  const saveTpls = (t) => { try { localStorage.setItem(TPL_KEY, JSON.stringify(t)); } catch { /* storage full */ } };
+  function renderTemplates() {
+    const t = loadTpls();
+    $('#tpl-apply').innerHTML = `<option value="">${t.length ? 'Choose a template…' : 'No templates yet'}</option>` + t.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('');
+    $('#tpl-del').hidden = true;
+  }
+  $('#tpl-save').onclick = () => {
+    const name = prompt('Template name', `${THEMES[scene().look.theme]?.name || 'My'} look`);
+    if (!name) return;
+    const t = loadTpls();
+    t.push({ name: name.slice(0, 40), look: JSON.parse(JSON.stringify(scene().look)), lens: JSON.parse(JSON.stringify(scene().camera.lens)) });
+    saveTpls(t);
+    renderTemplates();
+    toast('Template saved — use it in any project from this browser');
+  };
+  $('#tpl-apply').addEventListener('change', (e) => {
+    const t = loadTpls()[+e.target.value];
+    $('#tpl-del').hidden = e.target.value === '';
+    if (!t) return;
+    pushUndo();
+    scene().look = { ...scene().look, ...JSON.parse(JSON.stringify(t.look)) };
+    if (t.lens) scene().camera.lens = { ...scene().camera.lens, ...t.lens };
+    migrateScene(scene());
+    applyLook(scene());
+    renderThemes(); renderLookControls(); renderLegs(); rebuild(); applyGrade();
+    $('#tpl-apply').value = e.target.value;
+    $('#tpl-del').hidden = false;
+    toast(`Applied “${t.name}”`);
+  });
+  $('#tpl-del').onclick = () => {
+    const i = +$('#tpl-apply').value;
+    const t = loadTpls();
+    if (!t[i] || !confirm(`Delete the template “${t[i].name}”?`)) return;
+    t.splice(i, 1);
+    saveTpls(t);
+    renderTemplates();
+  };
+
   $('#side').addEventListener('input', (e) => {
     const el = e.target.closest('[data-look]');
     if (!el) return;
@@ -1348,7 +1536,7 @@ export function createEditor() {
         if (map.getZoom() < 13.5) toast('3D buildings show when you zoom in to street level (zoom 14+)', 3600);
       }
     }
-    if (['placeNames', 'lang', 'states', 'terrain', 'terrainExaggeration', 'buildings3d'].includes(key)) applyLook(scene());
+    if (['placeNames', 'lang', 'states', 'terrain', 'terrainExaggeration', 'buildings3d', 'rasterLabels', 'rasterRoads'].includes(key)) applyLook(scene());
     rebuild();
     renderLegs();
     save();
@@ -1418,6 +1606,8 @@ export function createEditor() {
       $('#se-flip-row').hidden = !t.flip;
       $('#se-flip').checked = !!sg.flip;
       $('#se-appear').value = sg.appear || 'auto';
+      $('#se-at-row').hidden = sg.appear !== 'time';
+      $('#se-at').value = (+sg.at || model.signTimes[i] || 0).toFixed(2);
       $('#se-type').value = sg.type;
     }
     renderSignList();
@@ -1436,7 +1626,8 @@ export function createEditor() {
   $('#se-text').addEventListener('input', (e) => editSign((sg) => { sg.text = e.target.value; }));
   $('#se-detail').addEventListener('input', (e) => editSign((sg) => { sg.detail = e.target.value; }));
   $('#se-flip').addEventListener('change', (e) => editSign((sg) => { sg.flip = e.target.checked; }, true));
-  $('#se-appear').addEventListener('change', (e) => editSign((sg) => { sg.appear = e.target.value; }, true));
+  $('#se-appear').addEventListener('change', (e) => { editSign((sg) => { if (e.target.value === 'time' && sg.at == null) sg.at = +(model.signTimes[selSign] || time).toFixed(2); sg.appear = e.target.value; }, true); selectSign(selSign); });
+  $('#se-at').addEventListener('input', (e) => editSign((sg) => { sg.at = Math.max(0, +e.target.value || 0); }));
   $('#se-type').addEventListener('change', (e) => { editSign((sg) => { sg.type = e.target.value; }, true); selectSign(selSign); });
   $('#se-delete').onclick = () => deleteSign(selSign);
   $('#se-close').onclick = () => selectSign(null);
@@ -1482,6 +1673,8 @@ export function createEditor() {
 
   // ---------------------------------------------------------------- camera
   const CAM_SUB = {
+    keyframes: 'Set the view at moments in time; the camera moves smoothly between them.',
+    orbit: 'The camera circles around the view, like a drone shot.',
     fixed: "The camera doesn't move: the video shows exactly what's in the frame.",
     startEnd: 'The camera glides from a start view to an end view while the line draws.',
     follow: 'The camera travels with the arrow along the route.',
@@ -1503,7 +1696,53 @@ export function createEditor() {
     $('#follow-rotate').checked = !!cam.followRotate;
     $('#tilt').value = +cam.tilt || 0;
     $('#tilt-out').textContent = `${+cam.tilt || 0}°`;
+    $('#orbit-speed').value = cam.orbitSpeed ?? 12;
+    $('#orbit-out').textContent = `${cam.orbitSpeed ?? 12}°/s`;
+    renderKeyframes();
   }
+  function renderKeyframes() {
+    const cam = scene().camera;
+    const ks = cam.keys || [];
+    $('#kf-list').innerHTML = ks.length ? ks.map((k, i) => `
+      <li data-i="${i}" class="${selKey === i ? 'sel' : ''}">
+        <div class="kh"><i></i><b>${k.t.toFixed(2)} s</b><span class="muted small">zoom ${k.view.zoomRef.toFixed(1)} · ${Math.round(k.view.bearing || 0)}° · tilt ${Math.round(k.view.pitch || 0)}°</span></div>
+        <label class="row"><span>Then</span><select data-k="ease">${Object.entries(EASE_NAMES).map(([v, t]) => `<option value="${v}" ${(k.ease || 'ease') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <div class="btn-row"><button class="btn sm" data-k="go">Go to</button><button class="btn sm" data-k="update">Use current view</button><button class="btn sm danger" data-k="del">Delete</button></div>
+      </li>`).join('') : '<li class="muted small">No keyframes yet.</li>';
+  }
+  $('#kf-add').onclick = () => {
+    const cam = scene().camera;
+    pushUndo();
+    cam.keys ||= [];
+    const t = +time.toFixed(3);
+    const v = currentView();
+    const ex = cam.keys.find((k) => Math.abs(k.t - t) < 0.05);
+    if (ex) ex.view = v; else cam.keys.push({ t, view: v, ease: 'ease' });
+    cam.keys.sort((a, b) => a.t - b.t);
+    selKey = cam.keys.findIndex((k) => Math.abs(k.t - t) < 0.05);
+    commitAll();
+    toast(ex ? 'Keyframe updated' : `Keyframe added at ${t.toFixed(2)} s — move the playhead and frame the next view`, 3200);
+  };
+  $('#kf-list').addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-i]');
+    const a = e.target.closest('button')?.dataset.k;
+    if (!li || !a) return;
+    const i = +li.dataset.i, cam = scene().camera, k = cam.keys[i];
+    selKey = i;
+    if (a === 'go') { time = k.t; setViewMode('edit'); map.easeTo({ center: k.view.center, zoom: zoomFor(k.view.zoomRef, frame.w), bearing: k.view.bearing || 0, pitch: k.view.pitch || 0, duration: 500 }); updatePlayhead(); }
+    if (a === 'update') { pushUndo(); k.view = currentView(); commitAll(); toast('Keyframe updated'); }
+    if (a === 'del') { pushUndo(); cam.keys.splice(i, 1); selKey = null; commitAll(); }
+    renderKeyframes();
+  });
+  $('#kf-list').addEventListener('change', (e) => {
+    const li = e.target.closest('li[data-i]');
+    if (!li || e.target.dataset.k !== 'ease') return;
+    pushUndo();
+    scene().camera.keys[+li.dataset.i].ease = e.target.value;
+    rebuild(); save();
+  });
+  $('#orbit-set').onclick = () => { const cam = scene().camera; pushUndo(); cam.orbitView = currentView(); if (!(+cam.tilt)) cam.tilt = 55; commitAll(); previewCamera(); toast('The camera will orbit around this view'); };
+  $('#orbit-speed').addEventListener('input', (e) => { scene().camera.orbitSpeed = +e.target.value; $('#orbit-out').textContent = `${e.target.value}°/s`; rebuild(); previewCamera(); save(); });
   $('#cam-cards').addEventListener('click', (e) => {
     const b = e.target.closest('[data-cam]');
     if (!b) return;
@@ -1511,14 +1750,16 @@ export function createEditor() {
     cam.mode = b.dataset.cam;
     if (cam.mode === 'fixed' && !cam.fixed) cam.fixed = currentView();
     if (cam.mode === 'follow' && cam.followZoomRef == null && model.fit) cam.followZoomRef = model.fit.zoomRef + 2;
+    if (cam.mode === 'keyframes' && !(cam.keys || []).length) { cam.keys = [{ t: 0, view: currentView(), ease: 'ease' }]; toast('First keyframe set from the current view. Move the playhead, frame a new view and add another.', 4200); }
+    if (cam.mode === 'orbit' && !cam.orbitView) { cam.orbitView = currentView(); if (!(+cam.tilt)) cam.tilt = 55; }
     rebuild();
     renderCamera();
-    if (cam.mode === 'fixed') { setViewMode('edit'); showEditView(); }
+    if (cam.mode === 'fixed' || cam.mode === 'keyframes') { setViewMode('edit'); showEditView(); }
     else previewCamera();
     save();
   });
   function previewCamera() {
-    if (!model.drawable.length) return;
+    if (!model.drawable.length && scene().camera.mode !== 'orbit') return;
     setViewMode('play');
     if (time <= model.drawStart + 0.01 || time >= model.total - 0.01) time = model.drawStart + (model.drawEnd - model.drawStart) * 0.35;
     applyCamera(time);
@@ -1559,20 +1800,112 @@ export function createEditor() {
     $('#still-end').value = String(+sc.stillEnd || 0);
     $('#resolution').value = String(project.resolution);
     $('#fps').value = String(project.fps);
-    $('#join').value = project.join || 'cut';
-    $('#join-row').hidden = project.scenes.length < 2;
+    $('#join').innerHTML = Object.entries(TRANSITIONS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    $('#join').value = sc.transition || 'cut';
+    $('#join-secs').value = String(sc.transitionSeconds || 0.8);
+    const last = sceneIdx === project.scenes.length - 1;
+    $('#join-row').hidden = last;
+    $('#join-secs-row').hidden = last || (sc.transition || 'cut') === 'cut';
+    $('#render-preset').value = '';
+    renderAudioList();
   }
+  const PRESETS = {
+    yt1080: ['16:9', 1080, 30], yt4k: ['16:9', 2160, 30], reel: ['9:16', 1080, 30], igpost: ['4:5', 1080, 30],
+    square: ['1:1', 1080, 30], cinema: ['21:9', 2160, 24], draft: ['16:9', 720, 24],
+  };
+  $('#render-preset').addEventListener('change', (e) => {
+    const p = PRESETS[e.target.value];
+    if (!p) return;
+    [project.aspect, project.resolution, project.fps] = p;
+    $('#aspect').value = project.aspect;
+    $('#resolution').value = $('#resolution-top').value = String(project.resolution);
+    $('#fps').value = String(project.fps);
+    layout(true);
+    updateEstimate();
+    save();
+    toast(`Set to ${e.target.selectedOptions[0].textContent}`);
+  });
+  $('#join-secs').addEventListener('change', (e) => { scene().transitionSeconds = +e.target.value; save(); });
+
+  // ---- sound
+  function renderAudioList() {
+    const ul = $('#audio-list');
+    const tracks = project.audio || [];
+    ul.innerHTML = tracks.map((tr) => `
+      <li data-id="${tr.id}">
+        <div class="ah"><b>${tr.kind === 'voice' ? '🎙' : '♪'}</b><span title="${esc(tr.name)}">${esc(tr.name)}</span><small class="muted">${(tr.duration || 0).toFixed(1)} s</small></div>
+        <label class="row"><span>Volume</span><input type="range" min="0" max="1.5" step="0.01" data-a="volume" value="${tr.volume}"></label>
+        <div class="grid3"><label>Starts at (s)<input type="number" step="0.1" min="0" data-a="start" value="${(+tr.start).toFixed(2)}"></label><label>Fade in (s)<input type="number" step="0.1" min="0" data-a="fadeIn" value="${tr.fadeIn}"></label><label>Fade out (s)<input type="number" step="0.1" min="0" data-a="fadeOut" value="${tr.fadeOut}"></label></div>
+        <div class="btn-row"><button class="btn sm" data-a="mute">${tr.muted ? 'Unmute' : 'Mute'}</button><button class="btn sm danger" data-a="del">Remove</button></div>
+      </li>`).join('');
+  }
+  $('#audio-list').addEventListener('input', (e) => {
+    const li = e.target.closest('li[data-id]');
+    const tr = li && (project.audio || []).find((x) => x.id === li.dataset.id);
+    const k = e.target.dataset.a;
+    if (!tr || !k || e.target.tagName !== 'INPUT') return;
+    tr[k] = Math.max(0, +e.target.value || 0);
+    renderTimeline(); save();
+  });
+  $('#audio-list').addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-id]');
+    const tr = li && (project.audio || []).find((x) => x.id === li.dataset.id);
+    const k = e.target.closest('button')?.dataset.a;
+    if (!tr || !k) return;
+    if (k === 'mute') { tr.muted = !tr.muted; renderAudioList(); save(); }
+    if (k === 'del') { pushUndo(); project.audio = project.audio.filter((x) => x !== tr); deleteMedia(tr.id).catch(() => {}); renderAudioList(); renderTimeline(); save(); }
+  });
+  $('#audio-add').onclick = () => $('#file-audio').click();
+  $('#file-audio').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      pushUndo();
+      await addAudioFile(project, f, 'music', 0);
+      renderAudioList(); renderTimeline(); save();
+      toast('Music added — it plays with the preview and is mixed into the video');
+    } catch (err) { toast(err.message || 'Could not read that audio file'); }
+  });
+  $('#audio-rec').onclick = async () => {
+    const btn = $('#audio-rec');
+    if (isRecording()) {
+      const blob = await stopRecording();
+      setPlaying(false);
+      btn.classList.remove('rec');
+      btn.textContent = '🎙 Record voiceover';
+      if (!blob || !blob.size) return;
+      try {
+        pushUndo();
+        const f = new File([blob], `Voiceover ${(project.audio || []).filter((t) => t.kind === 'voice').length + 1}`, { type: blob.type });
+        await addAudioFile(project, f, 'voice', recStart);
+        renderAudioList(); renderTimeline(); save();
+        toast('Voiceover added');
+      } catch (err) { toast(err.message || 'Could not use the recording'); }
+      return;
+    }
+    try {
+      await startRecording();
+    } catch { toast('Microphone not available — allow microphone access to record'); return; }
+    recStart = projTime(time);
+    btn.classList.add('rec');
+    btn.textContent = '■ Stop recording';
+    setViewMode('play');
+    if (!playing) setPlaying(true);
+  };
+  let recStart = 0;
+  $('#save-png').onclick = () => saveStill();
   $('#still-start').addEventListener('change', (e) => { scene().stillStart = +e.target.value; rebuild(); save(); });
   $('#still-end').addEventListener('change', (e) => { scene().stillEnd = +e.target.value; rebuild(); save(); });
   const setResolution = (v) => { project.resolution = +v; $('#resolution').value = String(v); $('#resolution-top').value = String(v); layout(true); updateEstimate(); save(); };
   $('#resolution').addEventListener('change', (e) => setResolution(e.target.value));
   $('#resolution-top').addEventListener('change', (e) => setResolution(e.target.value));
   $('#fps').addEventListener('change', (e) => { project.fps = +e.target.value; updateEstimate(); save(); });
-  $('#join').addEventListener('change', (e) => { project.join = e.target.value; save(); });
+  $('#join').addEventListener('change', (e) => { scene().transition = e.target.value; renderExportSettings(); save(); });
   $('#play-preview').onclick = () => { time = 0; setViewMode('play'); setPlaying(true); };
 
   function projectDuration() {
-    return project.scenes.reduce((s, sc, i) => s + (i === sceneIdx ? model.total : buildScene(sc, frame.w, frame.h).total), 0);
+    return project.scenes.reduce((s, sc, i) => s + (i === sceneIdx ? model.duration : buildScene(sc, frame.w, frame.h).duration), 0);
   }
   function updateEstimate() {
     const el = $('#estimate');
@@ -1647,14 +1980,26 @@ export function createEditor() {
     repaint();
   }
   function setPlaying(p) {
+    const was = playing;
     playing = p;
     document.body.classList.toggle('is-playing', p);
-    if (p) { playStartNow = performance.now(); playStartTime = time; }
+    if (p) { playStartNow = performance.now(); playStartTime = time; playFrom(project, projTime(time), tl?.state.rate || 1).catch(() => {}); }
+    else if (was) stopPlayback();
   }
+  /** Seconds from the start of the whole video for scene time t. */
+  let offsetCache = null;
+  function sceneOffset() {
+    if (offsetCache && offsetCache.key === sceneIdx && offsetCache.n === project.scenes.length) return offsetCache.v;
+    let v = 0;
+    for (let i = 0; i < sceneIdx; i++) v += buildScene(project.scenes[i], frame.w, frame.h).duration;
+    offsetCache = { key: sceneIdx, n: project.scenes.length, v };
+    return v;
+  }
+  const projTime = (t) => sceneOffset() + (t - (model?.trimIn || 0));
   function togglePlay() {
     if (!model.drawable.length && !scene().signs.length) { toast('Draw a route first'); return; }
     if (viewMode !== 'play') setViewMode('play');
-    if (!playing && time >= model.total - 0.02) time = 0;
+    if (!playing && (time < model.trimIn || time >= model.trimOut - 0.02)) time = model.trimIn;
     setPlaying(!playing);
   }
   $('#tl-play').onclick = togglePlay;
@@ -1663,61 +2008,69 @@ export function createEditor() {
     rafId = requestAnimationFrame(tick);
     if (!project || exporting) return;
     if (playing) {
-      time = playStartTime + (now - playStartNow) / 1000;
-      if (time >= model.total) { time = model.total; setPlaying(false); }
+      time = playStartTime + ((now - playStartNow) / 1000) * (tl.state.rate || 1);
+      if (time >= model.trimOut) {
+        if (tl.state.loop) { time = model.trimIn; playStartTime = time; playStartNow = now; playFrom(project, projTime(time), tl.state.rate).catch(() => {}); }
+        else { time = model.trimOut; setPlaying(false); }
+      }
       applyCamera(time);
       updatePlayhead();
       repaint();
     }
   }
 
-  function renderTimeline() {
-    const total = model.total;
-    const pct = (t) => `${(t / total) * 100}%`;
-    const step = total > 40 ? 10 : total > 16 ? 2 : 1;
-    let ruler = '';
-    for (let s = 0; s <= total + 1e-6; s += step) ruler += `<span style="left:${pct(s)}">${s}s</span>`;
-    $('#tl-ruler').innerHTML = ruler;
-    const cam = scene().camera.mode;
-    const camLabel = { fixed: ['Fixed view', 'The view in the frame'], startEnd: ['Start to end', 'Glides between two views'], follow: ['Follow the line', 'Stays with the arrow'] }[cam] || ['Camera', ''];
-    const a = model.drawStart, b = Math.max(model.drawEnd, a + 0.05);
-    $('#tl-cam').innerHTML = `<div class="bar" style="left:${pct(a)};width:${pct(b - a)}"><span>${camLabel[0]}</span><span>${camLabel[1]}</span></div>`;
-    const pauses = model.runs.filter((r) => r.pauseAfter > 0 && r !== model.runs.at(-1)).map((r) => `<div class="pause" style="left:${pct(r.end)};width:${pct(r.pauseAfter)}"></div>`).join('');
-    $('#tl-line').innerHTML = model.drawable.length ? `<div class="bar" style="left:${pct(a)};width:${pct(b - a)}"><span>Line draws</span></div>${pauses}` : '';
-    $('#tl-layers').innerHTML = layersOf().filter((L) => !L.hidden).map((L, i) => {
-      const d = Math.max(0.05, +L.duration || 0.05);
-      const tail = L.hold > 0 ? L.hold : Math.max(0, total - L.start - d);
-      return `<div class="lb ${i % 2 ? 'a' : 'b'} ${L.id === selLayer ? 'sel' : ''}" data-id="${L.id}" title="${esc(L.name)}" style="left:${pct(L.start)};width:${pct(d)};--tail:${((tail / d) * 100).toFixed(1)}%"></div>`;
-    }).join('');
-    $('#tl-signs').innerHTML = model.signTimes.map((t, i) => `<div class="sig" style="left:${pct(t)}" title="${esc(scene().signs[i]?.text || '')}">${i + 1}</div>`).join('');
-    updatePlayhead();
-    updateSpeed();
-  }
-  function updatePlayhead() {
-    $('#tl-head').style.left = `${(time / model.total) * 100}%`;
-    $('#tl-time').textContent = `${fmt(time)} / ${fmtShort(model.total)}`;
-  }
-  const tracks = $('#tl-tracks');
-  tracks.addEventListener('pointerdown', (e) => {
-    if (exporting) return;
-    const lb = e.target.closest('.lb');
-    if (lb) { if (step !== 'layers') setStep('layers'); selectLayer(lb.dataset.id); return; }
-    tracks.setPointerCapture(e.pointerId);
-    const seek = (ev) => {
-      const r = tracks.getBoundingClientRect();
-      time = clamp((ev.clientX - r.left) / r.width, 0, 1) * model.total;
-      setViewMode('play');
-      setPlaying(false);
-      applyCamera(time);
-      updatePlayhead();
-      repaint();
-    };
-    seek(e);
-    const move = (ev) => seek(ev);
-    const up = () => { tracks.removeEventListener('pointermove', move); tracks.removeEventListener('pointerup', up); };
-    tracks.addEventListener('pointermove', move);
-    tracks.addEventListener('pointerup', up);
+  // ---------------------------------------------------------------- timeline (module)
+  let selKey = null;
+  const tl = createTimeline({
+    scene, model: () => (project ? model : null), project: () => project, fps: () => project?.fps || 30,
+    getTime: () => time,
+    seek(t) { time = clamp(t, 0, model.total); setViewMode('play'); setPlaying(false); applyCamera(time); tl.playhead(); repaint(); },
+    isPlaying: () => playing,
+    busy: () => exporting || !project,
+    selLayer: () => selLayer,
+    selectLayer(id) { if (step !== 'layers') setStep('layers'); selectLayer(id); },
+    selKey: () => selKey,
+    selectKey(i) { selKey = i; if (step !== 'camera') setStep('camera'); renderKeyframes(); },
+    pushUndo,
+    commit(o = {}) { if (o.light) { offsetCache = null; rebuild(); repaint(); save(); } else commitAll(); },
+    sceneOffset,
+    splitAt: (t) => splitScene(t),
+    pause: () => setPlaying(false),
+    play: () => { if (!playing) togglePlay(); },
+    rateChanged: () => { if (playing) setPlaying(true); },
   });
+  function renderTimeline() { tl.render(); updateSpeed(); }
+  function updatePlayhead() { tl.playhead(); }
+  /** Re-render everything after a change that may touch any part of the scene. */
+  function commitAll() {
+    offsetCache = null;
+    fixLegs();
+    rebuild();
+    renderLegs(); renderSignList(); renderLayerList();
+    if (step === 'layers') renderLayerEditor();
+    if (step === 'camera') renderCamera();
+    if (step === 'export') renderExportSettings();
+    renderScenes();
+    save();
+  }
+  function splitScene(t) {
+    const m = model;
+    if (t <= m.trimIn + 0.1 || t >= m.trimOut - 0.1) { toast('Move the playhead inside the scene to split it'); return; }
+    const A = scene();
+    const B = JSON.parse(JSON.stringify(A));
+    B.id = `sc_${Math.random().toString(36).slice(2, 10)}`;
+    B.name = `${A.name} · 2`;
+    A.trimOut = +t.toFixed(3);
+    B.trimIn = +t.toFixed(3);
+    B.transition = A.transition;
+    A.transition = 'cut';
+    project.scenes.splice(sceneIdx + 1, 0, B);
+    offsetCache = null;
+    renderScenes();
+    rebuild();
+    save();
+    toast(`Split at ${t.toFixed(2)} s — the second part is now “${B.name}”`, 3200);
+  }
 
   // speed
   const speedName = (s) => (s <= 3.5 ? 'Fast' : s <= 6 ? 'Normal' : s <= 10 ? 'Slow' : 'Very slow');
@@ -1766,7 +2119,7 @@ export function createEditor() {
     if (!project) return;
     $$('#scene-tabs [data-dur]').forEach((el) => {
       const i = +el.dataset.dur;
-      const t = i === sceneIdx ? model.total : buildScene(project.scenes[i], frame.w, frame.h).total;
+      const t = i === sceneIdx ? model.duration : buildScene(project.scenes[i], frame.w, frame.h).duration;
       el.textContent = `${t.toFixed(1)} s`;
     });
     const tab = $(`#scene-tabs [data-i="${sceneIdx}"] svg.mini`);
@@ -1839,8 +2192,8 @@ export function createEditor() {
   // ---------------------------------------------------------------- project-level controls
   $('#project-name').addEventListener('input', (e) => { project.name = e.target.value || 'Untitled trip'; save(); });
   $('#aspect').addEventListener('change', (e) => { project.aspect = e.target.value; layout(true); save(); });
-  $('#save-file').onclick = () => {
-    const blob = new Blob([JSON.stringify({ ...project, format: 'map-animator', version: 2 })], { type: 'application/json' });
+  $('#save-file').onclick = async () => {
+    const blob = new Blob([await projectFileJSON(project)], { type: 'application/json' });
     downloadBlob(blob, `${slug(project.name)}.mapanim.json`);
   };
 
@@ -1851,7 +2204,8 @@ export function createEditor() {
     if (e.key === 'Escape') { stopPlacing(); cancelDrawing(); closePops(); selPoint = null; selectSign(null); repaint(); return; }
     if (e.key === 'Enter' && drawing && !typing) { e.preventDefault(); finishDrawing(); return; }
     if (typing) return;
-    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
+    if (!(step === 'route' && selPoint && e.key.startsWith('Arrow')) && tl.handleKey(e)) { e.preventDefault(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (step === 'route' && selPoint) { e.preventDefault(); deletePoint(selPoint.li, selPoint.i); }
@@ -1862,6 +2216,57 @@ export function createEditor() {
 
   // ---------------------------------------------------------------- export
   let exportAbort = null, exportUrl = null, expScene = null;
+  /** Render the frame at the playhead at full resolution and download it as PNG. */
+  async function saveStill() {
+    if (exporting) return;
+    const { width, height } = videoSize(project.aspect, project.resolution);
+    setPlaying(false);
+    closePops();
+    exporting = true;
+    toast('Rendering the frame…', 10000);
+    const mapEl = $('#map');
+    stage.classList.add('exporting');
+    Object.assign(mapEl.style, { left: `${frame.x}px`, top: `${frame.y}px`, width: `${frame.w}px`, height: `${frame.h}px`, filter: 'none' });
+    map.resize();
+    const px = width / frame.w;
+    map.setPixelRatio(px);
+    const unit = (Math.min(frame.w, frame.h) / 720) * px;
+    const sc = scene();
+    const t = viewMode === 'play' ? time : Math.max(model.trimIn, Math.min(model.trimOut, time));
+    try {
+      const blob = await renderStill({
+        map, width, height,
+        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); await preloadSignImages(s2.signs); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
+        applyCamera: (m, tt) => { const c = m.cameraAt(tt); map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 }); applyTimeEffects(tt, sc, m); },
+        mapFilter: (s2) => gradeFilter(s2.look.grade),
+        drawFrame: (ctx, s2, m, tt) => {
+          const full = { x: 0, y: 0, w: width, h: height };
+          const mc = map.getCanvas();
+          const lens = lensFor(s2, m, tt, (ll) => map.project(ll).y / frame.h);
+          if (lens?.dof) drawDepthOfField(ctx, mc, 0, 0, mc.width, mc.height, full, { ...lens, filter: gradeFilter(s2.look.grade) }, unit);
+          drawGradeWash(ctx, full, s2.look.grade);
+          renderScene(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full });
+          drawVignette(ctx, full, +s2.camera.lens?.vignette || 0);
+          renderCaptions(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full });
+          drawAttribution(ctx, themeAttribution(s2.look), unit, width, height);
+        },
+      }, sc, t);
+      downloadBlob(blob, `${slug(project.name)}-${t.toFixed(2)}s-${width}x${height}.png`);
+      toast('Frame saved as PNG');
+    } catch (err) {
+      console.error(err);
+      toast(`Could not render the frame: ${err.message || err}`);
+    } finally {
+      exporting = false;
+      stage.classList.remove('exporting');
+      Object.assign(mapEl.style, { left: '', top: '', width: '', height: '' });
+      mapEl.style.filter = gradeFilter(scene().look.grade);
+      map.setPixelRatio(window.devicePixelRatio || 1);
+      layout();
+      if (viewMode === 'play') applyCamera(time); else showEditView();
+    }
+  }
+
   async function startExport() {
     if (exporting) return;
     if (!project.scenes.some((sc) => buildScene(sc, frame.w, frame.h).drawable.length || sc.signs.length)) { toast('Draw a route first'); return; }
@@ -1897,10 +2302,12 @@ export function createEditor() {
     let lastPrev = 0;
     const origIdx = sceneIdx;
     try {
-      const { blob, ext, codec } = await exportVideo({
-        scenes: project.scenes, map, width, height, fps, join: project.join,
+      const result = await exportVideo({
+        scenes: project.scenes, map, width, height, fps, join: project.join === 'fade' ? 'fadeBlack' : project.join,
         signal: exportAbort.signal,
-        durationOf: (sc) => buildScene(sc, frame.w, frame.h).total,
+        durationOf: (sc) => buildScene(sc, frame.w, frame.h).duration,
+        mapFilter: (sc) => gradeFilter(sc.look.grade),
+        mixAudio: (project.audio || []).some((t) => !t.muted) ? (d) => mixProject(project, d) : null,
         prepareScene: async (sc) => {
           await applyLook(sc);
           floods.clear();
@@ -1919,7 +2326,8 @@ export function createEditor() {
           const full = { x: 0, y: 0, w: width, h: height };
           const mc = map.getCanvas();
           const lens = lensFor(sc, m, t, (ll) => map.project(ll).y / frame.h);
-          if (lens?.dof) drawDepthOfField(ctx, mc, 0, 0, mc.width, mc.height, full, lens, unit);
+          if (lens?.dof) drawDepthOfField(ctx, mc, 0, 0, mc.width, mc.height, full, { ...lens, filter: gradeFilter(sc.look.grade) }, unit);
+          drawGradeWash(ctx, full, sc.look.grade);
           renderScene(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full });
           drawVignette(ctx, full, +sc.camera.lens?.vignette || 0);
           renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full });
@@ -1934,6 +2342,7 @@ export function createEditor() {
           if (performance.now() - lastPrev > 200) { lastPrev = performance.now(); pctx.drawImage(canvas, 0, 0, prev.width, prev.height); }
         },
       });
+      const { blob, ext, codec } = result;
       exportUrl = URL.createObjectURL(blob);
       const name = `${slug(project.name)}-${width}x${height}.${ext}`;
       const a = $('#render-download');
@@ -1941,6 +2350,7 @@ export function createEditor() {
       a.download = name;
       a.hidden = false;
       a.textContent = `Download ${ext.toUpperCase()} · ${(blob.size / 1e6).toFixed(1)} MB`;
+      if ((project.audio || []).some((t) => !t.muted) && !result.audio) toast('This browser could not encode the soundtrack, so the video is silent', 4200);
       $('#render-title').textContent = 'Your video is ready';
       $('#render-status').textContent = `${name} · ${codec === 'avc' ? 'H.264' : codec.toUpperCase()} · made in ${fmtShort((performance.now() - t0) / 1000)}`;
       $('#render-bar').style.width = '100%';
@@ -1977,6 +2387,8 @@ export function createEditor() {
       if (!map) initMap();
       project = p;
       project.scenes.forEach(migrateScene);
+      project.audio ||= [];
+      offsetCache = null;
       selLayer = null; drawing = null; pickOrigin = null;
       floods.clear();
       $('#resolution-top').value = String(project.resolution);
@@ -2032,6 +2444,18 @@ function migrateScene(sc) {
   c.lens = { dof: false, blur: 6, focus: 0.55, band: 0.35, followArrow: false, vignette: 0, ...(c.lens || {}) };
   sc.look.buildings3d ??= false;
   sc.look.buildingsRise ??= false;
+  sc.look.rasterLabels ??= true;
+  sc.look.rasterRoads ??= false;
+  sc.look.north ||= { ...defaultNorth(), style: sc.look.compass ? 'compass' : 'none' };
+  sc.look.scaleBar ||= defaultScaleBar();
+  sc.look.grade ||= defaultGrade();
+  c.keys ||= [];
+  c.orbitSpeed ??= 12;
+  sc.markers ||= [];
+  sc.trimIn ??= 0;
+  if (sc.trimOut === undefined) sc.trimOut = null;
+  sc.transition ||= 'cut';
+  sc.transitionSeconds ??= 0.8;
 }
 
 /** Lens settings for a frame; with "keep the arrow sharp" the focus band follows the traveller. */

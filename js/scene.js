@@ -7,6 +7,15 @@ const TILE = 512;
 export const REF_W = 1000; // camera zooms are stored for a 1000-px-wide frame
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const easeInOut = (u) => 0.5 - 0.5 * Math.cos(Math.PI * clamp(u, 0, 1));
+export const EASES = {
+  linear: (u) => u,
+  ease: (u) => easeInOut(u),
+  in: (u) => u * u * u,
+  out: (u) => 1 - (1 - u) ** 3,
+  fly: (u) => easeInOut(u),
+  hold: (u) => (u >= 1 ? 1 : 0),
+};
+export const EASE_NAMES = { ease: 'Ease in & out', linear: 'Linear', in: 'Ease in', out: 'Ease out', fly: 'Fly (zoom out between)', hold: 'Hold (jump cut)' };
 const softEase = (u) => 0.45 * clamp(u, 0, 1) + 0.55 * easeInOut(u);
 
 export const zoomFor = (zoomRef, frameW) => zoomRef + Math.log2(frameW / REF_W);
@@ -225,6 +234,20 @@ export function buildScene(scene, fw, fh) {
   const endV = toCam(cam.end || cam.start || cam.fixed || fit) || startV;
   const followZoom = zoomFor(cam.followZoomRef ?? ((fit?.zoomRef ?? 3) + 2), fw);
   let smoothBearing = null;
+  // camera keyframes (Premiere / After Effects style)
+  const keys = (cam.keys || []).filter((k) => k.view).slice().sort((a, b) => a.t - b.t);
+  const kViews = keys.map((k) => ({ center: k.view.center, zoom: zoomFor(k.view.zoomRef, fw), bearing: k.view.bearing || 0, pitch: k.view.pitch || 0 }));
+  const kPaths = keys.map((k, i) => (i < keys.length - 1 && k.ease === 'fly' ? flyPath(kViews[i], kViews[i + 1], fw, fh) : null));
+  function keyCam(time) {
+    if (time <= keys[0].t) return kViews[0];
+    if (time >= keys.at(-1).t) return kViews.at(-1);
+    let i = 0;
+    while (i < keys.length - 2 && time > keys[i + 1].t) i++;
+    const u = (time - keys[i].t) / Math.max(1e-6, keys[i + 1].t - keys[i].t);
+    const e = EASES[keys[i].ease] || EASES.ease;
+    if (kPaths[i]) return kPaths[i](e(u));
+    return interpView(kViews[i], kViews[i + 1], e(u));
+  }
 
   function baseCam(time) {
     if (cam.mode === 'startEnd') {
@@ -244,6 +267,11 @@ export function buildScene(scene, fw, fh) {
         smoothBearing = bearing;
       }
       return { center: st.point, zoom: followZoom, bearing, pitch: tilt };
+    }
+    if (cam.mode === 'keyframes' && keys.length) return keyCam(time);
+    if (cam.mode === 'orbit') {
+      const v = toCam(cam.orbitView || cam.fixed || fit) || fixedV;
+      return { center: v.center, zoom: v.zoom, bearing: (v.bearing || 0) + (+cam.orbitSpeed || 12) * (time - I), pitch: tilt || 55 };
     }
     return fixedV;
   }
@@ -288,8 +316,10 @@ export function buildScene(scene, fw, fh) {
 
   // ---- signs: when do they appear? ----
   const signTimes = (scene.signs || []).map((sg) => {
+    if (sg.appear === 'time') return Math.max(0, +sg.at || 0);
     if (sg.appear === 'start' || !drawable.length) return I;
     if (sg.appear === 'end') return drawEnd;
+    if (sg.appear === 'time') return Math.max(0, +sg.at || 0);
     // nearest point on the route
     const mp = toMerc([sg.lng, sg.lat]);
     let best = null, bd = Infinity;
@@ -314,7 +344,9 @@ export function buildScene(scene, fw, fh) {
     return Math.max(drawStart, hi - 0.15);
   });
 
-  return { legs, drawable, runs, total, drawStart, drawEnd, stillStart, stillEnd, routeLen, fit, overview, stateAt, cameraAt, signTimes, fw, fh, intro: I, outro: O, mainEnd, layers, buildingsAt };
+  const trimIn = clamp(+scene.trimIn || 0, 0, Math.max(0, total - 0.1));
+  const trimOut = scene.trimOut != null ? clamp(+scene.trimOut, trimIn + 0.1, total) : total;
+  return { trimIn, trimOut, duration: trimOut - trimIn, keys, legs, drawable, runs, total, drawStart, drawEnd, stillStart, stillEnd, routeLen, fit, overview, stateAt, cameraAt, signTimes, fw, fh, intro: I, outro: O, mainEnd, layers, buildingsAt };
 }
 
 /** Like interpView, but zooms out in the middle when the two views are far apart (flyTo feel). */

@@ -2,6 +2,7 @@
 // on-screen captions. Everything is drawn on the 2D overlay from GeoJSON-style geometry in lng/lat.
 // (Terrain-based rising floods are rendered by flood.js inside the map itself.)
 import { simplify, toMerc } from './geo.js';
+import { signImage } from './signs.js';
 
 const UI = '"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif';
 const DISPLAY = '"Archivo","Inter",system-ui,sans-serif';
@@ -31,8 +32,8 @@ export const LAYER_KINDS = {
 };
 
 export const ANIMS = {
-  boundary: { draw: 'Trace the outline', fade: 'Fade in', grow: 'Grow from the centre', wipe: 'Wipe across', pulse: 'Glowing pulse', none: 'No animation' },
-  area: { fade: 'Fade in', draw: 'Trace, then fill', grow: 'Grow from the centre', wipe: 'Wipe across', pulse: 'Glowing pulse', none: 'No animation' },
+  boundary: { draw: 'Trace the outline', fade: 'Fade in', grow: 'Grow from the centre', wipe: 'Wipe across', flash: 'Flash, then stay', pulse: 'Glowing pulse', none: 'No animation' },
+  area: { fade: 'Fade in', draw: 'Trace, then fill', grow: 'Grow from the centre', wipe: 'Wipe across', flash: 'Flash, then stay', pulse: 'Glowing pulse', none: 'No animation' },
   flood: { spread: 'Spread from a point', rise: 'Rise and fill', wipe: 'Flow in from a side', terrain: 'Rising water on real terrain', none: 'Already flooded' },
   line: { draw: 'Draw along', fade: 'Fade in', flow: 'Flowing dashes', none: 'No animation' },
   point: { pop: 'Pop in', drop: 'Drop in', fade: 'Fade in', none: 'No animation' },
@@ -41,7 +42,7 @@ export const ANIMS = {
 };
 
 export const EFFECTS = { none: 'None', pulse: 'Pulse rings', ripple: 'Water ripple', radar: 'Radar sweep', bounce: 'Bounce', float: 'Float', spin: 'Spin', shake: 'Shake', blink: 'Blink', heartbeat: 'Heartbeat', flicker: 'Flicker' };
-export const MARKERS = { dot: 'Dot', pin: 'Pin', emoji: 'Emoji', target: 'Target', ring: 'Ring' };
+export const MARKERS = { dot: 'Dot', pin: 'Pin', emoji: 'Emoji', image: 'Your image / icon', target: 'Target', ring: 'Ring' };
 export const CAPTION_LAYOUTS = { lowerThird: 'Lower third', title: 'Big title', card: 'Card', band: 'Band', plain: 'Plain text' };
 export const POSITIONS = { 'top-left': 'Top left', top: 'Top', 'top-right': 'Top right', center: 'Centre', 'bottom-left': 'Bottom left', bottom: 'Bottom', 'bottom-right': 'Bottom right' };
 
@@ -226,6 +227,7 @@ function drawPolygonLayer(ctx, L, tm, proj, unit, frame) {
   if (L.anim === 'fade') alpha *= ease(tm.u);
   if (L.anim === 'draw') { traceU = clamp(tm.u / 0.7, 0, 1); fillA *= clamp((tm.u - 0.55) / 0.45, 0, 1); }
   if (L.anim === 'pulse') alpha *= ease(clamp(tm.u * 2, 0, 1));
+  if (L.anim === 'flash' && !tm.edit) { const f = tm.u >= 1 ? 1 : 0.5 - 0.5 * Math.cos(tm.u * Math.PI * 7); alpha *= f; fillA = Math.min(1, fillA + (tm.u < 1 ? 0.25 * f : 0)); }
   if (L.anim === 'grow' || L.anim === 'wipe') {
     const box = screenBox(proj, layerCoords(L));
     if (L.anim === 'grow') {
@@ -549,6 +551,16 @@ function drawPointLayer(ctx, L, tm, proj, unit) {
     for (const a of [0, 1, 2, 3]) { const c = Math.cos(a * Math.PI / 2), sn = Math.sin(a * Math.PI / 2); ctx.moveTo(c * 12 * size, sn * 12 * size); ctx.lineTo(c * 26 * size, sn * 26 * size); }
     ctx.stroke();
     ctx.beginPath(); ctx.arc(0, 0, 3 * size, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+  } else if (m === 'image') {
+    const img = signImage(s.image);
+    ctx.rotate(rot);
+    if (img) {
+      const h = 40 * size, w = (h * img.naturalWidth) / img.naturalHeight;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    } else {
+      ctx.beginPath(); ctx.arc(0, 0, 14 * size, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill();
+      ctx.shadowColor = 'transparent'; ctx.fillStyle = '#888'; ctx.font = `700 ${11 * size}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('IMG', 0, 0);
+    }
   } else if (m === 'emoji') {
     ctx.rotate(rot);
     ctx.font = `${30 * size}px ${EMOJI}`;
@@ -792,3 +804,33 @@ export function hitLayer(ctx, layers, proj, p, unit, frame) {
 
 /** Point-in-polygon in lng/lat (for flood masks etc.). */
 export function mercRing(ring) { return ring.map(toMerc); }
+
+// ------------------------------------------------------------------ CSV points (GEOlayers-style data import)
+function splitCSVLine(line, sep) {
+  const out = [];
+  let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === sep) { out.push(cur); cur = ''; } else cur += c;
+  }
+  out.push(cur);
+  return out.map((v) => v.trim());
+}
+/** Parse a CSV/TSV with latitude & longitude columns. Returns { rows, lat, lon, name, header }. */
+export function parseCSVPoints(text) {
+  const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim());
+  if (lines.length < 2) throw new Error('The CSV file has no rows');
+  const sep = (lines[0].match(/\t/g) || []).length > (lines[0].match(/,/g) || []).length ? '\t' : (lines[0].match(/;/g) || []).length > (lines[0].match(/,/g) || []).length ? ';' : ',';
+  const header = splitCSVLine(lines[0], sep);
+  const low = header.map((h) => h.toLowerCase().replace(/[^a-z]/g, ''));
+  const find = (names) => low.findIndex((h) => names.includes(h));
+  const lat = find(['lat', 'latitude', 'y', 'lat_dd', 'latdd']);
+  const lon = find(['lon', 'lng', 'long', 'longitude', 'x', 'londd']);
+  if (lat < 0 || lon < 0) throw new Error('Could not find latitude and longitude columns (name them lat and lon)');
+  const name = find(['name', 'title', 'label', 'city', 'place', 'location', 'description']);
+  const rows = lines.slice(1).map((l) => splitCSVLine(l, sep)).filter((r) => Number.isFinite(+r[lat]) && Number.isFinite(+r[lon]) && r[lat] !== '' && r[lon] !== '');
+  return { header, rows, lat, lon, name };
+}

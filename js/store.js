@@ -10,8 +10,12 @@ function db() {
   if (!dbp) {
     dbp = new Promise((resolve) => {
       try {
-        const req = indexedDB.open(DB, 1);
-        req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'id' });
+        const req = indexedDB.open(DB, 2);
+        req.onupgradeneeded = () => {
+          const d = req.result;
+          if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('media')) d.createObjectStore('media');
+        };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => resolve(null);
       } catch { resolve(null); }
@@ -19,12 +23,12 @@ function db() {
   }
   return dbp;
 }
-async function tx(mode, fn) {
+async function tx(mode, fn, store = STORE) {
   const d = await db();
   if (!d) return fn(null);
   return new Promise((resolve, reject) => {
-    const t = d.transaction(STORE, mode);
-    const s = t.objectStore(STORE);
+    const t = d.transaction(store, mode);
+    const s = t.objectStore(store);
     const r = fn(s);
     t.oncomplete = () => resolve(r?.result ?? r);
     t.onerror = () => reject(t.error);
@@ -62,7 +66,7 @@ export function newProject(name) {
     format: 'map-animator', version: 2,
     id: newId(),
     name: name || 'Untitled trip',
-    aspect: '16:9', resolution: 1080, fps: 30, join: 'cut',
+    aspect: '16:9', resolution: 1080, fps: 30, join: 'cut', audio: [],
     scenes: [newScene('Scene 1')],
     createdAt: Date.now(), updatedAt: Date.now(),
   };
@@ -106,5 +110,42 @@ export function demoProject() {
   ];
   sc.lineSeconds = 7;
   sc.camera.mode = 'fixed';
+  return p;
+}
+
+// ---- media (audio blobs) ----
+const memMedia = new Map();
+export async function putMedia(id, blob) {
+  const d = await db();
+  if (!d) { memMedia.set(id, blob); return; }
+  await tx('readwrite', (s) => s.put(blob, id), 'media');
+}
+export async function getMedia(id) {
+  const d = await db();
+  if (!d) return memMedia.get(id) || null;
+  return (await tx('readonly', (s) => s.get(id), 'media')) || null;
+}
+export async function deleteMedia(id) {
+  const d = await db();
+  if (!d) { memMedia.delete(id); return; }
+  await tx('readwrite', (s) => s.delete(id), 'media');
+}
+const blobToDataURL = (b) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+/** Project file contents including embedded audio. */
+export async function projectFileJSON(p) {
+  const media = {};
+  for (const t of p.audio || []) {
+    const b = await getMedia(t.id);
+    if (b) media[t.id] = await blobToDataURL(b);
+  }
+  return JSON.stringify({ ...p, format: 'map-animator', version: 3, media });
+}
+/** Store media embedded in a project file; returns the project without it. */
+export async function importProjectMedia(p) {
+  const media = p.media || {};
+  for (const [id, url] of Object.entries(media)) {
+    try { await putMedia(id, await (await fetch(url)).blob()); } catch { /* skip broken media */ }
+  }
+  delete p.media;
   return p;
 }

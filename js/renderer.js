@@ -2,6 +2,7 @@
 import { sampleAt } from './geo.js';
 import { drawSign } from './signs.js';
 import { drawLayers, layerHandles } from './layers.js';
+import { drawNorthArrow, drawScaleBar, arrowRotation, metresPerPixel, defaultNorth } from './hud.js';
 
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -328,6 +329,10 @@ export function renderScene(ctx, o) {
   }
 
   // ---- compass ----
-  if (look.compass && o.frame) drawCompass(ctx, o.frame, map.getBearing(), unit);
+  if (o.frame) {
+    const n = look.north || (look.compass ? { ...defaultNorth(), style: 'compass' } : null);
+    if (n && n.style !== 'none') drawNorthArrow(ctx, o.frame, unit, n, arrowRotation(n, model, time, map.getBearing(), model.trimIn || 0));
+    if (look.scaleBar?.on) { const c = map.getCenter(); drawScaleBar(ctx, o.frame, unit, look.scaleBar, metresPerPixel(c.lat, map.getZoom()) / px); }
+  }
   return out;
 }

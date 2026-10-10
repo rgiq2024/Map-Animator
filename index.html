@@ -174,11 +174,14 @@
           <button data-add="symbol"><i>✨</i>Animated symbol</button>
           <button data-add="label"><i>T</i>Text on map</button>
           <button data-add="caption"><i>▭</i>Caption</button>
+          <button data-add="freehand"><i>✎</i>Freehand</button>
+          <button data-add="freearea"><i>✐</i>Freehand area</button>
         </div>
         <span class="label-caps">Bring in</span>
         <div class="btn-row bring">
           <button class="btn sm" id="find-boundary">Find a boundary…</button>
           <button class="btn sm" id="import-layers">Import GeoJSON / KML…</button>
+          <button class="btn sm" id="import-csv">Points from CSV…</button>
         </div>
         <div class="layer-editor" id="layer-editor" hidden></div>
         <div class="list-head"><span class="label-caps">Layers</span><b id="layer-count">0</b></div>
@@ -204,6 +207,8 @@
           <label class="row"><span>3D mountains</span><input type="checkbox" class="switch" data-look="terrain" /></label>
           <label class="row sub-row" id="terrain-row"><span>Height</span><input type="range" min="1" max="3" step="0.1" data-look="terrainExaggeration" /></label>
           <label class="row"><span>3D buildings</span><input type="checkbox" class="switch" data-look="buildings3d" /></label>
+          <label class="row" id="rlabels-row"><span>Place names on top</span><input type="checkbox" class="switch" data-look="rasterLabels" /></label>
+          <label class="row" id="rroads-row"><span>Main roads on top</span><input type="checkbox" class="switch" data-look="rasterRoads" /></label>
           <label class="row sub-row" id="bld-row"><span>Grow up at the start</span><input type="checkbox" class="switch" data-look="buildingsRise" /></label>
         </div>
         <div class="group">
@@ -220,7 +225,35 @@
         </div>
         <div class="group">
           <h4>Extras</h4>
-          <label class="row"><span>Compass</span><input type="checkbox" class="switch" data-look="compass" /></label>
+          <label class="row"><span>North arrow</span><select id="north-style"></select></label>
+          <div id="north-opts">
+            <label class="row sub-row"><span>Turns</span><select id="north-mode"></select></label>
+            <label class="row sub-row"><span>Corner</span><select id="north-pos"></select></label>
+            <label class="row sub-row"><span>Size</span><input type="range" min="0.5" max="2.5" step="0.05" id="north-size" /></label>
+            <label class="row sub-row"><span>Spins in at the start</span><input type="checkbox" class="switch" id="north-spin" /></label>
+            <label class="row sub-row"><span>Smooth, swinging turn</span><input type="checkbox" class="switch" id="north-smooth" /></label>
+          </div>
+          <label class="row"><span>Scale bar</span><input type="checkbox" class="switch" id="scale-on" /></label>
+          <div id="scale-opts">
+            <label class="row sub-row"><span>Units</span><select id="scale-units"><option value="metric">Kilometres</option><option value="imperial">Miles</option></select></label>
+            <label class="row sub-row"><span>Corner</span><select id="scale-pos"></select></label>
+          </div>
+        </div>
+        <div class="group">
+          <h4>Colour grade</h4>
+          <label class="row"><span>Look</span><select id="grade-preset"></select></label>
+          <label class="row sub-row"><span>Brightness</span><input type="range" min="0.4" max="1.6" step="0.01" data-grade="brightness" /></label>
+          <label class="row sub-row"><span>Contrast</span><input type="range" min="0.5" max="1.8" step="0.01" data-grade="contrast" /></label>
+          <label class="row sub-row"><span>Saturation</span><input type="range" min="0" max="2" step="0.01" data-grade="saturation" /></label>
+          <label class="row sub-row"><span>Temperature</span><input type="range" min="-1" max="1" step="0.01" data-grade="warmth" /></label>
+          <label class="row sub-row"><span>Faded blacks</span><input type="range" min="0" max="0.4" step="0.01" data-grade="fade" /></label>
+          <label class="row sub-row"><span>Black &amp; white</span><input type="checkbox" class="switch" data-grade="bw" /></label>
+          <p class="note small">Grades the map only, so your route, signs and text keep their colours.</p>
+        </div>
+        <div class="group">
+          <h4>Templates</h4>
+          <label class="row"><span>Apply</span><select id="tpl-apply"><option value="">Choose a template…</option></select></label>
+          <div class="btn-row"><button class="btn sm" id="tpl-save">Save this look as a template</button><button class="btn sm danger" id="tpl-del" hidden>Delete template</button></div>
         </div>
       </section>
 
@@ -243,8 +276,9 @@
           </div>
           <label class="field"><span>Style</span><select id="se-type"></select></label>
           <label class="row" id="se-flip-row"><span>Point left</span><input type="checkbox" class="switch" id="se-flip" /></label>
+          <label class="row" id="se-at-row"><span>Appears at (s)</span><input type="number" step="0.1" min="0" id="se-at" /></label>
           <label class="field"><span>Appears</span>
-            <select id="se-appear"><option value="auto">When the line gets there</option><option value="start">From the start</option><option value="end">At the end</option></select>
+            <select id="se-appear"><option value="auto">When the line gets there</option><option value="start">From the start</option><option value="end">At the end</option><option value="time">At a set time</option></select>
           </label>
           <button class="btn sm danger" id="se-delete">Delete sign</button>
         </div>
@@ -260,6 +294,8 @@
         <div class="cam-cards" id="cam-cards">
           <button data-cam="fixed"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg><b>Fixed view</b><small>Films exactly what you see</small></button>
           <button data-cam="startEnd"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="9" height="7" rx="1"/><rect x="12" y="13" width="9" height="7" rx="1"/><path d="M8 11v4h4"/></svg><b>Start to end</b><small>Glide from one view to another</small></button>
+          <button data-cam="keyframes"><svg viewBox="0 0 24 24"><path d="M12 3l4 4-4 4-4-4z"/><path d="M5 14l3 3-3 3-3-3zM19 14l3 3-3 3-3-3z"/></svg><b>Keyframes</b><small>Set views at points in time</small></button>
+          <button data-cam="orbit"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="4"/><circle cx="12" cy="12" r="2"/><path d="M19 9l2 1-1 2"/></svg><b>Orbit</b><small>Circle around the scene in 3D</small></button>
           <button data-cam="follow"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M8 15l3-3 2 2 3-4"/></svg><b>Follow the line</b><small>Stay with the arrow as it travels</small></button>
         </div>
         <div class="cam-opts" data-cam-opts="fixed">
@@ -271,6 +307,20 @@
           <div class="view-slots">
             <div class="slot"><span>Start view</span><b id="start-state">Not set</b><div class="btn-row"><button class="btn sm primary" id="set-start">Set start</button><button class="btn sm" id="go-start">Show</button></div></div>
             <div class="slot"><span>End view</span><b id="end-state">Not set</b><div class="btn-row"><button class="btn sm primary" id="set-end">Set end</button><button class="btn sm" id="go-end">Show</button></div></div>
+          </div>
+        </div>
+        <div class="cam-opts" data-cam-opts="keyframes">
+          <p class="note">Move the playhead, frame the view (pan, zoom, rotate with right-drag, tilt), then add a keyframe. The camera moves between keyframes with the easing you choose. Drag the diamonds on the timeline to retime them.</p>
+          <button class="btn sm primary" id="kf-add">◆ Add keyframe at the playhead</button>
+          <ul class="kf-list" id="kf-list"></ul>
+        </div>
+        <div class="cam-opts" data-cam-opts="orbit">
+          <p class="note">The camera circles around the centre of the view. Frame it, then press the button. Turn on 3D buildings or 3D mountains for depth.</p>
+          <button class="btn sm" id="orbit-set">Orbit around the current view</button>
+          <div class="slider-row">
+            <div class="slider-head"><span class="label-caps">Speed</span><b id="orbit-out"></b></div>
+            <input type="range" min="-45" max="45" step="1" id="orbit-speed" />
+            <div class="slider-foot"><span>Anticlockwise</span><span>Clockwise</span></div>
           </div>
         </div>
         <div class="cam-opts" data-cam-opts="follow">
@@ -314,6 +364,17 @@
         <h2>Preview &amp; export</h2>
         <p class="sub">Nothing is rendered until you press Render.</p>
         <button class="btn block" id="play-preview">▶ Play preview</button>
+        <label class="field"><span class="label-caps">Preset</span>
+          <select id="render-preset">
+            <option value="">Custom</option>
+            <option value="yt1080">YouTube · 16:9 Full HD 30 fps</option>
+            <option value="yt4k">YouTube · 16:9 4K 30 fps</option>
+            <option value="reel">Reels / TikTok / Shorts · 9:16 1080p 30 fps</option>
+            <option value="igpost">Instagram post · 4:5 1080p 30 fps</option>
+            <option value="square">Square · 1:1 1080p 30 fps</option>
+            <option value="cinema">Cinema · 21:9 4K 24 fps</option>
+            <option value="draft">Quick draft · 16:9 720p 24 fps</option>
+          </select></label>
         <div class="grid2">
           <label class="field"><span class="label-caps">Still at start</span>
             <select id="still-start"><option value="0">None</option><option value="0.5">0.5 s</option><option value="1">1 s</option><option value="1.5">1.5 s</option><option value="2">2 s</option><option value="3">3 s</option><option value="5">5 s</option></select></label>
@@ -323,10 +384,19 @@
             <select id="resolution"><option value="480">SD 480p</option><option value="720">HD 720p</option><option value="1080">Full HD 1080p</option><option value="1440">2K 1440p</option><option value="2160">4K 2160p</option></select></label>
           <label class="field"><span class="label-caps">Frame rate <i class="dot"></i></span>
             <select id="fps"><option value="24">24 fps</option><option value="25">25 fps</option><option value="30">30 fps</option><option value="50">50 fps</option><option value="60">60 fps</option></select></label>
-          <label class="field span2" id="join-row"><span class="label-caps">Joining scenes <i class="dot"></i></span>
-            <select id="join"><option value="cut">Cut</option><option value="fade">Fade through black</option></select></label>
+          <label class="field" id="join-row"><span class="label-caps">To the next scene</span>
+            <select id="join"></select></label>
+          <label class="field" id="join-secs-row"><span class="label-caps">Transition length</span>
+            <select id="join-secs"><option value="0.4">0.4 s</option><option value="0.8">0.8 s</option><option value="1.2">1.2 s</option><option value="2">2 s</option></select></label>
         </div>
-        <p class="note small"><i class="dot"></i> Resolution, frame rate, video shape and joining scenes apply to the whole project.</p>
+        <p class="note small"><i class="dot"></i> Resolution, frame rate and video shape apply to the whole project. Transitions show in the rendered video.</p>
+        <div class="group">
+          <h4>Sound</h4>
+          <div class="btn-row"><button class="btn sm" id="audio-add">♪ Add music…</button><button class="btn sm" id="audio-rec">🎙 Record voiceover</button></div>
+          <p class="note small" id="audio-note">Voiceovers start at the playhead; the animation plays while you talk. Drag the bars on the timeline to move them.</p>
+          <ul class="audio-list" id="audio-list"></ul>
+        </div>
+        <button class="btn block" id="save-png">Save this frame as PNG</button>
       </section>
 
       <div class="side-foot">
@@ -376,24 +446,56 @@
   </div>
 
   <footer class="ed-timeline">
-    <button class="play-btn" id="tl-play" title="Play (space)">
-      <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-      <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
-    </button>
-    <div class="tl-time" id="tl-time">0:00.0 / 0:00</div>
-    <div class="tl-labels"><span>Camera</span><span>Line</span><span>Layers</span><span>Signs</span></div>
-    <div class="tl-tracks" id="tl-tracks">
-      <div class="tl-ruler" id="tl-ruler"></div>
-      <div class="tl-row" id="tl-cam"></div>
-      <div class="tl-row" id="tl-line"></div>
-      <div class="tl-row" id="tl-layers"></div>
-      <div class="tl-row" id="tl-signs"></div>
-      <div class="tl-head" id="tl-head"></div>
+    <div class="tl-bar">
+      <div class="tl-transport">
+        <button class="tbtn" id="tl-start" title="Go to in point (Home)"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 6l-9 6 9 6z"/></svg></button>
+        <button class="tbtn" id="tl-prev" title="Back one frame (←)"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button class="play-btn" id="tl-play" title="Play / pause (Space · L to play, K to pause)">
+          <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+        <button class="tbtn" id="tl-next" title="Forward one frame (→)"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+        <button class="tbtn" id="tl-end" title="Go to out point (End)"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 6l9 6-9 6z"/></svg></button>
+        <div class="tl-time" id="tl-time">0:00.0</div>
+        <select id="tl-rate" title="Playback speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+        <button class="tbtn" id="tl-loop" title="Loop playback"><svg viewBox="0 0 24 24"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 014-4h12M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 01-4 4H4"/></svg></button>
+      </div>
+      <div class="tl-tools">
+        <button class="tbtn wide" id="tl-split" title="Cut the scene in two at the playhead (Ctrl+K)"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg>Split</button>
+        <button class="tbtn" id="tl-razor" title="Razor tool: click the timeline to cut (C)"><svg viewBox="0 0 24 24"><path d="M3 21l8-8M14 3l7 7-6 6-7-7z"/></svg></button>
+        <span class="tsep"></span>
+        <button class="tbtn wide" id="tl-in" title="Set in point at the playhead (I)">[ In</button>
+        <button class="tbtn wide" id="tl-out" title="Set out point at the playhead (O)">Out ]</button>
+        <button class="tbtn" id="tl-clear-trim" title="Remove trimming"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <span class="tsep"></span>
+        <button class="tbtn" id="tl-marker" title="Add / remove marker (M) · ↑↓ jump between markers"><svg viewBox="0 0 24 24"><path d="M6 3h12v13l-6 5-6-5z"/></svg></button>
+        <button class="tbtn active" id="tl-snap" title="Snapping (S)"><svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0012 0V3M6 7h4M14 7h4"/></svg></button>
+      </div>
+      <div class="tl-zoomer">
+        <button class="tbtn" id="tl-zoom-out" title="Zoom out (−)">−</button>
+        <input type="range" id="tl-zoom" min="1" max="40" step="0.1" value="1" title="Timeline zoom (Ctrl + scroll)" />
+        <button class="tbtn" id="tl-zoom-in" title="Zoom in (+)">+</button>
+        <button class="speed" id="speed-btn" title="How long the line takes to draw">
+          <svg viewBox="0 0 40 24"><path d="M4 20a16 16 0 0132 0" fill="none" stroke-width="3"/><path id="speed-needle" d="M20 20L30 9" stroke-width="3"/></svg>
+          <span><b id="speed-label">Normal</b><small id="speed-secs">5.0 s</small></span>
+        </button>
+      </div>
     </div>
-    <button class="speed" id="speed-btn" title="How long the line takes to draw">
-      <svg viewBox="0 0 40 24"><path d="M4 20a16 16 0 0132 0" fill="none" stroke-width="3"/><path id="speed-needle" d="M20 20L30 9" stroke-width="3"/></svg>
-      <span><b id="speed-label">Normal</b><small id="speed-secs">5.0 s</small></span>
-    </button>
+    <div class="tl-body">
+      <div class="tl-labels"><span class="rl"></span><span>Camera</span><span>Line</span><span id="tl-lab-layers">Layers</span><span>Signs</span><span>Audio</span></div>
+      <div class="tl-scroll" id="tl-scroll">
+        <div class="tl-tracks" id="tl-tracks">
+          <div class="tl-ruler" id="tl-ruler"></div>
+          <div class="tl-row" id="tl-cam"></div>
+          <div class="tl-row" id="tl-line"></div>
+          <div class="tl-row" id="tl-layers"></div>
+          <div class="tl-row" id="tl-signs"></div>
+          <div class="tl-row" id="tl-audio"></div>
+          <div class="tl-trim" id="tl-trim"></div>
+          <div class="tl-head" id="tl-head"></div>
+        </div>
+      </div>
+    </div>
     <div class="speed-pop" id="speed-pop" hidden>
       <b>Line drawing time</b>
       <div class="presets">
@@ -411,6 +513,11 @@
 <!-- ======================= MODALS ======================= -->
 <dialog class="modal wide" id="themes-modal">
   <div class="modal-head"><h3>More map themes</h3><button class="icon-x" data-close>✕</button></div>
+  <h4 class="modal-sub">Satellite &amp; Earth imagery</h4>
+  <div class="theme-grid" id="imagery-themes"></div>
+  <h4 class="modal-sub">Free base maps</h4>
+  <div class="theme-grid" id="base-themes"></div>
+  <h4 class="modal-sub">Designed themes</h4>
   <div class="theme-grid" id="more-themes"></div>
 </dialog>
 
@@ -443,6 +550,18 @@
       <button class="btn" data-as="area">▰ Filled area</button>
       <button class="btn" data-as="flood">🌊 Flood</button>
     </div>
+  </div>
+</dialog>
+
+<dialog class="modal" id="csv-modal">
+  <div class="modal-head"><h3>Points from CSV</h3><button class="icon-x" data-close>✕</button></div>
+  <div class="prose">
+    <p class="small" id="csv-info"></p>
+    <label class="row"><span>Label from column</span><select id="csv-name"></select></label>
+    <label class="row"><span>Symbol</span><select id="csv-preset"></select></label>
+    <label class="row"><span>Points appear</span><select id="csv-stagger"><option value="0">All together</option><option value="0.15">One after another (fast)</option><option value="0.4">One after another</option><option value="1">One by one, slowly</option></select></label>
+    <label class="row"><span>Join them with a line</span><input type="checkbox" class="switch" id="csv-line" /></label>
+    <div class="modal-actions"><button class="btn primary" id="csv-go">Add points</button></div>
   </div>
 </dialog>
 
@@ -498,6 +617,9 @@
 <input type="file" id="file-route" accept=".gpx,.kml,.kmz,.igc,.geojson,.json" hidden />
 <input type="file" id="file-image" accept="image/*" hidden />
 <input type="file" id="file-layers" accept=".geojson,.json,.kml,.kmz,.gpx" hidden />
+<input type="file" id="file-csv" accept=".csv,.tsv,.txt,text/csv" hidden />
+<input type="file" id="file-audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac" hidden />
+<input type="file" id="file-marker" accept="image/*" hidden />
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/app.js"></script>
