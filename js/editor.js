@@ -22,6 +22,7 @@ import { hitGizmo, gizmoDrag } from './gizmo.js';
 import { zoomSpeedAt } from './renderer.js';
 import { drawZoomBlur } from './effects.js';
 import { putMedia } from './store.js';
+import { TEMPLATES as QS_TEMPLATES, openQuickStart } from './quickstart.js';
 import { SPRITES } from './sprites.js';
 import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
@@ -2173,7 +2174,7 @@ export function createEditor() {
 
   // ---------------------------------------------------------------- steps
   /** A scene can be played/exported with a route, signs or just layers (points, symbols, 3D models…). */
-  const hasContent = (sc, m) => !!(m?.drawable.length || sc.signs?.length || (sc.layers || []).some((L) => !L.hidden));
+  const hasContent = (sc, m) => !!(m?.drawable.length || sc.signs?.length || (sc.layers || []).some((L) => !L.hidden) || (sc.camera?.mode === 'keyframes' && (sc.camera.keys || []).length > 1) || sc.camera?.mode === 'orbit');
   function setStep(s) {
     step = s;
     visited.add(s);
@@ -2420,6 +2421,39 @@ export function createEditor() {
     });
     document.body.append(m);
   }
+  // quick camera moves (Zoom-To, Orbit, Point-to-Point, Spiral, Fly-To and Orbit) for the current scene
+  $('#qs-chips').innerHTML = Object.entries(QS_TEMPLATES).map(([k, t]) => `<button class="chip" data-tpl="${k}">${t.name}</button>`).join('');
+  $('#qs-chips').onclick = (e) => {
+    const b = e.target.closest('[data-tpl]');
+    if (!b) return;
+    openQuickStart({
+      kind: b.dataset.tpl,
+      actionLabel: 'Apply to this scene',
+      onCreate: ({ scenes }) => {
+        pushUndo();
+        const cur = scene();
+        const [first, ...rest] = scenes;
+        cur.camera = { ...cur.camera, mode: 'keyframes', keys: first.camera.keys, tilt: first.camera.tilt, intro: 'none', outro: 'none' };
+        Object.assign(cur.look, { theme: first.look.theme, globe: first.look.globe, atmosphere: first.look.atmosphere, clouds: first.look.clouds, cloudMode: first.look.cloudMode, cloudAmount: first.look.cloudAmount, buildings3d: first.look.buildings3d, terrain: first.look.terrain, placeNames: first.look.placeNames, rasterLabels: first.look.rasterLabels });
+        cur.layers = [...(cur.layers || []), ...first.layers];
+        if (!model.drawable.length) { cur.stillStart = 0; cur.stillEnd = 0.4; }
+        rest.forEach((sc, i) => { sc.name = sc.name || `Scene ${project.scenes.length + 1}`; project.scenes.splice(sceneIdx + 1 + i, 0, sc); });
+        if (rest.length) cur.transition = 'dissolve';
+        offsetCache = null; eventsCache = null;
+        styleKey = null;
+        applyLook(cur);
+        renderScenes();
+        commitLayers();
+        renderCamera();
+        setViewMode('play');
+        time = model.trimIn;
+        applyCamera(time);
+        updatePlayhead();
+        toast(rest.length ? `Applied — ${rest.length} more scene${rest.length === 1 ? '' : 's'} added for the other places` : 'Camera move applied — press play', 3600);
+      },
+    });
+  };
+
   $('#new-scene').onclick = () => {
     const last = project.scenes.at(-1);
     const sc = newScene(`Scene ${project.scenes.length + 1}`, last.look);

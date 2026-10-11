@@ -5,6 +5,7 @@ import { buildScene } from './scene.js';
 import { renderScene } from './renderer.js';
 import { bounds } from './geo.js';
 import { toast, downloadBlob } from './editor.js';
+import { TEMPLATES, thumbSVG, openQuickStart } from './quickstart.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -87,6 +88,23 @@ export function createHome({ open }) {
       open(p.id);
     };
   }
+
+  // ---------------- quick start templates
+  $('#quick-grid').innerHTML = Object.entries(TEMPLATES).map(([k, t]) => `<button class="quick-card" data-tpl="${k}">${thumbSVG(k)}<b>${t.name}</b><small>${t.desc}</small></button>`).join('');
+  $('#quick-grid').onclick = (e) => {
+    const b = e.target.closest('[data-tpl]');
+    if (!b) return;
+    openQuickStart({
+      kind: b.dataset.tpl,
+      onCreate: async ({ scenes, name }) => {
+        const p = newProject(name);
+        p.scenes = scenes;
+        await saveProject(p);
+        open(p.id, { step: 'camera' });
+        toast('Your camera move is ready — press play to preview', 3600);
+      },
+    });
+  };
 
   $('#create-form').addEventListener('submit', async (e) => {
     e.preventDefault();

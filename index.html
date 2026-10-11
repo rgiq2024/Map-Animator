@@ -57,6 +57,11 @@
     </div>
   </section>
 
+  <section class="quick" id="quick-section">
+    <div class="section-head"><h2>Quick start project</h2><span class="muted small">Pick a camera move, add places by name, coordinates, map clicks or a point file</span></div>
+    <div class="quick-grid" id="quick-grid"></div>
+  </section>
+
   <section class="projects" id="projects-section">
     <div class="section-head"><h2>Your projects</h2><span class="muted small" id="projects-count"></span></div>
     <div class="project-grid" id="project-grid"></div>
@@ -338,6 +343,10 @@
           <button data-cam="globe"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><b>Rotate globe</b><small>The Earth turns under the route</small></button>
           <button data-cam="orbit"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="4"/><circle cx="12" cy="12" r="2"/><path d="M19 9l2 1-1 2"/></svg><b>Orbit</b><small>Circle around the scene in 3D</small></button>
           <button data-cam="follow"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M8 15l3-3 2 2 3-4"/></svg><b>Follow the line</b><small>Stay with the arrow as it travels</small></button>
+        </div>
+        <div class="qs-strip">
+          <span class="label-caps">Quick camera moves</span>
+          <div class="qs-chips" id="qs-chips"></div>
         </div>
         <div class="cam-opts" data-cam-opts="fixed">
           <p class="note">Move and zoom the map until the frame shows what you want. The video uses whatever the frame shows, so you can change it any time, in any step.</p>

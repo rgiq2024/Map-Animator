@@ -182,7 +182,9 @@ export function buildScene(scene, fw, fh) {
   const drawStart = I + stillStart;
   const drawEnd = runs.length ? t : drawStart;
   const featEnd = layers.reduce((m, L) => Math.max(m, layerEnd(L)), 0);
-  const mainEnd = Math.max(drawEnd, featEnd, drawStart) + stillEnd;
+  // camera keyframes also make the scene long enough to play them all
+  const keyEnd = cam0.mode === 'keyframes' ? (cam0.keys || []).reduce((m, k) => Math.max(m, k.view ? +k.t || 0 : 0), 0) : 0;
+  const mainEnd = Math.max(drawEnd, featEnd, drawStart, keyEnd) + stillEnd;
   const total = Math.max(0.5, mainEnd + O);
 
   // cumulative offsets so progress is one number across legs
