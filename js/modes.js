@@ -6,6 +6,7 @@ export const MODE_GROUPS = [
   { name: 'On land', modes: ['car', 'caravan', 'motorhome', 'bus', 'truck', 'tuktuk', 'motorcycle', 'offroad', 'atv', 'snowmobile', 'bicycle', 'steamtrain', 'train', 'speedtrain', 'tram'] },
   { name: 'On water', modes: ['boat', 'sailboat', 'cruise', 'ferry', 'kayak'] },
   { name: 'In the air', modes: ['plane', 'helicopter', 'balloon', 'paraglider', 'rocket'] },
+  { name: 'Military & space · 3D', modes: ['jet3d', 'airliner3d', 'heli3d', 'drone3d', 'quad3d', 'missile3d', 'warship3d', 'cargo3d', 'sub3d', 'tank3d', 'sat3d'] },
 ];
 
 export const MODES = {
@@ -39,6 +40,17 @@ export const MODES = {
   balloon:    { label: 'Hot-air balloon', icon: '🎈', style: 'dotted', air: true },
   paraglider: { label: 'Paraglider', icon: '🪂', style: 'dotted', air: true },
   rocket:     { label: 'Rocket', icon: '🚀', style: 'dashed', air: true, rot: -45 },
+  jet3d:      { label: 'Fighter jet', icon: '🛩️', sprite: 'jet', style: 'dashed', air: true },
+  airliner3d: { label: 'Airliner (3D)', icon: '✈️', sprite: 'airliner', style: 'dashed', air: true },
+  heli3d:     { label: 'Helicopter (3D)', icon: '🚁', sprite: 'helicopter', style: 'dotted' },
+  drone3d:    { label: 'Drone', icon: '🛸', sprite: 'drone', style: 'dotted' },
+  quad3d:     { label: 'Quadcopter', icon: '🛸', sprite: 'quad', style: 'dotted' },
+  missile3d:  { label: 'Missile', icon: '🚀', sprite: 'missile', style: 'solid', air: true },
+  warship3d:  { label: 'Warship', icon: '🚢', sprite: 'warship', style: 'dashed' },
+  cargo3d:    { label: 'Cargo ship', icon: '🚢', sprite: 'cargo', style: 'dashed' },
+  sub3d:      { label: 'Submarine', icon: '🚢', sprite: 'submarine', style: 'dotted' },
+  tank3d:     { label: 'Tank', icon: '🪖', sprite: 'tank', style: 'dashed', route: 'car' },
+  sat3d:      { label: 'Satellite', icon: '🛰️', sprite: 'satellite', style: 'dashed', air: true },
 };
 
 export const LINE_STYLES = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', rail: 'Railway' };

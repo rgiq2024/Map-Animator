@@ -41,7 +41,7 @@ export function createTimeline(api) {
 
     // camera
     const cam = sc.camera;
-    const camLabel = { fixed: ['Fixed view', 'The view in the frame'], startEnd: ['Start to end', 'Glides between two views'], follow: ['Follow the line', 'Stays with the arrow'], keyframes: ['Keyframes', `${(cam.keys || []).length} keyframe${(cam.keys || []).length === 1 ? '' : 's'}`], orbit: ['Orbit', `${cam.orbitSpeed || 12}°/s`] }[cam.mode] || ['Camera', ''];
+    const camLabel = { fixed: ['Fixed view', 'The view in the frame'], startEnd: ['Start to end', 'Glides between two views'], follow: ['Follow the line', 'Stays with the arrow'], keyframes: ['Keyframes', `${(cam.keys || []).length} keyframe${(cam.keys || []).length === 1 ? '' : 's'}`], orbit: ['Orbit', `${cam.orbitSpeed || 12}°/s`], globe: ['Rotate globe', 'The Earth turns under the route'] }[cam.mode] || ['Camera', ''];
     const a = m.drawStart, b = Math.max(m.drawEnd, a + 0.05);
     const ca = cam.mode === 'keyframes' || cam.mode === 'orbit' ? m.intro : a;
     const cb = cam.mode === 'keyframes' || cam.mode === 'orbit' ? m.mainEnd : b;

@@ -2,6 +2,9 @@
 import { sampleAt } from './geo.js';
 import { drawSign } from './signs.js';
 import { drawLayers, layerHandles } from './layers.js';
+import { drawSprite } from './sprites.js';
+import { drawClouds } from './effects.js';
+import { zoomRefFor } from './scene.js';
 import { drawNorthArrow, drawScaleBar, arrowRotation, metresPerPixel, defaultNorth } from './hud.js';
 
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
@@ -112,12 +115,17 @@ function drawBadge(ctx, x, y, mode, heading, color, r, shadow) {
   ctx.restore();
 }
 
-function drawSymbol(ctx, look, L, x, y, heading, unit) {
+function drawSymbol(ctx, look, L, x, y, heading, unit, t = 0) {
   const color = L.color;
-  const kind = look.symbol === 'auto' || !look.symbol ? (L.mode.icon ? 'icon' : 'arrow') : look.symbol;
+  const kind = look.symbol === 'auto' || !look.symbol ? (L.mode.sprite ? 'sprite' : L.mode.icon ? 'icon' : 'arrow') : look.symbol;
   const size = (+look.symbolSize || 1);
   const w = (+look.lineWidth || 5) * unit;
   if (kind === 'none') return;
+  if (L.mode.sprite && (kind === 'sprite' || kind === 'icon')) {
+    const sz = 24 * unit * size;
+    drawSprite(ctx, L.mode.sprite, x, y, (heading * Math.PI) / 180, sz, { color, t, alt: L.mode.air ? sz * 0.75 : sz * 0.15, shadow: look.symbol3d === false ? 0 : 1 });
+    return;
+  }
   if (kind === 'arrow' || (kind === 'icon' && !L.mode.icon)) drawArrow(ctx, x, y, heading, color, (w * 1.7 + 9 * unit) * size, look.symbol3d);
   else if (kind === 'icon') drawBadge(ctx, x, y, L.mode, heading, color, 18 * unit * size, look.symbol3d);
   else if (kind === 'dot') {
@@ -156,7 +164,11 @@ export function tokensAt(model, time) {
 /** On-screen captions (drawn last, above lens effects). */
 export function renderCaptions(ctx, o) {
   const proj = projector(o.map, o.px, o.ox || 0, o.oy || 0);
-  drawLayers(ctx, { scene: o.scene, proj, unit: o.unit, time: o.time, frame: o.frame, tokens: tokensAt(o.model, o.time) }, 'captions');
+  const c = o.map.getCenter();
+  const fhCss = o.frame ? o.frame.h / o.px : 600;
+  const altM = metresPerPixel(c.lat, o.map.getZoom()) * fhCss * 1.4;
+  const view = { center: [c.lng, c.lat], zoom: o.map.getZoom(), bearing: o.map.getBearing(), pitch: o.map.getPitch(), altM };
+  drawLayers(ctx, { scene: o.scene, proj, unit: o.unit, time: o.time, frame: o.frame, view, tokens: tokensAt(o.model, o.time) }, 'captions');
 }
 
 /**
@@ -317,7 +329,7 @@ export function renderScene(ctx, o) {
   // ---- travel symbol ----
   if (model.drawable.length) {
     if (st && st.point) {
-      drawSymbol(ctx, look, st.L, ...proj(st.point), st.heading - map.getBearing(), unit);
+      drawSymbol(ctx, look, st.L, ...proj(st.point), st.heading - map.getBearing(), unit, time);
     } else if (!st) {
       const L = model.drawable.at(-1);
       const end = L.coords.at(-1);
@@ -329,6 +341,21 @@ export function renderScene(ctx, o) {
   }
 
   // ---- compass ----
+  // clouds / fog while zooming through the sky
+  if (look.clouds && o.frame) {
+    const fwCss = o.frame.w / px;
+    const zr = zoomRefFor(map.getZoom(), fwCss);
+    let k = 1;
+    if (look.cloudMode !== 'always') {
+      if (time == null) k = 0;
+      else {
+        const z1 = model.cameraAt(Math.max(0, time - 0.06)).zoom, z2 = model.cameraAt(time + 0.06).zoom;
+        k = Math.min(1, Math.abs(z2 - z1) / 0.12 / 1.2);
+      }
+    }
+    if (k > 0.01) drawClouds(ctx, o.frame, zr, map.getBearing(), (+look.cloudAmount || 0.8) * k, unit);
+  }
+
   if (o.frame) {
     const n = look.north || (look.compass ? { ...defaultNorth(), style: 'compass' } : null);
     if (n && n.style !== 'none') drawNorthArrow(ctx, o.frame, unit, n, arrowRotation(n, model, time, map.getBearing(), model.trimIn || 0));

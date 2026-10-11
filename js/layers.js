@@ -3,6 +3,8 @@
 // (Terrain-based rising floods are rendered by flood.js inside the map itself.)
 import { simplify, toMerc } from './geo.js';
 import { signImage } from './signs.js';
+import { FX_KINDS, FX_ANIMS, FX_DEFAULTS, drawFX, fxPhases, issTrack } from './fx.js';
+import { drawSprite } from './sprites.js';
 
 const UI = '"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif';
 const DISPLAY = '"Archivo","Inter",system-ui,sans-serif';
@@ -49,6 +51,7 @@ export const LAYER_KINDS = {
   point:    { name: 'Point', icon: '◉', geom: 'point', desc: 'Marker with an animated effect' },
   label:    { name: 'Text on map', icon: 'T', geom: 'point', desc: 'A label that stays on its map spot' },
   caption:  { name: 'Caption', icon: '▭', geom: null, desc: 'Title or text on screen' },
+  ...FX_KINDS,
 };
 
 export const ANIMS = {
@@ -59,10 +62,11 @@ export const ANIMS = {
   point: { pop: 'Pop in', drop: 'Drop in', fade: 'Fade in', none: 'No animation' },
   label: { fade: 'Fade in', typewriter: 'Typewriter', slideUp: 'Slide up', pop: 'Pop in', none: 'No animation' },
   caption: { slide: 'Slide in', fade: 'Fade in', typewriter: 'Typewriter', pop: 'Pop in', wipe: 'Wipe', none: 'No animation' },
+  ...FX_ANIMS,
 };
 
 export const EFFECTS = { none: 'None', pulse: 'Pulse rings', ripple: 'Water ripple', radar: 'Radar sweep', bounce: 'Bounce', float: 'Float', spin: 'Spin', shake: 'Shake', blink: 'Blink', heartbeat: 'Heartbeat', flicker: 'Flicker' };
-export const MARKERS = { dot: 'Dot', pin: 'Pin', emoji: 'Emoji', image: 'Your image / icon', target: 'Target', ring: 'Ring' };
+export const MARKERS = { dot: 'Dot', pin: 'Pin', emoji: 'Emoji', sprite: '3D vehicle', image: 'Your image / icon', target: 'Target', ring: 'Ring' };
 export const CAPTION_LAYOUTS = { lowerThird: 'Lower third', title: 'Big title', card: 'Card', band: 'Band', plain: 'Plain text' };
 export const POSITIONS = { 'top-left': 'Top left', top: 'Top', 'top-right': 'Top right', center: 'Centre', 'bottom-left': 'Bottom left', bottom: 'Bottom', 'bottom-right': 'Bottom right' };
 
@@ -84,6 +88,14 @@ export const SYMBOL_PRESETS = {
   airport:  { name: 'Airport', marker: 'emoji', emoji: '✈️', color: '#2d7ff9', effect: 'float' },
   camera:   { name: 'Photo spot', marker: 'emoji', emoji: '📸', color: '#8b5cf6', effect: 'bounce' },
   flag:     { name: 'Flag', marker: 'emoji', emoji: '🚩', color: '#ff3b30', effect: 'float' },
+  jet3d:    { name: 'Fighter jet', marker: 'sprite', sprite: 'jet', color: '#ff3b30', effect: 'float' },
+  ship3d:   { name: 'Warship', marker: 'sprite', sprite: 'warship', color: '#ffd23f', effect: 'ripple' },
+  drone3d:  { name: 'Drone', marker: 'sprite', sprite: 'drone', color: '#2fbf71', effect: 'radar' },
+  heli3d:   { name: 'Helicopter', marker: 'sprite', sprite: 'helicopter', color: '#ffd23f', effect: 'float' },
+  tank3d:   { name: 'Tank', marker: 'sprite', sprite: 'tank', color: '#ff3b30', effect: 'pulse' },
+  sat3d:    { name: 'Satellite', marker: 'sprite', sprite: 'satellite', color: '#36d1ff', effect: 'float' },
+  iss3d:    { name: 'Space station', marker: 'sprite', sprite: 'iss', color: '#ffd23f', effect: 'spin' },
+  sub3d:    { name: 'Submarine', marker: 'sprite', sprite: 'submarine', color: '#2d7ff9', effect: 'ripple' },
 };
 
 const uid = () => `ly_${Math.random().toString(36).slice(2, 9)}`;
@@ -98,12 +110,13 @@ export function newLayer(kind, geom, opts = {}) {
     point: { anim: 'pop', duration: 0.8, style: { marker: 'dot', emoji: '📍', color: '#ff4a2b', size: 1, effect: 'pulse', label: '' } },
     label: { anim: 'fade', duration: 1, style: { text: 'Label', size: 26, color: '#ffffff', halo: '#16181d', weight: 800, upper: false, italic: false } },
     caption: { anim: 'slide', duration: 0.8, style: { text: 'Your title', sub: '', layout: 'lowerThird', position: 'bottom-left', accent: '#ff6b35', size: 1 } },
+    ...FX_DEFAULTS,
   }[kind];
   const L = { ...base, anim: S.anim, style: { ...S.style } };
   if (S.duration) L.duration = S.duration;
   if (opts.preset && SYMBOL_PRESETS[opts.preset]) {
     const p = SYMBOL_PRESETS[opts.preset];
-    Object.assign(L.style, { marker: p.marker, color: p.color, effect: p.effect, emoji: p.emoji || L.style.emoji });
+    Object.assign(L.style, { marker: p.marker, color: p.color, effect: p.effect, emoji: p.emoji || L.style.emoji, sprite: p.sprite || L.style.sprite, heading: 0 });
     L.name = p.name;
   }
   return L;
@@ -571,6 +584,10 @@ function drawPointLayer(ctx, L, tm, proj, unit) {
     for (const a of [0, 1, 2, 3]) { const c = Math.cos(a * Math.PI / 2), sn = Math.sin(a * Math.PI / 2); ctx.moveTo(c * 12 * size, sn * 12 * size); ctx.lineTo(c * 26 * size, sn * 26 * size); }
     ctx.stroke();
     ctx.beginPath(); ctx.arc(0, 0, 3 * size, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+  } else if (m === 'sprite') {
+    ctx.shadowColor = 'transparent';
+    const spin = s.effect === 'spin' ? rot : 0;
+    drawSprite(ctx, s.sprite || 'jet', 0, 0, ((+s.heading || 0) * Math.PI) / 180 + spin, 26 * size, { color, t: tau, alt: 10 * size });
   } else if (m === 'image') {
     const img = signImage(s.image);
     ctx.rotate(rot);
@@ -757,6 +774,13 @@ export function drawLayers(ctx, o, phase) {
   const tokens = o.tokens || {};
   for (const L of layers) {
     if (L.hidden) continue;
+    if (FX_KINDS[L.kind]) {
+      if (!fxPhases(L.kind).includes(phase)) continue;
+      const tm = layerTiming(L, time);
+      if (!tm.visible) continue;
+      try { drawFX(ctx, L, tm, o, phase); } catch (e) { console.warn('fx draw failed', L.id, e); }
+      continue;
+    }
     const below = L.kind === 'boundary' || L.kind === 'area' || L.kind === 'flood' || L.kind === 'line';
     const isCap = L.kind === 'caption';
     if ((phase === 'below') !== below && !isCap) continue;

@@ -13,7 +13,9 @@ import { EASE_NAMES } from './scene.js';
 import { parseCSVPoints, FONTS, loadFonts } from './layers.js';
 import { addAudioFile, mixProject, playFrom, stopPlayback, startRecording, stopRecording, isRecording } from './audio.js';
 import { projectFileJSON, deleteMedia } from './store.js';
-import { drawDepthOfField, drawVignette } from './effects.js';
+import { drawDepthOfField, drawVignette, starfield } from './effects.js';
+import { FX_FORMS } from './fx.js';
+import { SPRITES } from './sprites.js';
 import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
@@ -119,8 +121,8 @@ export function createEditor() {
   }
 
   function lookKey(look) {
-    const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d, rasterLabels, rasterRoads } = look;
-    return JSON.stringify({ theme, placeNames, lang, states, terrain, buildings3d: !!buildings3d, rasterLabels: rasterLabels !== false, rasterRoads: !!rasterRoads, terrainExaggeration: terrain ? terrainExaggeration : 0 });
+    const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d, rasterLabels, rasterRoads, globe, atmosphere } = look;
+    return JSON.stringify({ theme, placeNames, lang, states, terrain, globe: !!globe, atmosphere: !!atmosphere, buildings3d: !!buildings3d, rasterLabels: rasterLabels !== false, rasterRoads: !!rasterRoads, terrainExaggeration: terrain ? terrainExaggeration : 0 });
   }
   function applyLook(sc) {
     const key = lookKey(sc.look);
@@ -140,11 +142,20 @@ export function createEditor() {
       bldFactor = null;
       floods?.attach();
       $('#map').style.filter = gradeFilter(scene().look.grade);
+      setSpaceBackground(scene().look.globe);
       applyTimeEffects(viewMode === 'play' ? time : null);
     })();
     return stylePromise;
   }
 
+  let starURL = null;
+  function setSpaceBackground(on) {
+    const el = $('#map');
+    el.classList.toggle('space', !!on);
+    if (on) { starURL ||= starfield(1600, 1000).toDataURL('image/jpeg', 0.85); el.style.backgroundImage = `url(${starURL})`; }
+    else el.style.backgroundImage = '';
+  }
+  const spaceBg = (sc) => (sc.look.globe ? starfield(1600, 1000) : null);
   const currentView = () => ({
     center: [+map.getCenter().lng.toFixed(6), +map.getCenter().lat.toFixed(6)],
     zoomRef: +zoomRefFor(map.getZoom(), frame.w).toFixed(4),
@@ -862,10 +873,34 @@ export function createEditor() {
     if (e.key === 'Escape') $('#search-pop').hidden = true;
   });
   let results = [];
+  /** "25.2, 55.27", "25.2 N 55.27 E", "25°12'N 55°16'E" → [lat, lng] */
+  function parseCoords(q) {
+    const dms = /(-?\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*['′]\s*)?(?:(\d+(?:\.\d+)?)\s*["″]\s*)?([NSEW])?/gi;
+    const parts = [...q.matchAll(dms)];
+    if (parts.length === 2) {
+      const v = parts.map((m) => { let d = +m[1] + (+m[2] || 0) / 60 + (+m[3] || 0) / 3600; if (/[SW]/i.test(m[4] || '')) d = -d; return { d, h: (m[4] || '').toUpperCase() }; });
+      let [a, b] = v;
+      if (a.h === 'E' || a.h === 'W') [a, b] = [b, a];
+      return [a.d, b.d];
+    }
+    const m = q.trim().match(/^(-?\d+(?:\.\d+)?)\s*([NS])?[\s,;]+(-?\d+(?:\.\d+)?)\s*([EW])?$/i);
+    if (!m) return null;
+    let lat = +m[1], lng = +m[3];
+    if (/S/i.test(m[2] || '')) lat = -lat;
+    if (/W/i.test(m[4] || '')) lng = -lng;
+    if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
+    return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? [lat, lng] : null;
+  }
   async function runSearch(q) {
     if (!q) return;
     const seq = ++searchSeq;
     const ul = $('#search-results');
+    const c = parseCoords(q);
+    if (c) {
+      results = [{ name: `${c[0].toFixed(5)}, ${c[1].toFixed(5)}`, detail: 'Latitude, longitude — fly there', lat: c[0], lng: c[1], coord: true }];
+      ul.innerHTML = `<li data-i="0"><b>📍 ${esc(results[0].name)}</b><small>${results[0].detail}</small></li>`;
+      return;
+    }
     ul.innerHTML = '<li class="msg">Searching…</li>';
     try {
       results = await geocode(q);
@@ -879,8 +914,12 @@ export function createEditor() {
     const r = results[+li.dataset.i];
     $('#search-pop').hidden = true;
     setViewMode('edit');
-    if (r.bbox) flyToBounds(r.bbox, 0.2);
-    else { userIntent = true; map.easeTo({ center: [r.lng, r.lat], zoom: 11, duration: 700 }); }
+    // Earth-style flight: zoom out, travel, zoom in
+    userIntent = true;
+    if (r.bbox && !r.coord) {
+      const c = fitCamera(r.bbox, frame.w, frame.h, 0.2);
+      map.flyTo({ center: c.center, zoom: c.zoom, bearing: 0, pitch: +scene().camera.tilt || 0, duration: 2600, curve: 1.6, essential: true });
+    } else map.flyTo({ center: [r.lng, r.lat], zoom: 13, duration: 2600, curve: 1.6, essential: true });
   });
 
   // ---------------------------------------------------------------- layers
@@ -1050,6 +1089,26 @@ export function createEditor() {
     selectLayer(L.id);
   });
   $('#add-layer').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  $('#add-fx').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  $('#add-info').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    cancelDrawing();
+    const L = newLayer(b.dataset.add, null, { start: newStart() });
+    if (b.dataset.type) {
+      L.style.type = b.dataset.type;
+      const T = { bar: ['Population (millions)', 'Dubai: 3.6\nAbu Dhabi: 1.5\nSharjah: 1.8\nAjman: 0.5', '', ' M'], line: ['Visitors per year', '2019: 16.7\n2020: 5.5\n2021: 7.3\n2022: 14.4\n2023: 17.2', '', ' M'], donut: ['Land use', 'Urban: 35\nDesert: 45\nFarmland: 12\nWater: 8', '', '%'], counter: ['Distance flown', 'Kilometres flown: 5432', '', ' km'], progress: ['Mission progress', 'Survey: 80\nImagery: 55\nAnalysis: 30', '', '%'] }[b.dataset.type];
+      if (T) { [L.style.title, L.style.data, L.style.prefix, L.style.suffix] = T; L.name = T[0]; }
+      if (b.dataset.type === 'counter') L.duration = 2.5;
+    }
+    if (b.dataset.variant) {
+      L.style.variant = b.dataset.variant;
+      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock' }[b.dataset.variant];
+      if (b.dataset.variant === 'satellite') { L.style.color = '#36d1ff'; L.style.label = 'SAT-01 LIVE'; }
+      if (b.dataset.variant === 'target') { L.style.color = '#ff5a52'; L.style.label = 'TGT-07'; L.duration = 2; }
+    }
+    addLayer(L);
+  });
 
   // editor form
   const fRow = (label, inner, cls = '') => `<label class="row ${cls}"><span>${label}</span>${inner}</label>`;
@@ -1089,6 +1148,7 @@ export function createEditor() {
     } else if (L.kind === 'point') {
       h += '<h5>Symbol</h5>' + fRow('Marker', fSel('style.marker', s.marker, MARKERS));
       if (s.marker === 'emoji') h += fRow('Emoji', fText('style.emoji', s.emoji, '📍'));
+      if (s.marker === 'sprite') h += fRow('Vehicle', fSel('style.sprite', s.sprite || 'jet', SPRITES)) + fRow('Heading (°)', fRange('style.heading', s.heading || 0, -180, 180, 1));
       if (s.marker === 'image') h += `<div class="btn-row"><button class="btn sm" data-act="markerImg">${s.image ? 'Change image…' : 'Choose image…'}</button><span class="muted small">PNG with see-through background works best</span></div>`;
       h += fRow('Colour', fColor('style.color', s.color)) + fRow('Size', fRange('style.size', s.size, 0.4, 3, 0.05)) + fRow('Effect', fSel('style.effect', s.effect, EFFECTS));
       h += `<label class="field"><span>Label</span>${fText('style.label', s.label, 'Optional text next to it')}</label>`;
@@ -1105,6 +1165,22 @@ export function createEditor() {
       if (!['lowerThird', 'band'].includes(s.layout)) h += fRow('Position', fSel('style.position', s.position, POSITIONS));
       h += fRow('Accent', fColor('style.accent', s.accent)) + fRow('Size', fRange('style.size', s.size || 1, 0.6, 1.8, 0.05));
       h += '<p class="hint-line">Use {km} or {mi} to show the distance travelled so far.</p>';
+    }
+    if (FX_FORMS[L.kind]) {
+      h += '<h5>Settings</h5>';
+      for (const [path, label, type, o] of FX_FORMS[L.kind]) {
+        const v = path.split('.').reduce((a, k) => a?.[k], L);
+        if (type === 'select') h += fRow(label, fSel(path, v, o));
+        else if (type === 'font') h += fRow(label, fSel(path, v || '', FONTS));
+        else if (type === 'color') h += fRow(label, fColor(path, v));
+        else if (type === 'range') h += fRow(label, fRange(path, v, o[0], o[1], o[2]));
+        else if (type === 'switch') h += fRow(label, fSw(path, v));
+        else if (type === 'number') h += fRow(label, fNum(path, v, o || 1));
+        else if (type === 'textarea') h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea></label>`;
+        else h += `<label class="field"><span>${label}</span>${fText(path, v)}</label>`;
+      }
+      if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
+      if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
     }
     h += `<div class="btn-row">${L.geom ? '<button class="btn sm" data-act="zoom">Zoom to</button>' : ''}<button class="btn sm" data-act="up">Up</button><button class="btn sm" data-act="down">Down</button><button class="btn sm" data-act="dup">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>`;
     box.innerHTML = h;
@@ -1135,6 +1211,7 @@ export function createEditor() {
     const key = el.dataset.b;
     let v = el.type === 'checkbox' ? el.checked : el.value;
     if (el.type === 'range' || el.type === 'number') v = v === '' ? null : +v;
+    if (key === 'style.count') v = Math.max(1, Math.min(40, Math.round(+v || 1)));
     if (key === 'style.weight') v = +v;
     if (final) pushUndo();
     setPath(L, key, v);
@@ -1355,8 +1432,8 @@ export function createEditor() {
     const cam = scene().camera;
     const feats = layersOf().filter((l) => l.geom && !l.hidden).map((l) => [`feature:${l.id}`, `Layer: ${l.kind === 'label' ? l.style.text : l.name}`]);
     const opt = (pairs, v) => pairs.map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${esc(t)}</option>`).join('');
-    $('#cam-intro').innerHTML = opt([['none', 'No zoom'], ['world', 'The whole world'], ['wide', 'A wide view'], ['routeStart', 'Close to the route start'], ...feats], cam.intro || 'none');
-    $('#cam-outro').innerHTML = opt([['none', 'No zoom'], ['overview', 'Everything (route and layers)'], ['wide', 'A wide view'], ['world', 'The whole world'], ['routeEnd', 'Close to the route end'], ...feats], cam.outro || 'none');
+    $('#cam-intro').innerHTML = opt([['none', 'No zoom'], ['space', 'Earth zoom from space (globe)'], ['world', 'The whole world'], ['wide', 'A wide view'], ['routeStart', 'Close to the route start'], ...feats], cam.intro || 'none');
+    $('#cam-outro').innerHTML = opt([['none', 'No zoom'], ['overview', 'Everything (route and layers)'], ['space', 'Out to space (globe)'], ['wide', 'A wide view'], ['world', 'The whole world'], ['routeEnd', 'Close to the route end'], ...feats], cam.outro || 'none');
     $('#cam-intro-secs').innerHTML = SECS.map((v) => `<option value="${v}" ${v === +cam.introSeconds ? 'selected' : ''}>${v} s</option>`).join('');
     $('#cam-outro-secs').innerHTML = SECS.map((v) => `<option value="${v}" ${v === +cam.outroSeconds ? 'selected' : ''}>${v} s</option>`).join('');
     $('#intro-secs-row').hidden = !cam.intro || cam.intro === 'none';
@@ -1378,8 +1455,15 @@ export function createEditor() {
     if (preview === 'end') { setViewMode('play'); setPlaying(false); time = model.total; applyCamera(time); updatePlayhead(); }
     repaint();
   };
-  $('#cam-intro').addEventListener('change', (e) => { scene().camera.intro = e.target.value; camChanged('start'); });
-  $('#cam-outro').addEventListener('change', (e) => { scene().camera.outro = e.target.value; camChanged('end'); });
+  const ensureGlobe = (v) => {
+    if (v !== 'space' || scene().look.globe) return;
+    scene().look.globe = true;
+    if (!scene().look.clouds) { scene().look.clouds = true; scene().look.cloudMode = 'zoom'; }
+    applyLook(scene());
+    toast('Turned on the globe and clouds for the Earth zoom');
+  };
+  $('#cam-intro').addEventListener('change', (e) => { ensureGlobe(e.target.value); scene().camera.intro = e.target.value; if (e.target.value === 'space' && (+scene().camera.introSeconds || 0) < 4) scene().camera.introSeconds = 5; camChanged('start'); });
+  $('#cam-outro').addEventListener('change', (e) => { ensureGlobe(e.target.value); scene().camera.outro = e.target.value; if (e.target.value === 'space' && (+scene().camera.outroSeconds || 0) < 4) scene().camera.outroSeconds = 5; camChanged('end'); });
   $('#cam-intro-secs').addEventListener('change', (e) => { scene().camera.introSeconds = +e.target.value; camChanged(); });
   $('#cam-outro-secs').addEventListener('change', (e) => { scene().camera.outroSeconds = +e.target.value; camChanged(); });
   const lensField = (id, key, num = true) => $(id).addEventListener('input', (e) => {
@@ -1433,6 +1517,7 @@ export function createEditor() {
       if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
     });
     $('#terrain-row').hidden = !look.terrain;
+    $('#cloud-opts').hidden = !look.clouds;
     $('#bld-row').hidden = !look.buildings3d;
     const opt = (o, v) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${t}</option>`).join('');
     const n = look.north;
@@ -1529,6 +1614,8 @@ export function createEditor() {
     let v = el.type === 'checkbox' ? el.checked : el.value;
     if (el.type === 'range') v = +v;
     scene().look[key] = v;
+    if (key === 'clouds') $('#cloud-opts').hidden = !v;
+    if (key === 'globe' && v && map.getZoom() > 6) toast('Zoom out to see the globe — use “Earth zoom from space” in the Camera step for a fly-in', 4200);
     if (key === 'terrain') {
       $('#terrain-row').hidden = !v;
       if (v && !(+scene().camera.tilt)) { scene().camera.tilt = 45; renderCamera(); if (viewMode === 'edit') map.easeTo({ pitch: 45 }); toast('Tilted the camera so the mountains show'); }
@@ -1540,7 +1627,7 @@ export function createEditor() {
         if (map.getZoom() < 13.5) toast('3D buildings show when you zoom in to street level (zoom 14+)', 3600);
       }
     }
-    if (['placeNames', 'lang', 'states', 'terrain', 'terrainExaggeration', 'buildings3d', 'rasterLabels', 'rasterRoads'].includes(key)) applyLook(scene());
+    if (['placeNames', 'lang', 'states', 'terrain', 'terrainExaggeration', 'buildings3d', 'rasterLabels', 'rasterRoads', 'globe', 'atmosphere'].includes(key)) applyLook(scene());
     rebuild();
     renderLegs();
     save();
@@ -1689,6 +1776,9 @@ export function createEditor() {
   function renderCamera() {
     renderCamSelects();
     const cam = scene().camera;
+    $('#globe-zoom').value = +cam.globeZoom || 0;
+    $('#globe-out').textContent = (+cam.globeZoom || 0).toFixed(1);
+    $('#globe-rotate').checked = !!cam.followRotate;
     $$('#cam-cards [data-cam]').forEach((b) => b.classList.toggle('active', b.dataset.cam === cam.mode));
     $$('.cam-opts').forEach((d) => d.classList.toggle('active', d.dataset.camOpts === cam.mode));
     $('#cam-sub').textContent = CAM_SUB[cam.mode] || '';
@@ -1748,6 +1838,8 @@ export function createEditor() {
     scene().camera.keys[+li.dataset.i].ease = e.target.value;
     rebuild(); save();
   });
+  $('#globe-zoom').addEventListener('input', (e) => { scene().camera.globeZoom = +e.target.value; $('#globe-out').textContent = (+e.target.value).toFixed(1); rebuild(); previewCamera(); save(); });
+  $('#globe-rotate').addEventListener('change', (e) => { scene().camera.followRotate = e.target.checked; rebuild(); previewCamera(); save(); });
   $('#orbit-set').onclick = () => { const cam = scene().camera; pushUndo(); cam.orbitView = currentView(); if (!(+cam.tilt)) cam.tilt = 55; commitAll(); previewCamera(); toast('The camera will orbit around this view'); };
   $('#orbit-speed').addEventListener('input', (e) => { scene().camera.orbitSpeed = +e.target.value; $('#orbit-out').textContent = `${e.target.value}°/s`; rebuild(); previewCamera(); save(); });
   $('#cam-cards').addEventListener('click', (e) => {
@@ -1759,6 +1851,7 @@ export function createEditor() {
     if (cam.mode === 'follow' && cam.followZoomRef == null && model.fit) cam.followZoomRef = model.fit.zoomRef + 2;
     if (cam.mode === 'keyframes' && !(cam.keys || []).length) { cam.keys = [{ t: 0, view: currentView(), ease: 'ease' }]; toast('First keyframe set from the current view. Move the playhead, frame a new view and add another.', 4200); }
     if (cam.mode === 'orbit' && !cam.orbitView) { cam.orbitView = currentView(); if (!(+cam.tilt)) cam.tilt = 55; }
+    if (cam.mode === 'globe' && !scene().look.globe) { scene().look.globe = true; applyLook(scene()); }
     rebuild();
     renderCamera();
     if (cam.mode === 'fixed' || cam.mode === 'keyframes') { setViewMode('edit'); showEditView(); }
@@ -2246,6 +2339,7 @@ export function createEditor() {
         prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 }); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2) => gradeFilter(s2.look.grade),
+        background: spaceBg,
         drawFrame: (ctx, s2, m, tt) => {
           const full = { x: 0, y: 0, w: width, h: height };
           const mc = map.getCanvas();
@@ -2314,6 +2408,7 @@ export function createEditor() {
         signal: exportAbort.signal,
         durationOf: (sc) => buildScene(sc, frame.w, frame.h).duration,
         mapFilter: (sc) => gradeFilter(sc.look.grade),
+        background: spaceBg,
         mixAudio: (project.audio || []).some((t) => !t.muted) ? (d) => mixProject(project, d) : null,
         prepareScene: async (sc) => {
           await applyLook(sc);

@@ -178,6 +178,28 @@
           <button data-add="freehand"><i>✎</i>Freehand</button>
           <button data-add="freearea"><i>✐</i>Freehand area</button>
         </div>
+        <span class="label-caps">Space &amp; defence</span>
+        <div class="add-grid fx" id="add-fx">
+          <button data-add="satellite"><i>🛰️</i>Satellite pass</button>
+          <button data-add="iss"><i>🛰</i>ISS orbit</button>
+          <button data-add="launch"><i>🚀</i>Launch site</button>
+          <button data-add="vehicle"><i>⛴</i>3D vehicle</button>
+          <button data-add="trajectory"><i>➶</i>Missile / drone</button>
+          <button data-add="strike"><i>💥</i>Blast</button>
+          <button data-add="bombing"><i>✈</i>Bombing run</button>
+          <button data-add="capture"><i>⚑</i>Capture area</button>
+        </div>
+        <span class="label-caps">Infographics &amp; HUD</span>
+        <div class="add-grid fx" id="add-info">
+          <button data-add="chart" data-type="bar"><i>📊</i>Bar chart</button>
+          <button data-add="chart" data-type="line"><i>📈</i>Line chart</button>
+          <button data-add="chart" data-type="donut"><i>◔</i>Donut</button>
+          <button data-add="chart" data-type="counter"><i>#</i>Counter</button>
+          <button data-add="chart" data-type="progress"><i>▭</i>Progress</button>
+          <button data-add="hud" data-variant="drone"><i>⌖</i>Drone HUD</button>
+          <button data-add="hud" data-variant="satellite"><i>▦</i>Satellite HUD</button>
+          <button data-add="hud" data-variant="target"><i>◎</i>Target lock</button>
+        </div>
         <span class="label-caps">Bring in</span>
         <div class="btn-row bring">
           <button class="btn sm" id="find-boundary">Find a boundary…</button>
@@ -207,6 +229,13 @@
           <label class="row"><span>States and regions</span><input type="checkbox" class="switch" data-look="states" /></label>
           <label class="row"><span>3D mountains</span><input type="checkbox" class="switch" data-look="terrain" /></label>
           <label class="row sub-row" id="terrain-row"><span>Height</span><input type="range" min="1" max="3" step="0.1" data-look="terrainExaggeration" /></label>
+          <label class="row"><span>Globe (3D Earth)</span><input type="checkbox" class="switch" data-look="globe" /></label>
+          <label class="row"><span>Sky &amp; fog</span><input type="checkbox" class="switch" data-look="atmosphere" /></label>
+          <label class="row"><span>Clouds</span><input type="checkbox" class="switch" data-look="clouds" /></label>
+          <div id="cloud-opts">
+            <label class="row sub-row"><span>Show</span><select data-look="cloudMode"><option value="zoom">Only while zooming</option><option value="always">Always (fog)</option></select></label>
+            <label class="row sub-row"><span>Amount</span><input type="range" min="0.1" max="1.5" step="0.05" data-look="cloudAmount" /></label>
+          </div>
           <label class="row"><span>3D buildings</span><input type="checkbox" class="switch" data-look="buildings3d" /></label>
           <label class="row" id="rlabels-row"><span>Place names on top</span><input type="checkbox" class="switch" data-look="rasterLabels" /></label>
           <label class="row" id="rroads-row"><span>Main roads on top</span><input type="checkbox" class="switch" data-look="rasterRoads" /></label>
@@ -297,6 +326,7 @@
           <button data-cam="fixed"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg><b>Fixed view</b><small>Films exactly what you see</small></button>
           <button data-cam="startEnd"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="9" height="7" rx="1"/><rect x="12" y="13" width="9" height="7" rx="1"/><path d="M8 11v4h4"/></svg><b>Start to end</b><small>Glide from one view to another</small></button>
           <button data-cam="keyframes"><svg viewBox="0 0 24 24"><path d="M12 3l4 4-4 4-4-4z"/><path d="M5 14l3 3-3 3-3-3zM19 14l3 3-3 3-3-3z"/></svg><b>Keyframes</b><small>Set views at points in time</small></button>
+          <button data-cam="globe"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><b>Rotate globe</b><small>The Earth turns under the route</small></button>
           <button data-cam="orbit"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="4"/><circle cx="12" cy="12" r="2"/><path d="M19 9l2 1-1 2"/></svg><b>Orbit</b><small>Circle around the scene in 3D</small></button>
           <button data-cam="follow"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M8 15l3-3 2 2 3-4"/></svg><b>Follow the line</b><small>Stay with the arrow as it travels</small></button>
         </div>
@@ -315,6 +345,15 @@
           <p class="note">Move the playhead, frame the view (pan, zoom, rotate with right-drag, tilt), then add a keyframe. The camera moves between keyframes with the easing you choose. Drag the diamonds on the timeline to retime them.</p>
           <button class="btn sm primary" id="kf-add">◆ Add keyframe at the playhead</button>
           <ul class="kf-list" id="kf-list"></ul>
+        </div>
+        <div class="cam-opts" data-cam-opts="globe">
+          <p class="note">The traveller stays in the middle and the Earth turns beneath it — ideal for flights. Turns on the globe view.</p>
+          <div class="slider-row">
+            <div class="slider-head"><span class="label-caps">Zoom</span><b id="globe-out"></b></div>
+            <input type="range" min="-4" max="4" step="0.1" id="globe-zoom" />
+            <div class="slider-foot"><span>Further</span><span>Closer</span></div>
+          </div>
+          <label class="row"><span>Point the route up the screen</span><input type="checkbox" class="switch" id="globe-rotate" /></label>
         </div>
         <div class="cam-opts" data-cam-opts="orbit">
           <p class="note">The camera circles around the centre of the view. Frame it, then press the button. Turn on 3D buildings or 3D mountains for depth.</p>
@@ -587,6 +626,8 @@
       <li><b>Route.</b> Click on the map to place points, or load a GPX / KML / KMZ / IGC file. The line curves smoothly through your points. Click the line to add a point, double-click a point for a sharp corner, drag points to move them, and click a point to pause there or split the leg.</li>
       <li><b>Legs.</b> Each leg has a way of travelling — walk, car, train, ferry, plane and more — with its own symbol and line style. Use <i>+ New leg</i> to switch.</li>
       <li><b>Layers.</b> Draw or import boundaries, areas, floods, lines, points, animated symbols, text and captions. Each has its own animation and timing — trace a boundary, spread a flood from a point, raise water over real terrain, pulse a symbol, type out a caption.</li>
+      <li><b>Space &amp; defence.</b> In the Layers step add satellite passes, the ISS orbit, launch sites, 3D ships/jets/drones, missile and drone paths, blasts, bombing runs and capture areas — plus charts, counters and HUD overlays.</li>
+      <li><b>Globe.</b> Turn on the globe in Look, then pick “Earth zoom from space” in Camera. Search a place or type coordinates like <kbd>25.2, 55.27</kbd> to fly there.</li>
       <li><b>Look.</b> Pick a map theme, place names, 3D mountains, line colour and symbol.</li>
       <li><b>Signs.</b> Add boards, flags, photos and more. They pop up when the line reaches them.</li>
       <li><b>Camera.</b> Film a fixed view, glide from a start view to an end view, or follow the line.</li>

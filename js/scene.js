@@ -269,6 +269,21 @@ export function buildScene(scene, fw, fh) {
       return { center: st.point, zoom: followZoom, bearing, pitch: tilt };
     }
     if (cam.mode === 'keyframes' && keys.length) return keyCam(time);
+    if (cam.mode === 'globe' && drawable.length) {
+      // keep the traveller in the middle: the globe turns beneath it
+      const st = stateAt(time);
+      let bearing = 0;
+      if (cam.followRotate) {
+        const L = st.L;
+        const span = Math.max(L.m.length * 0.05, 1);
+        const a = sampleAt(L.m, clamp((st.dist - span) / L.m.length, 0, 1)).point;
+        const b = sampleAt(L.m, clamp((st.dist + span) / L.m.length, 0, 1)).point;
+        bearing = (a[0] === b[0] && a[1] === b[1]) ? (smoothBearing ?? 0) : screenHeading(a, b) + 90;
+        smoothBearing = bearing;
+      }
+      const z = zoomFor(fit.zoomRef, fw) - 0.35 + (+cam.globeZoom || 0);
+      return { center: st.point, zoom: z, bearing, pitch: tilt };
+    }
     if (cam.mode === 'orbit') {
       const v = toCam(cam.orbitView || cam.fixed || fit) || fixedV;
       return { center: v.center, zoom: v.zoom, bearing: (v.bearing || 0) + (+cam.orbitSpeed || 12) * (time - I), pitch: tilt || 55 };
@@ -280,6 +295,7 @@ export function buildScene(scene, fw, fh) {
   const worldZoom = Math.log2(fw / 512) + 0.15;
   const viewOf = (spec, ref, isEnd) => {
     if (!spec || spec === 'none') return null;
+    if (spec === 'space') return { center: [ref.center[0] - (isEnd ? -70 : 70), clamp(ref.center[1] * 0.35, -35, 35)], zoom: worldZoom - 0.9, bearing: 0, pitch: 0 };
     if (spec === 'world') return { center: [ref.center[0], clamp(ref.center[1], -45, 55)], zoom: worldZoom, bearing: 0, pitch: 0 };
     if (spec === 'wide') return { center: ref.center, zoom: Math.max(worldZoom, ref.zoom - 5), bearing: 0, pitch: 0 };
     if (spec === 'overview' && overview) return { center: overview.center, zoom: zoomFor(overview.zoomRef, fw), bearing: 0, pitch: tilt };

@@ -292,6 +292,19 @@ export async function buildStyle(look) {
     });
   }
   st.layers = layers;
+  // globe (3D Earth) and atmosphere / fog
+  if (look.globe) {
+    st.projection = { type: 'globe' };
+    st.sky = {
+      'sky-color': '#0b2a5a', 'horizon-color': '#9fc8ff', 'fog-color': '#cfe3ff',
+      'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.6,
+      'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0],
+    };
+  } else {
+    delete st.projection;
+    if (look.atmosphere) st.sky = { 'sky-color': '#7fb5ea', 'horizon-color': '#e8f1fb', 'fog-color': '#e8f1fb', 'sky-horizon-blend': 0.5, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.25 };
+    else delete st.sky;
+  }
   if (look.terrain) {
     st.sources.terrain = { type: 'raster-dem', tiles: DEM_TILES, tileSize: 256, maxzoom: 14, encoding: 'terrarium' };
     st.terrain = { source: 'terrain', exaggeration: +look.terrainExaggeration || 1.4 };

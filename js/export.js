@@ -119,6 +119,8 @@ async function drawOne(o, ctx, scene, model, t) {
   await settle(map);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, width, height);
+  const bg = o.background?.(scene);
+  if (bg) ctx.drawImage(bg, 0, 0, width, height);
   const f = o.mapFilter?.(scene) || 'none';
   ctx.filter = f;
   ctx.drawImage(map.getCanvas(), 0, 0, width, height);

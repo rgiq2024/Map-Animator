@@ -88,3 +88,88 @@ export function drawGradeWash(ctx, fr, g) {
   if (+g.fade > 0) { ctx.fillStyle = `rgba(235,232,225,${Math.min(0.4, +g.fade)})`; ctx.fillRect(fr.x, fr.y, fr.w, fr.h); }
   ctx.restore();
 }
+
+// ---------------------------------------------------------------- clouds you fly through while zooming
+let cloudSprites = null;
+function makeCloudSprites() {
+  const out = [];
+  for (let v = 0; v < 5; v++) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const x = c.getContext('2d');
+    let s = v * 9301 + 49297;
+    const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+    for (let k = 0; k < 16; k++) {
+      const cx = 128 + (r() - 0.5) * 130, cy = 128 + (r() - 0.5) * 70, rr = 30 + r() * 52;
+      const g = x.createRadialGradient(cx, cy, 0, cx, cy, rr);
+      g.addColorStop(0, 'rgba(255,255,255,0.55)');
+      g.addColorStop(0.5, 'rgba(250,251,255,0.32)');
+      g.addColorStop(1, 'rgba(240,244,250,0)');
+      x.fillStyle = g;
+      x.beginPath(); x.arc(cx, cy, rr, 0, Math.PI * 2); x.fill();
+    }
+    out.push(c);
+  }
+  return out;
+}
+const CLOUDS = (() => {
+  let s = 12345;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  return Array.from({ length: 46 }, () => ({ x: (r() - 0.5) * 2.6, y: (r() - 0.5) * 2.2, d: 0.45 + r() * 0.9, s: 0.18 + r() * 0.3, v: Math.floor(r() * 5), z: (r() - 0.5) * 2.5 }));
+})();
+
+/**
+ * Clouds that rush past the camera while zooming (Google-Earth style).
+ * zoomRef = zoom normalised to a 1000-px-wide frame; amount 0..1.
+ */
+export function drawClouds(ctx, fr, zoomRef, bearing, amount, unit) {
+  if (!(amount > 0)) return;
+  cloudSprites ||= makeCloudSprites();
+  const cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2;
+  const rot = (-bearing * Math.PI) / 180;
+  const z0 = 6.2;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.clip();
+  const band = Math.exp(-(((zoomRef - z0) / 2.2) ** 2));
+  if (band * amount > 0.02) {
+    ctx.fillStyle = `rgba(236,241,248,${0.28 * band * amount})`;
+    ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+  }
+  for (const c of CLOUDS) {
+    const zc = z0 + c.z;
+    const k = 2 ** ((zoomRef - zc) * c.d);
+    const local = Math.exp(-(((zoomRef - zc) / 1.6) ** 2));
+    let a = amount * local;
+    const R = c.s * fr.w * k;
+    if (R > fr.w * 1.1) a *= Math.max(0, 1.6 - R / fr.w);
+    if (a < 0.02 || R < 4) continue;
+    const px = c.x * fr.w * 0.5 * k, py = c.y * fr.h * 0.5 * k;
+    const x = cx + px * Math.cos(rot) - py * Math.sin(rot), y = cy + px * Math.sin(rot) + py * Math.cos(rot);
+    if (x < fr.x - R * 2 || x > fr.x + fr.w + R * 2 || y < fr.y - R || y > fr.y + fr.h + R) continue;
+    ctx.globalAlpha = Math.min(1, a * 1.25);
+    ctx.drawImage(cloudSprites[c.v], x - R * 1.4, y - R * 0.8, R * 2.8, R * 1.6);
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- stars behind the globe
+let starCanvas = null;
+export function starfield(w = 1600, h = 1000) {
+  if (starCanvas && starCanvas.width === w && starCanvas.height === h) return starCanvas;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.hypot(w, h) / 2);
+  g.addColorStop(0, '#0a1430'); g.addColorStop(1, '#010208');
+  x.fillStyle = g; x.fillRect(0, 0, w, h);
+  let s = 777;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < (w * h) / 900; i++) {
+    const b = r();
+    x.fillStyle = `rgba(255,255,255,${0.25 + b * 0.75})`;
+    const sz = b > 0.97 ? 1.8 : b > 0.85 ? 1.2 : 0.7;
+    x.beginPath(); x.arc(r() * w, r() * h, sz, 0, Math.PI * 2); x.fill();
+  }
+  starCanvas = c;
+  return c;
+}
