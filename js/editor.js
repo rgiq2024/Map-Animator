@@ -899,7 +899,7 @@ export function createEditor() {
   $$('#toolbar [data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
   $('#tb-fit').onclick = () => fitRoute();
   function fitRoute() {
-    if (!model.fit) { toast('Draw a route first'); return; }
+    if (!model.fit) { toast('Nothing on the map yet — draw a route or add a layer'); return; }
     setViewMode('edit');
     userIntent = true;
     map.easeTo({ ...camOf(model.fit), duration: 700 });
@@ -1986,7 +1986,7 @@ export function createEditor() {
     save();
   });
   function previewCamera() {
-    if (!model.drawable.length && scene().camera.mode !== 'orbit') return;
+    if (!hasContent(scene(), model) && scene().camera.mode !== 'orbit') return;
     setViewMode('play');
     if (time <= model.drawStart + 0.01 || time >= model.total - 0.01) time = model.drawStart + (model.drawEnd - model.drawStart) * 0.35;
     applyCamera(time);
@@ -2172,13 +2172,15 @@ export function createEditor() {
   }
 
   // ---------------------------------------------------------------- steps
+  /** A scene can be played/exported with a route, signs or just layers (points, symbols, 3D models…). */
+  const hasContent = (sc, m) => !!(m?.drawable.length || sc.signs?.length || (sc.layers || []).some((L) => !L.hidden));
   function setStep(s) {
     step = s;
     visited.add(s);
     $$('#stepper [data-step]').forEach((b) => {
       const k = b.dataset.step;
       b.classList.toggle('active', k === s);
-      const done = k !== s && visited.has(k) && (k !== 'route' || model?.drawable.length);
+      const done = k !== s && visited.has(k) && (k !== 'route' || model?.drawable.length || (scene().layers || []).length);
       b.classList.toggle('done', !!done);
     });
     $$('.step-page').forEach((p) => p.classList.toggle('active', p.dataset.page === s));
@@ -2204,6 +2206,7 @@ export function createEditor() {
     const b = e.target.closest('[data-step]');
     if (b) setStep(b.dataset.step);
   });
+  $('#skip-route').onclick = () => setStep('layers');
   $('#next-step').onclick = () => {
     if (step === 'export') { startExport(); return; }
     setStep(STEPS[STEPS.indexOf(step) + 1]);
@@ -2262,7 +2265,7 @@ export function createEditor() {
   }
   const projTime = (t) => sceneOffset() + (t - (model?.trimIn || 0));
   function togglePlay() {
-    if (!model.drawable.length && !scene().signs.length) { toast('Draw a route first'); return; }
+    if (!hasContent(scene(), model)) { toast('Add a route or a layer first'); return; }
     if (viewMode !== 'play') setViewMode('play');
     if (!playing && (time < model.trimIn || time >= model.trimOut - 0.02)) time = model.trimIn;
     setPlaying(!playing);
@@ -2538,7 +2541,7 @@ export function createEditor() {
 
   async function startExport() {
     if (exporting) return;
-    if (!project.scenes.some((sc) => buildScene(sc, frame.w, frame.h).drawable.length || sc.signs.length)) { toast('Draw a route first'); return; }
+    if (!project.scenes.some((sc) => hasContent(sc, buildScene(sc, frame.w, frame.h)))) { toast('Add a route or a layer first'); return; }
     if (project.scenes.some((sc) => sc.legs.some((l) => l._pending))) { toast('Still finding roads — try again in a moment'); return; }
     const { width, height } = videoSize(project.aspect, project.resolution);
     const fps = project.fps;
