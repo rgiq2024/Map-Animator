@@ -245,6 +245,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .ed-stage.tool-area .maplibregl-canvas-container.maplibregl-interactive { cursor: cell; }
 .ed-stage.placing .maplibregl-canvas-container.maplibregl-interactive { cursor: copy; }
 .ed-stage.on-handle .maplibregl-canvas-container.maplibregl-interactive { cursor: grab !important; }
+.ed-stage.on-scale .maplibregl-canvas-container.maplibregl-interactive { cursor: nwse-resize !important; }
+.ed-stage.on-rotate .maplibregl-canvas-container.maplibregl-interactive { cursor: alias !important; }
+.snd-box .row input[type=range] { max-width: 150px; }
 .ed-stage.on-line .maplibregl-canvas-container.maplibregl-interactive { cursor: copy !important; }
 .ed-stage.dragging .maplibregl-canvas-container.maplibregl-interactive { cursor: grabbing !important; }
 .frame-label { position: absolute; z-index: 2; font-family: var(--mono); font-size: 10.5px; color: rgba(255,255,255,.85); pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.6); }

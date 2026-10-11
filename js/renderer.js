@@ -2,6 +2,7 @@
 import { sampleAt } from './geo.js';
 import { drawSign } from './signs.js';
 import { drawLayers, layerHandles } from './layers.js';
+import { gizmoFor, drawGizmo } from './gizmo.js';
 import { drawSprite } from './sprites.js';
 import { drawClouds } from './effects.js';
 import { zoomRefFor } from './scene.js';
@@ -161,13 +162,20 @@ export function tokensAt(model, time) {
   return { km: (m / 1000).toFixed(m < 100000 ? 1 : 0), mi: (m / 1609.344).toFixed(m < 160934 ? 1 : 0) };
 }
 
+/** How fast the camera zooms at time t (zoom levels per second, signed). */
+export function zoomSpeedAt(model, t) {
+  if (t == null || !model?.cameraAt) return 0;
+  const h = 0.06;
+  try { return (model.cameraAt(t + h).zoom - model.cameraAt(Math.max(0, t - h)).zoom) / (2 * h); } catch { return 0; }
+}
+
 /** On-screen captions (drawn last, above lens effects). */
 export function renderCaptions(ctx, o) {
   const proj = projector(o.map, o.px, o.ox || 0, o.oy || 0);
   const c = o.map.getCenter();
   const fhCss = o.frame ? o.frame.h / o.px : 600;
   const altM = metresPerPixel(c.lat, o.map.getZoom()) * fhCss * 1.4;
-  const view = { center: [c.lng, c.lat], zoom: o.map.getZoom(), bearing: o.map.getBearing(), pitch: o.map.getPitch(), altM };
+  const view = { center: [c.lng, c.lat], zoom: o.map.getZoom(), bearing: o.map.getBearing(), pitch: o.map.getPitch(), altM, zoomSpeed: zoomSpeedAt(o.model, o.time) };
   drawLayers(ctx, { scene: o.scene, proj, unit: o.unit, time: o.time, frame: o.frame, view, tokens: tokensAt(o.model, o.time) }, 'captions');
 }
 
@@ -191,7 +199,7 @@ export function renderScene(ctx, o) {
   const out = { signBoxes: [], legBadges: [], handles: [], layerHandles: [], proj };
   const edit = o.edit;
   const tokens = o.tokens || tokensAt(model, time);
-  const lo = { scene, proj, unit, time, frame: o.frame, tokens };
+  const lo = { scene, proj, unit, time, frame: o.frame, tokens, exact: o.exact };
   drawLayers(ctx, lo, 'below');
 
   // ---- route lines ----
@@ -282,6 +290,8 @@ export function renderScene(ctx, o) {
       ctx.restore();
       out.layerHandles.push({ id: L.id, ring: h.ring, i: h.i, x: h.p[0], y: h.p[1] });
     }
+    out.gizmo = gizmoFor(L, proj, unit);
+    if (out.gizmo) drawGizmo(ctx, out.gizmo, dpr);
   }
   // drawing in progress
   if (edit && edit.drawing && edit.drawing.coords.length) {

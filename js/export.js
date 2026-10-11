@@ -116,6 +116,7 @@ export async function exportVideo(o) {
 async function drawOne(o, ctx, scene, model, t) {
   const { map, width, height } = o;
   o.applyCamera(model, t);
+  await o.beforeFrame?.(scene, model, t);
   await settle(map);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, width, height);

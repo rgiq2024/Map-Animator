@@ -1,6 +1,8 @@
 // Special layers: satellites & ISS, launch sites, missile/drone trajectories, strikes and bombing runs,
 // captured areas, infographic charts/counters and HUD overlays. Pure canvas drawing; deterministic in time.
 import { drawSprite, drawRocketSide, SPRITES } from './sprites.js';
+import { drawExplosion, drawPuff } from './explosion.js';
+import { drawVideoFx } from './videofx.js';
 
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
 const MONO = '"JetBrains Mono",ui-monospace,Menlo,monospace';
@@ -31,6 +33,9 @@ export const FX_KINDS = {
   bombing:   { name: 'Bombing run', icon: '✈', geom: 'line', desc: 'An aircraft drops a series of strikes along a line' },
   capture:   { name: 'Capture area', icon: '⚑', geom: 'polygon', desc: 'An area being taken, with an advancing front and flag' },
   vehicle:   { name: '3D vehicle', icon: '⛴', geom: 'line', desc: 'A ship, jet, tank or drone moving along a path' },
+  model3d:   { name: '3D model', icon: '🧊', geom: 'point', desc: 'A real 3D model (built-in or your own GLB/glTF)' },
+  videofx:   { name: 'Effect clip', icon: '🎞', geom: 'point', desc: 'Your own explosion, fire or smoke video clip' },
+  flicker:   { name: 'Flicker text', icon: '▌', geom: null, desc: 'Glitchy, decoding, flickering text with sound' },
   chart:     { name: 'Chart', icon: '📊', geom: null, desc: 'Animated bar, line or donut chart, counter or progress bar' },
   hud:       { name: 'HUD', icon: '⌖', geom: null, desc: 'Drone, satellite or targeting head-up display' },
 };
@@ -39,6 +44,9 @@ export const FX_ANIMS = {
   trajectory: { fly: 'Fly to the target' }, strike: { blast: 'Explode' }, bombing: { run: 'Bombing run' },
   capture: { advance: 'Advancing front', fade: 'Fade in', none: 'Already captured' },
   vehicle: { move: 'Move along the path' },
+  model3d: { pop: 'Pop in', fade: 'Fade in', none: 'No animation' },
+  videofx: { play: 'Play the clip' },
+  flicker: { decode: 'Decode (scrambled letters)', flicker: 'Flicker on', glitch: 'Glitch (RGB split)', type: 'Typewriter' },
   chart: { grow: 'Grow', fade: 'Fade in', none: 'No animation' },
   hud: { boot: 'Boot up', fade: 'Fade in', none: 'No animation' },
 };
@@ -51,6 +59,9 @@ export const FX_DEFAULTS = {
   bombing: { anim: 'run', duration: 4, style: { sprite: 'jet', color: '#ff3b30', size: 1, count: 6, blast: 0.8, scorch: true } },
   capture: { anim: 'advance', duration: 3, style: { color: '#e53935', dir: 'W', opacity: 0.32, hatch: true, arrows: true, flag: true, label: 'CAPTURED', font: '' } },
   vehicle: { anim: 'move', duration: 5, style: { sprite: 'warship', color: '#ffd23f', size: 1, wake: true, path: false, label: '' } },
+  model3d: { anim: 'pop', duration: 4, style: { source: 'builtin:jet', color: '#ff3b30', size: 1, sizeMode: 'screen', altitude: 0, heading: 0, pitch: 0, roll: 0, motion: 'none', followPath: true, spinSpeed: 30, yawOffset: 0, playAnim: true } },
+  videofx: { anim: 'play', duration: 3, style: { media: '', name: '', size: 1, rotation: 0, blend: 'screen', opacity: 1, loop: false, speed: 1, anchor: 'ground', flip: false, boom: true } },
+  flicker: { anim: 'decode', duration: 1.6, style: { text: 'TARGET ACQUIRED', sub: 'GRID 25.20N 55.27E', position: 'center', color: '#7CFF7C', size: 1, box: true, cursor: true, font: '', keepFlicker: true } },
   chart: { anim: 'grow', duration: 1.6, style: { type: 'bar', title: 'Chart title', data: 'Dubai: 3.6\nAbu Dhabi: 1.5\nSharjah: 1.8\nAjman: 0.5', position: 'bottom-right', size: 1, accent: '#ff6b35', prefix: '', suffix: ' M', font: '' } },
   hud: { anim: 'boot', duration: 1.2, style: { variant: 'drone', color: '#7CFF7C', label: 'UAV-01', coords: true, rec: true, scan: true } },
 };
@@ -67,9 +78,12 @@ export const FX_FORMS = {
   capture: [['style.color', 'Colour', 'color'], ['style.opacity', 'Opacity', 'range', [0.05, 0.9, 0.01]], ['style.dir', 'Advances from', 'select', { W: 'The west', E: 'The east', N: 'The north', S: 'The south', C: 'The middle' }], ['style.hatch', 'Hatching', 'switch'], ['style.arrows', 'Arrows on the front', 'switch'], ['style.flag', 'Flag when captured', 'switch'], ['style.label', 'Flag text', 'text'], ['style.font', 'Font', 'font']],
   vehicle: [['style.sprite', 'Vehicle', 'select', SPRITES], ['style.color', 'Accent colour', 'color'], ['style.size', 'Size', 'range', [0.4, 4, 0.05]], ['style.wake', 'Wake / trail', 'switch'], ['style.path', 'Show the path', 'switch'], ['style.label', 'Label', 'text']],
   chart: [['style.type', 'Type', 'select', { bar: 'Bar chart', hbar: 'Horizontal bars', line: 'Line chart', donut: 'Donut chart', counter: 'Counter', progress: 'Progress bars' }], ['style.title', 'Title', 'text'], ['style.data', 'Data (one “Label: value” per line)', 'textarea'], ['style.prefix', 'Before numbers', 'text'], ['style.suffix', 'After numbers', 'text'], ['style.position', 'Position', 'select', POS], ['style.size', 'Size', 'range', [0.5, 2, 0.05]], ['style.accent', 'Colour', 'color'], ['style.font', 'Font', 'font']],
+  model3d: [['style.source', 'Model', 'model'], ['style.color', 'Accent colour (built-in models)', 'color'], ['style.size', 'Size', 'range', [0.1, 6, 0.05]], ['style.sizeMode', 'Size is', 'select', { screen: 'The same on screen at any zoom', real: 'Real-world metres (× size)' }], ['style.altitude', 'Height above ground', 'range', [0, 400, 1]], ['style.heading', 'Heading (°)', 'range', [-180, 180, 1]], ['style.pitch', 'Pitch (°)', 'range', [-90, 90, 1]], ['style.roll', 'Roll (°)', 'range', [-180, 180, 1]], ['style.motion', 'Motion', 'select', { none: 'None', move: 'Move along the path', spin: 'Spin', float: 'Float up and down' }], ['style.spinSpeed', 'Spin speed (°/s)', 'number', 1], ['style.yawOffset', 'Model faces (° offset)', 'number', 1], ['style.playAnim', 'Play the model’s own animation', 'switch']],
+  videofx: [['style.media', 'Clip', 'video'], ['style.size', 'Size', 'range', [0.1, 6, 0.05]], ['style.rotation', 'Rotation (°)', 'range', [-180, 180, 1]], ['style.blend', 'Background', 'select', { screen: 'Black background (screen blend)', lighter: 'Black background (add light)', normal: 'Transparent / normal' }], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.anchor', 'Anchor', 'select', { ground: 'Bottom on the point (explosions)', center: 'Centred on the point' }], ['style.speed', 'Playback speed', 'range', [0.25, 3, 0.05]], ['style.loop', 'Loop', 'switch'], ['style.flip', 'Mirror', 'switch'], ['style.boom', 'Add explosion sound', 'switch']],
+  flicker: [['style.text', 'Text', 'text'], ['style.sub', 'Second line', 'text'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.font', 'Font', 'font'], ['style.box', 'Dark box behind', 'switch'], ['style.cursor', 'Blinking cursor', 'switch'], ['style.keepFlicker', 'Keep flickering a little', 'switch']],
   hud: [['style.variant', 'Style', 'select', { drone: 'Drone camera', satellite: 'Satellite feed', target: 'Target lock', minimal: 'Minimal frame' }], ['style.color', 'Colour', 'color'], ['style.label', 'Label', 'text'], ['style.coords', 'Show coordinates', 'switch'], ['style.rec', 'REC and timecode', 'switch'], ['style.scan', 'Scan lines', 'switch']],
 };
-export const FX_SCREEN = new Set(['chart', 'hud']);
+export const FX_SCREEN = new Set(['chart', 'hud', 'flicker']);
 export const FX_BELOW = new Set(['capture']);
 
 // ---------------------------------------------------------------- geometry helpers
@@ -155,71 +169,7 @@ function cloudPuff(ctx, x, y, r, col, a) {
 }
 /** Explosion at (x,y). tau = seconds since detonation. R = base radius px. */
 export function drawBlast(ctx, x, y, R, tau, seed = 1, o = {}) {
-  if (tau < 0) return;
-  const rnd = rng(seed);
-  ctx.save();
-  if (o.scorch !== false && tau > 0.35) {
-    ctx.fillStyle = `rgba(20,14,10,${Math.min(0.5, (tau - 0.35) * 0.8)})`;
-    ctx.beginPath(); ctx.ellipse(x, y, R * 0.95, R * 0.7, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = `rgba(60,30,10,${Math.min(0.35, (tau - 0.35) * 0.6)})`;
-    ctx.beginPath(); ctx.ellipse(x, y, R * 0.55, R * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-  }
-  // shockwave
-  if (tau < 0.8) {
-    const r = R * 3.2 * easeOut(tau / 0.8);
-    ctx.strokeStyle = `rgba(255,240,220,${0.85 * (1 - tau / 0.8)})`;
-    ctx.lineWidth = Math.max(1, R * 0.12 * (1 - tau / 0.8));
-    ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.8, 0, 0, Math.PI * 2); ctx.stroke();
-  }
-  // smoke (rises, grows, fades)
-  const puffs = 10;
-  for (let k = 0; k < puffs; k++) {
-    const st = 0.25 + rnd() * 0.5, life = 4 + rnd() * 2.5;
-    const dx = (rnd() - 0.5) * R * 1.6, vy = R * (0.35 + rnd() * 0.5), r0 = R * (0.35 + rnd() * 0.3);
-    const tt = tau - st;
-    if (tt < 0 || tt > life) continue;
-    const q = tt / life;
-    const col = rnd() > 0.5 ? '#3d3b39' : '#5d5a57';
-    cloudPuff(ctx, x + dx * (0.4 + q), y - vy * tt * (1 - q * 0.4), r0 * (1 + q * 2.2), col, 0.62 * (1 - q) * Math.min(1, tt * 3));
-  }
-  // fireball
-  if (tau < 2) {
-    const grow = easeOut(tau / 0.35), fade = 1 - clamp((tau - 0.7) / 1.3, 0, 1);
-    for (let k = 0; k < 7; k++) {
-      const a = rnd() * Math.PI * 2, d = rnd() * R * 0.55 * grow;
-      const r = R * (0.45 + rnd() * 0.45) * grow * (1 + tau * 0.25);
-      const fx = x + Math.cos(a) * d, fy = y + Math.sin(a) * d * 0.7 - tau * R * 0.4;
-      const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, r);
-      g.addColorStop(0, `rgba(255,248,200,${fade})`);
-      g.addColorStop(0.3, `rgba(255,170,40,${0.95 * fade})`);
-      g.addColorStop(0.65, `rgba(220,60,20,${0.7 * fade})`);
-      g.addColorStop(1, 'rgba(60,20,10,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(fx, fy, r, 0, Math.PI * 2); ctx.fill();
-    }
-  }
-  // sparks / debris
-  if (tau < 1.3) {
-    ctx.lineCap = 'round';
-    for (let k = 0; k < 20; k++) {
-      const a = rnd() * Math.PI * 2, sp = R * (2.5 + rnd() * 3);
-      const px = x + Math.cos(a) * sp * tau, py = y + Math.sin(a) * sp * tau * 0.8 + R * 2.5 * tau * tau;
-      ctx.strokeStyle = `rgba(255,${180 + rnd() * 60 | 0},80,${1 - tau / 1.3})`;
-      ctx.lineWidth = Math.max(1, R * 0.06);
-      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - Math.cos(a) * R * 0.25, py - Math.sin(a) * R * 0.2); ctx.stroke();
-    }
-  }
-  // flash
-  if (o.flash !== false && tau < 0.22) {
-    const a = 1 - tau / 0.22;
-    const g = ctx.createRadialGradient(x, y, 0, x, y, R * 2.4);
-    g.addColorStop(0, `rgba(255,255,255,${a})`);
-    g.addColorStop(0.4, `rgba(255,240,180,${a * 0.7})`);
-    g.addColorStop(1, 'rgba(255,200,120,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, R * 2.4, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.restore();
+  drawExplosion(ctx, x, y, R * 1.15, tau, seed, o);
 }
 
 // ---------------------------------------------------------------- satellites
@@ -352,26 +302,30 @@ function drawLaunch(ctx, L, tm, proj, unit, frame) {
     rise = 0.5 * acc * tt * tt;
     ang = clamp(tt * 0.14, 0, 0.5) * (+s.tilt || 0);
   }
-  // smoke at the base
+  // billowing steam/smoke at the pad
   if (s.smoke !== false && tau > 0.2) {
     const rnd = rng(hashStr(L.id));
-    for (let i = 0; i < 12; i++) {
-      const dir = rnd() > 0.5 ? 1 : -1, sp = h * (0.4 + rnd() * 0.9), st = 0.2 + rnd() * 1.2;
+    for (let i = 0; i < 16; i++) {
+      const dir = rnd() > 0.5 ? 1 : -1, sp = h * (0.5 + rnd() * 1.1), st = 0.2 + rnd() * 1.4, rot = rnd() * 6;
       const tt = tau - st;
       if (tt < 0) continue;
-      const q = Math.min(1, tt / 5);
-      cloudPuff(ctx, x + dir * sp * easeOut(tt / 2.5), y - h * 0.05 - rnd() * h * 0.2 * q, h * (0.18 + 0.5 * q), rnd() > 0.5 ? '#f2f0ec' : '#d9d6d0', 0.8 * (1 - q * 0.8));
+      const q = Math.min(1, tt / 7);
+      drawPuff(ctx, x + dir * sp * easeOut(tt / 2.5), y - h * 0.08 - h * 0.25 * q, h * (0.22 + 0.6 * q), rot + tt * 0.1, 0.9 * (1 - q * 0.85), 'dust');
     }
   }
-  // exhaust column
-  if (rise > 0) {
-    const gr = ctx.createLinearGradient(x, y, x, y - rise);
-    gr.addColorStop(0, 'rgba(240,238,232,0.85)');
-    gr.addColorStop(1, 'rgba(255,220,160,0.5)');
-    ctx.strokeStyle = gr;
-    ctx.lineWidth = h * 0.12;
-    ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x, y - h * 0.05); ctx.lineTo(x + Math.sin(ang) * rise * 0.5, y - rise); ctx.stroke();
+  // short exhaust plume behind the climbing rocket: puffs that expand and fade (no long line)
+  if (tau > lift) {
+    const acc = (2 * (frame ? frame.h : 600) * 1.2) / Math.max(0.5, (D - lift) ** 2);
+    const posAt = (tt) => { const r2 = 0.5 * acc * tt * tt, a2 = clamp(tt * 0.14, 0, 0.5) * (+s.tilt || 0); return [x + Math.sin(a2) * r2 * 0.5, y - r2]; };
+    const now = tau - lift;
+    for (let k = 0; k < 22; k++) {
+      const age = k * 0.09;
+      const tt = now - age;
+      if (tt < 0) break;
+      const [px, py] = posAt(tt);
+      const q = age / 2;
+      drawPuff(ctx, px + Math.sin(k * 1.7) * h * 0.04 * k * 0.3, py + h * 0.05, h * (0.08 + q * 0.45), k * 0.9, 0.7 * (1 - q) * (1 - q), 'smoke');
+    }
   }
   ctx.save();
   const rx = x + Math.sin(ang) * rise * 0.5, ry = y - rise;
@@ -953,6 +907,102 @@ export function issTrack(L) {
   return track;
 }
 
+// ---------------------------------------------------------------- flicker / decode / glitch text
+const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&@*+=<>/\\|';
+function scramble(text, u, seed, tau) {
+  const r = rng(seed + Math.floor(tau * 24));
+  return [...text].map((ch, i) => {
+    if (ch === ' ') return ' ';
+    const done = u * 1.25 - (i / Math.max(1, text.length)) * 0.6 > 0.35;
+    return done ? ch : GLYPHS[Math.floor(r() * GLYPHS.length)];
+  }).join('');
+}
+function drawFlicker(ctx, L, tm, frame, unit) {
+  const s = L.style;
+  const tau = tm.edit ? 99 : tm.tau;
+  const u = tm.edit ? 1 : clamp(tau / Math.max(0.1, L.duration), 0, 1);
+  const k = +s.size || 1;
+  const col = s.color || '#7CFF7C';
+  let t1 = s.text || '', t2 = s.sub || '';
+  const seed = hashStr(L.id);
+  let alpha = tm.alpha, jx = 0, split = 0;
+  if (L.anim === 'decode') { t1 = scramble(t1, u, seed, tau); t2 = scramble(t2, clamp(u * 1.2 - 0.2, 0, 1), seed + 5, tau); }
+  if (L.anim === 'type') { const n = Math.round((t1.length + t2.length) * u); t2 = t2.slice(0, Math.max(0, n - t1.length)); t1 = t1.slice(0, n); }
+  const fl = rng(seed + Math.floor(tau * 30))();
+  if (L.anim === 'flicker' && u < 1) alpha *= fl < 0.35 + u * 0.5 ? 1 : 0.08;
+  if (L.anim === 'glitch' && u < 1) { split = (1 - u) * 6 * unit; jx = (fl - 0.5) * 14 * unit * (1 - u); alpha *= fl < 0.2 ? 0.3 : 1; }
+  if (s.keepFlicker && u >= 1 && !tm.edit) { const f2 = rng(seed + Math.floor(tau * 12))(); if (f2 < 0.06) { alpha *= 0.35; split = 3 * unit; } }
+  if (alpha <= 0.01) return;
+  const F1 = `700 ${26 * k * unit}px ${fam(s.font, MONO)}`, F2 = `500 ${14 * k * unit}px ${fam(s.font, MONO)}`;
+  ctx.save();
+  ctx.font = F1; const w1 = ctx.measureText(s.text || '').width;
+  ctx.font = F2; const w2 = ctx.measureText(s.sub || '').width;
+  const W = Math.max(w1, w2) + 36 * unit * k, H = (t2 || s.sub ? 70 : 46) * unit * k;
+  const pos = s.position || 'center';
+  const m = 30 * unit;
+  let x = frame.x + (frame.w - W) / 2, y = frame.y + (frame.h - H) / 2;
+  if (pos.includes('left')) x = frame.x + m;
+  if (pos.includes('right')) x = frame.x + frame.w - m - W;
+  if (pos.includes('top') || pos === 'top') y = frame.y + m;
+  if (pos.includes('bottom') || pos === 'bottom') y = frame.y + frame.h - m - H;
+  x += jx;
+  ctx.globalAlpha *= alpha;
+  if (s.box !== false) {
+    ctx.fillStyle = 'rgba(4,8,6,0.72)';
+    ctx.fillRect(x, y, W, H);
+    ctx.strokeStyle = hexA(col, 0.7); ctx.lineWidth = 1.5 * unit;
+    const b = 10 * unit;
+    for (const [cx, cy, sx, sy] of [[x, y, 1, 1], [x + W, y, -1, 1], [x, y + H, 1, -1], [x + W, y + H, -1, -1]]) { ctx.beginPath(); ctx.moveTo(cx, cy + sy * b); ctx.lineTo(cx, cy); ctx.lineTo(cx + sx * b, cy); ctx.stroke(); }
+    ctx.fillStyle = hexA(col, 0.06);
+    for (let yy = y; yy < y + H; yy += 3 * unit) ctx.fillRect(x, yy, W, 1 * unit);
+  }
+  ctx.textBaseline = 'middle';
+  const tx = x + 18 * unit * k, ty1 = y + 24 * unit * k, ty2 = y + 50 * unit * k;
+  const draw = (txt, yy, F) => {
+    ctx.font = F;
+    if (split > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255,0,60,0.7)'; ctx.fillText(txt, tx - split, yy);
+      ctx.fillStyle = 'rgba(0,200,255,0.7)'; ctx.fillText(txt, tx + split, yy);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.shadowColor = hexA(col, 0.8); ctx.shadowBlur = 8 * unit;
+    ctx.fillStyle = col; ctx.fillText(txt, tx, yy);
+    ctx.shadowBlur = 0;
+  };
+  draw(t1, ty1, F1);
+  if (t2) draw(t2, ty2, F2);
+  if (s.cursor !== false && Math.sin(tau * 9) > 0) {
+    ctx.font = (t2 ? F2 : F1);
+    const last = t2 || t1;
+    const cw = ctx.measureText(last).width;
+    ctx.fillStyle = col;
+    ctx.fillRect(tx + cw + 3 * unit, (t2 ? ty2 : ty1) - 9 * unit * k, 9 * unit * k, 18 * unit * k);
+  }
+  ctx.restore();
+}
+
+/** HUD interference while the camera zooms fast (and briefly on boot). */
+export function hudGlitch(ctx, frame, unit, amount, seed, col = '#7CFF7C') {
+  if (amount <= 0.02) return;
+  const r = rng(seed);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < Math.round(8 * amount); i++) {
+    const y = frame.y + r() * frame.h, h = (2 + r() * 10) * unit;
+    ctx.fillStyle = hexA(col, 0.12 * amount * r());
+    ctx.fillRect(frame.x, y, frame.w, h);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  if (r() < amount * 0.8) {
+    ctx.font = `700 ${14 * unit}px ${MONO}`;
+    ctx.fillStyle = hexA(col, 0.9);
+    ctx.textAlign = 'center';
+    ctx.fillText(r() < 0.5 ? 'ACQUIRING…' : 'SIGNAL LOCK', frame.x + frame.w / 2, frame.y + frame.h / 2 + 60 * unit);
+  }
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- dispatcher
 /** Draw an FX layer. phase: 'below' | 'above' | 'captions'. */
 export function drawFX(ctx, L, tm, o, phase) {
@@ -967,13 +1017,32 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'bombing': if (phase === 'above') drawBombing(ctx, L, tm, proj, unit, phase); break;
     case 'capture': if (phase === 'below') drawCapture(ctx, L, tm, proj, unit); break;
     case 'chart': if (phase === 'captions' && frame) drawChart(ctx, L, tm, frame, unit); break;
-    case 'hud': if (phase === 'captions' && frame) drawHUD(ctx, L, tm, frame, unit, o.view, o.time, proj); break;
+    case 'flicker': if (phase === 'captions' && frame) drawFlicker(ctx, L, tm, frame, unit); break;
+    case 'videofx': if (phase === 'above') drawVideoFx(ctx, L, tm, proj, unit, o.exact); break;
+    case 'model3d': break; // drawn in 3D by models3d.js
+    case 'hud':
+      if (phase === 'captions' && frame) {
+        const zv = o.view?.zoomSpeed || 0;
+        const boot = tm.edit ? 0 : Math.max(0, 1 - tm.tau / 0.5);
+        const amt = Math.max(clamp(zv / 1.5, 0, 1), boot);
+        ctx.save();
+        if (amt > 0.05) {
+          const r = rng(hashStr(L.id) + Math.floor((o.time || 0) * 30));
+          ctx.globalAlpha *= r() < amt * 0.35 ? 0.25 : 1;
+          ctx.translate((r() - 0.5) * 8 * unit * amt, 0);
+        }
+        drawHUD(ctx, L, tm, frame, unit, o.view, o.time, proj);
+        ctx.restore();
+        hudGlitch(ctx, frame, unit, amt, hashStr(L.id) + Math.floor((o.time || 0) * 30), L.style.color);
+      }
+      break;
     default: break;
   }
 }
 /** Which phases an FX kind draws in. */
 export function fxPhases(kind) {
-  if (kind === 'chart' || kind === 'hud') return ['captions'];
+  if (kind === 'chart' || kind === 'hud' || kind === 'flicker') return ['captions'];
+  if (kind === 'model3d') return [];
   if (kind === 'capture') return ['below'];
   if (kind === 'satellite' || kind === 'iss') return ['below', 'above'];
   return ['above'];

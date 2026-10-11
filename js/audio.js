@@ -1,6 +1,7 @@
 // Soundtrack: music files and recorded voiceovers. Tracks sit on the project timeline (seconds from the
 // start of the whole video). Used for live preview and mixed + encoded into the MP4 on export.
 import { getMedia, putMedia } from './store.js';
+import { scheduleAll, hasSound } from './sfx.js';
 
 export const SR = 48000;
 const buffers = new Map();
@@ -51,12 +52,34 @@ function envelope(gain, track, at, from, to, ctxTime) {
   if (fo > 0 && to - fo > from) { g.setValueAtTime(level(to - fo), T(to - fo)); g.linearRampToValueAtTime(0, T(to)); }
 }
 
+/** Glue compressor → brick-wall limiter → soft clip, so big explosions never distort. Returns the input node. */
+function masterBus(ctx, dest) {
+  const input = ctx.createGain();
+  input.gain.value = 0.7;
+  const glue = ctx.createDynamicsCompressor();
+  glue.threshold.value = -18; glue.knee.value = 8; glue.ratio.value = 3; glue.attack.value = 0.01; glue.release.value = 0.25;
+  const lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.12;
+  const clip = ctx.createWaveShaper();
+  const n = 2048, curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.tanh(x * 1.2) / Math.tanh(1.2) * 0.89; }
+  clip.curve = curve;
+  input.connect(glue).connect(lim).connect(clip).connect(dest);
+  return input;
+}
+
 /** Mix all tracks into one stereo AudioBuffer of `duration` seconds (project time). */
-export async function mixProject(project, duration) {
+export async function mixProject(project, duration, events = []) {
   const tracks = (project.audio || []).filter((t) => !t.muted);
-  if (!tracks.length || !(duration > 0)) return null;
+  const synth = hasSound(project);
+  if ((!tracks.length && !synth) || !(duration > 0)) return null;
   const off = new OfflineAudioContext(2, Math.ceil(duration * SR), SR);
   let any = false;
+  if (synth) {
+    const bus = masterBus(off, off.destination);
+    scheduleAll(off, bus, project, events, 0, duration, 0);
+    any = true;
+  }
   for (const t of tracks) {
     const buf = await decodeTrack(t).catch(() => null);
     if (!buf) continue;
@@ -76,13 +99,18 @@ export async function mixProject(project, duration) {
 }
 
 /** Start live preview playback from project time `pt`. */
-export async function playFrom(project, pt, rate = 1) {
+let liveBus = null;
+export async function playFrom(project, pt, rate = 1, events = [], until = Infinity) {
   stopPlayback();
   const tracks = (project.audio || []).filter((t) => !t.muted);
-  if (!tracks.length || rate !== 1) return;
+  if ((!tracks.length && !hasSound(project)) || rate !== 1) return;
   const ctx = ctxLive();
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
   const now = ctx.currentTime + 0.05;
+  if (hasSound(project)) {
+    liveBus = masterBus(ctx, ctx.destination);
+    scheduleAll(ctx, liveBus, project, events, pt, Math.min(until, pt + 120), now);
+  }
   for (const t of tracks) {
     const buf = await decodeTrack(t).catch(() => null);
     if (!buf) continue;
@@ -101,6 +129,7 @@ export async function playFrom(project, pt, rate = 1) {
 export function stopPlayback() {
   for (const n of playingNodes) { try { n.stop(); } catch { /* already stopped */ } }
   playingNodes = [];
+  if (liveBus) { try { liveBus.disconnect(); } catch { /* ignore */ } liveBus = null; }
 }
 
 // ---- voiceover recording ----

@@ -15,6 +15,13 @@ import { addAudioFile, mixProject, playFrom, stopPlayback, startRecording, stopR
 import { projectFileJSON, deleteMedia } from './store.js';
 import { drawDepthOfField, drawVignette, starfield } from './effects.js';
 import { FX_FORMS } from './fx.js';
+import { ModelLayer, BUILTIN_MODELS, inspectModelFile } from './models3d.js';
+import { seekScene, videoFor } from './videofx.js';
+import { buildEvents, defaultSound, MUSIC, SFX_KINDS, hasSound } from './sfx.js';
+import { hitGizmo, gizmoDrag } from './gizmo.js';
+import { zoomSpeedAt } from './renderer.js';
+import { drawZoomBlur } from './effects.js';
+import { putMedia } from './store.js';
 import { SPRITES } from './sprites.js';
 import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
@@ -88,7 +95,7 @@ export function createEditor() {
   let rafId = 0;
   let dpr = window.devicePixelRatio || 1;
   let selLayer = null, drawing = null, pickOrigin = null;
-  let floods = null, bldFactor = null;
+  let floods = null, bldFactor = null, models = null;
 
   const scene = () => project.scenes[sceneIdx];
 
@@ -104,6 +111,7 @@ export function createEditor() {
     });
     map.on('render', drawOverlay);
     floods = new TerrainFloods(map, (L) => { if (selLayer === L.id) renderLayerEditor(); rebuild(); save(); });
+    models = new ModelLayer(map);
     map.on('error', (e) => console.warn('map:', e?.error?.message || e));
     map.on('movestart', (e) => {
       if (e.originalEvent && viewMode === 'play' && !exporting) setViewMode('edit');
@@ -141,6 +149,7 @@ export function createEditor() {
       });
       bldFactor = null;
       floods?.attach();
+      models?.attach();
       $('#map').style.filter = gradeFilter(scene().look.grade);
       setSpaceBackground(scene().look.globe);
       applyTimeEffects(viewMode === 'play' ? time : null);
@@ -199,6 +208,7 @@ export function createEditor() {
     overlay.width = Math.round(r.width * dpr);
     overlay.height = Math.round(r.height * dpr);
     map.resize();
+    models?.setUnit(Math.min(w, h) / 720);
     const { width, height } = videoSize(project.aspect, project.resolution);
     const lab = $('#frame-label');
     lab.textContent = `${project.aspect} · ${width}×${height}`;
@@ -236,6 +246,11 @@ export function createEditor() {
       const mc = map.getCanvas();
       const k = mc.width / stage.clientWidth;
       drawDepthOfField(octx, mc, frame.x * k, frame.y * k, frame.w * k, frame.h * k, fr, { ...lens, filter: gf }, unit);
+    }
+    if (t != null && scene().look.zoomBlur) {
+      const mc = map.getCanvas();
+      const k = mc.width / stage.clientWidth;
+      drawZoomBlur(octx, mc, frame.x * k, frame.y * k, frame.w * k, frame.h * k, fr, zoomSpeedAt(model, t), +scene().look.zoomBlurAmount || 1);
     }
     drawGradeWash(octx, { x: 0, y: 0, w: W, h: H }, scene().look.grade);
     hits = renderScene(octx, {
@@ -395,6 +410,8 @@ export function createEditor() {
     if (step === 'layers' && !drawing && !pickOrigin) {
       const r = 9 * (overlay.width / stage.clientWidth);
       const h = hits.layerHandles.find((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
+      const gz = hits.gizmo && hitGizmo(hits.gizmo, p, overlay.width / stage.clientWidth);
+      if (gz) { e.preventDefault(); startGizmo(gz, p, e); return; }
       if (h) { e.preventDefault(); startDrag({ kind: 'vertex', id: h.id, ring: h.ring, i: h.i }, e); return; }
       const id = hitLayer(octx, scene().layers || [], hits.proj, p, unitNow());
       const L = id && layerById(id);
@@ -409,6 +426,38 @@ export function createEditor() {
       const s = hitSign(p);
       if (s != null) { e.preventDefault(); startDrag({ kind: 'sign', i: s }, e); }
     }
+  }
+
+  /** Resize / rotate the selected layer with its on-map handles. */
+  function startGizmo(which, p0, e) {
+    const g = hits.gizmo;
+    const L = layerById(g.id);
+    if (!L) return;
+    map.dragPan.disable();
+    const snapshot = JSON.stringify({ scene: scene(), audio: project.audio || [] });
+    const start = { ...L.style };
+    const rect = stage.getBoundingClientRect();
+    const k = overlay.width / stage.clientWidth;
+    let moved = false;
+    stage.classList.add('dragging');
+    const move = (ev) => {
+      moved = true;
+      const p = [(ev.clientX - rect.left) * k, (ev.clientY - rect.top) * k];
+      Object.assign(L.style, gizmoDrag(g, which, start, p0, p));
+      if (L.kind === 'model3d') models?.update(scene(), viewMode === 'play' ? time : null, layerTiming);
+      repaint();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      map.dragPan.enable();
+      stage.classList.remove('dragging');
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+      if (moved) { undoStack.push(snapshot); updateUndo(); renderLayerEditor(); save(); }
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   }
 
   function startDrag(target, e) {
@@ -435,6 +484,7 @@ export function createEditor() {
         sg.lng = ll.lng; sg.lat = ll.lat;
       }
       model = buildScene(scene(), frame.w, frame.h);
+      if (dragging.kind === 'vertex' || dragging.kind === 'lpoint') models?.update(scene(), null, layerTiming);
       closePointPop();
       repaint();
     };
@@ -512,7 +562,10 @@ export function createEditor() {
     const p = toCanvas(e.point);
     if (step === 'layers') {
       const r = 9 * (overlay.width / stage.clientWidth);
-      const onH = hits.layerHandles.some((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
+      const gz = hits.gizmo && hitGizmo(hits.gizmo, p, overlay.width / stage.clientWidth);
+      stage.classList.toggle('on-rotate', gz === 'rotate');
+      stage.classList.toggle('on-scale', gz === 'scale');
+      const onH = !!gz || hits.layerHandles.some((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
       stage.classList.toggle('on-handle', onH || !!hitLayer(octx, scene().layers || [], hits.proj, p, unitNow()));
       return;
     }
@@ -946,9 +999,12 @@ export function createEditor() {
       $$('#add-layer [data-add]').forEach((b) => b.classList.toggle('active', b.dataset.add === kind));
       return;
     }
+    let pathModel = false;
+    if (kind === 'model3dpath') { kind = 'model3d'; pathModel = true; }
+    if (!pathModel && !LAYER_KINDS[kind].geom) { addLayer(newLayer(kind, null, { start: newStart() })); return; }
     setViewMode('edit');
-    const g = LAYER_KINDS[kind].geom;
-    drawing = { kind, coords: [], polygon: g === 'polygon', single: g === 'point', preset };
+    const g = pathModel ? 'line' : LAYER_KINDS[kind].geom;
+    drawing = { kind, coords: [], polygon: g === 'polygon', single: g === 'point', preset, pathModel };
     stage.classList.add('placing');
     showHint(HINTS[g]);
     $$('#add-layer [data-add]').forEach((b) => b.classList.toggle('active', b.dataset.add === (preset ? 'symbol' : kind)));
@@ -995,8 +1051,10 @@ export function createEditor() {
       geom = { type: 'LineString', coordinates: d.coords };
     } else geom = { type: 'Point', coordinates: d.coords[0] };
     const L = newLayer(d.kind, geom, { start: newStart(), preset: d.preset });
+    if (d.pathModel) { L.style.motion = 'move'; L.name = '3D model on a path'; L.duration = 6; }
     cancelDrawing();
     addLayer(L);
+    if (L.kind === 'videofx' && !L.style.media) $('#file-video').click();
   }
   function addLayer(L) {
     pushUndo();
@@ -1011,6 +1069,8 @@ export function createEditor() {
     renderLayerList();
     renderCamSelects();
     floods?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); renderFloodInfo(); });
+    models?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); });
+    eventsCache = null;
     save();
   }
   function onLayerClick(e, p) {
@@ -1090,6 +1150,7 @@ export function createEditor() {
   });
   $('#add-layer').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#add-fx').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  $('#upload-model-btn').onclick = () => $('#file-model').click();
   $('#add-info').addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
     if (!b) return;
@@ -1101,6 +1162,7 @@ export function createEditor() {
       if (T) { [L.style.title, L.style.data, L.style.prefix, L.style.suffix] = T; L.name = T[0]; }
       if (b.dataset.type === 'counter') L.duration = 2.5;
     }
+    if (b.dataset.anim) { L.anim = b.dataset.anim; if (b.dataset.anim === 'glitch') { L.style.text = 'SIGNAL INTERCEPTED'; L.style.color = '#ff4d4d'; L.name = 'Glitch text'; } }
     if (b.dataset.variant) {
       L.style.variant = b.dataset.variant;
       L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock' }[b.dataset.variant];
@@ -1177,7 +1239,21 @@ export function createEditor() {
         else if (type === 'switch') h += fRow(label, fSw(path, v));
         else if (type === 'number') h += fRow(label, fNum(path, v, o || 1));
         else if (type === 'textarea') h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea></label>`;
+        else if (type === 'model') {
+          const opts = {};
+          for (const [k, n] of Object.entries(BUILTIN_MODELS)) opts[`builtin:${k}`] = `${n} (built-in)`;
+          for (const m of project.models || []) opts[`media:${m.id}`] = `${m.name} (yours)`;
+          h += fRow(label, fSel(path, v, opts));
+          h += `<div class="btn-row"><button class="btn sm" data-act="uploadModel">Upload your own GLB / glTF…</button></div><p class="hint-line">Use a single .glb file (or .gltf with embedded textures). Free models: Sketchfab, Poly Pizza, NASA 3D Resources. Drag the square handle on the map to resize, the round one to rotate.</p>`;
+        } else if (type === 'video') {
+          h += `<div class="btn-row"><button class="btn sm" data-act="uploadVideo">${v ? 'Change clip…' : 'Choose a video clip…'}</button><span class="muted small">${esc(L.style.name || (v ? 'Clip loaded' : 'MP4 / WebM / MOV'))}</span></div>`;
+          h += '<p class="hint-line">Stock explosion, fire or smoke clips on a black background blend in automatically. Drag the square handle on the map to resize, the round one to rotate.</p>';
+        }
         else h += `<label class="field"><span>${label}</span>${fText(path, v)}</label>`;
+      }
+      if (SFX_KINDS.has(L.kind)) {
+        h += '<h5>Sound</h5>' + fRow('Sound effects', fSw('style.sound', L.style.sound !== false));
+        if (L.style.sound !== false) h += fRow('Volume', fRange('style.soundVol', L.style.soundVol ?? 1, 0, 2, 0.05));
       }
       if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
       if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
@@ -1215,7 +1291,9 @@ export function createEditor() {
     if (key === 'style.weight') v = +v;
     if (final) pushUndo();
     setPath(L, key, v);
-    if (key === 'anim' || key === 'style.marker' || key === 'style.layout') { renderLayerEditor(); commitLayers(); return; }
+    eventsCache = null;
+    if (key === 'anim' || key === 'style.marker' || key === 'style.layout' || key === 'style.sound') { renderLayerEditor(); commitLayers(); return; }
+    if (key === 'style.source' || key === 'style.color' && L.kind === 'model3d') { commitLayers(); return; }
     if (['start', 'duration', 'hold', 'style.levelFrom', 'style.levelTo'].includes(key) || key === 'name') {
       clearTimeout(layerEditTimer);
       layerEditTimer = setTimeout(() => { L.duration = Math.max(0.05, +L.duration || 0.05); L.start = Math.max(0, +L.start || 0); L.hold = Math.max(0, +L.hold || 0); commitLayers(); }, 250);
@@ -1223,6 +1301,7 @@ export function createEditor() {
     }
     if (key === 'style.font') loadFonts(scene()).then(repaint);
     floods?.update(scene(), viewMode === 'play' ? time : null);
+    if (L.kind === 'model3d') models?.update(scene(), viewMode === 'play' ? time : null, layerTiming);
     renderLayerList();
     repaint();
     save();
@@ -1237,6 +1316,8 @@ export function createEditor() {
     const i = ls.indexOf(L);
     if (a === 'close') selectLayer(null);
     if (a === 'markerImg') $('#file-marker').click();
+    if (a === 'uploadModel') $('#file-model').click();
+    if (a === 'uploadVideo') $('#file-video').click();
     if (a === 'zoom') zoomToLayer(L);
     if (a === 'del') deleteLayer(L.id);
     if (a === 'dup') { const c = JSON.parse(JSON.stringify(L)); c.id = `ly_${Math.random().toString(36).slice(2, 9)}`; c.name = `${L.name} copy`; addLayer(c); }
@@ -1265,6 +1346,52 @@ export function createEditor() {
       await preloadSignImages([{ image: L.style.image }]);
       renderLayerEditor(); repaint(); save();
     } catch { toast('Could not read that image'); }
+  });
+
+  $('#file-model').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      toast('Reading the 3D model…');
+      await inspectModelFile(f);
+      const id = `md_${Math.random().toString(36).slice(2, 10)}`;
+      await putMedia(id, f);
+      (project.models ||= []).push({ id, name: f.name.replace(/\.(glb|gltf)$/i, '') });
+      let L = selLayer && layerById(selLayer);
+      pushUndo();
+      if (!L || L.kind !== 'model3d') {
+        const c = map.getCenter();
+        L = newLayer('model3d', { type: 'Point', coordinates: [+c.lng.toFixed(6), +c.lat.toFixed(6)] }, { start: newStart() });
+        layersOf().push(L);
+        selLayer = L.id;
+      }
+      L.style.source = `media:${id}`;
+      L.name = f.name.replace(/\.(glb|gltf)$/i, '');
+      renderLayerEditor();
+      commitLayers();
+      toast('3D model added — drag it on the map, resize with the square handle');
+    } catch (err) { toast(err.message || 'Could not read that model'); }
+  });
+  $('#file-video').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    const L = selLayer && layerById(selLayer);
+    if (!f || !L || L.kind !== 'videofx') return;
+    if (f.size > 200e6) { toast('That clip is very large — use one under 200 MB'); return; }
+    const id = `vd_${Math.random().toString(36).slice(2, 10)}`;
+    await putMedia(id, f);
+    pushUndo();
+    L.style.media = id;
+    L.style.name = f.name;
+    L.name = f.name.replace(/\.[^.]+$/, '');
+    const v = videoFor(id);
+    v.el.addEventListener('loadeddata', () => {
+      if (v.el.duration && isFinite(v.el.duration)) { L.duration = +Math.min(30, v.el.duration).toFixed(2); renderLayerEditor(); commitLayers(); }
+      repaint();
+    }, { once: true });
+    renderLayerEditor();
+    commitLayers();
   });
 
   // CSV points
@@ -1908,6 +2035,7 @@ export function createEditor() {
     $('#join-secs-row').hidden = last || (sc.transition || 'cut') === 'cut';
     $('#render-preset').value = '';
     renderAudioList();
+    renderSoundSettings();
   }
   const PRESETS = {
     yt1080: ['16:9', 1080, 30], yt4k: ['16:9', 2160, 30], reel: ['9:16', 1080, 30], igpost: ['4:5', 1080, 30],
@@ -1928,6 +2056,32 @@ export function createEditor() {
   $('#join-secs').addEventListener('change', (e) => { scene().transitionSeconds = +e.target.value; save(); });
 
   // ---- sound
+  function renderSoundSettings() {
+    const snd = project.sound ||= defaultSound();
+    $('#snd-music').innerHTML = Object.entries(MUSIC).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    $('#snd-auto').checked = !!snd.auto;
+    $('#snd-sfxvol').value = snd.sfxVolume;
+    $('#snd-music').value = snd.music || 'none';
+    $('#snd-musvol').value = snd.musicVolume;
+    $('#snd-wind').checked = snd.zoomWind !== false;
+    $('#snd-opts').hidden = !snd.auto;
+  }
+  $('#snd-box').addEventListener('input', (e) => {
+    const el = e.target;
+    const snd = project.sound ||= defaultSound();
+    const k = { 'snd-auto': 'auto', 'snd-sfxvol': 'sfxVolume', 'snd-music': 'music', 'snd-musvol': 'musicVolume', 'snd-wind': 'zoomWind' }[el.id];
+    if (!k) return;
+    snd[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+    $('#snd-opts').hidden = !snd.auto;
+    eventsCache = null;
+    save();
+    if (playing) setPlaying(true);
+  });
+  $('#snd-test').onclick = async () => {
+    const { playFrom: pf } = await import('./audio.js');
+    const demo = [{ t: 0, type: 'hudboot', p: {} }, { t: 0.5, type: 'whistle', p: { dur: 0.8 } }, { t: 1.3, type: 'explosion', p: { size: 1.2 } }, { t: 2.6, type: 'jet', p: { dur: 3 } }];
+    pf({ ...project, audio: [], sound: { ...project.sound, auto: true, music: 'none' } }, 0, 1, demo, 6).catch(() => {});
+  };
   function renderAudioList() {
     const ul = $('#audio-list');
     const tracks = project.audio || [];
@@ -2065,6 +2219,7 @@ export function createEditor() {
   function applyTimeEffects(t, sc = scene(), m = model) {
     if (!map || !sc) return;
     floods?.update(sc, t);
+    models?.update(sc, t, layerTiming);
     const f = t == null || !m ? 1 : m.buildingsAt(t);
     const q = Math.round(f * 200) / 200;
     if (q !== bldFactor && map.getLayer && map.getLayer('ma-buildings')) {
@@ -2083,8 +2238,18 @@ export function createEditor() {
     const was = playing;
     playing = p;
     document.body.classList.toggle('is-playing', p);
-    if (p) { playStartNow = performance.now(); playStartTime = time; playFrom(project, projTime(time), tl?.state.rate || 1).catch(() => {}); }
+    if (p) { playStartNow = performance.now(); playStartTime = time; playFrom(project, projTime(time), tl?.state.rate || 1, soundEvents(), projTime(model.trimOut)).catch(() => {}); }
     else if (was) stopPlayback();
+  }
+  /** Automatic sound effects for the whole project (cached until something changes). */
+  let eventsCache = null;
+  function soundEvents() {
+    const key = JSON.stringify([project.scenes.map((s) => [s.layers, s.camera, s.legs.length, s.trimIn, s.trimOut, s.transition]), project.sound, frame.w, frame.h]);
+    if (eventsCache?.key === key) return eventsCache.ev;
+    let ev = [];
+    try { ev = buildEvents(project, project.scenes.map((sc) => buildScene(sc, frame.w, frame.h))); } catch (err) { console.warn('sound events', err); }
+    eventsCache = { key, ev };
+    return ev;
   }
   /** Seconds from the start of the whole video for scene time t. */
   let offsetCache = null;
@@ -2110,7 +2275,7 @@ export function createEditor() {
     if (playing) {
       time = playStartTime + ((now - playStartNow) / 1000) * (tl.state.rate || 1);
       if (time >= model.trimOut) {
-        if (tl.state.loop) { time = model.trimIn; playStartTime = time; playStartNow = now; playFrom(project, projTime(time), tl.state.rate).catch(() => {}); }
+        if (tl.state.loop) { time = model.trimIn; playStartTime = time; playStartNow = now; playFrom(project, projTime(time), tl.state.rate, soundEvents(), projTime(model.trimOut)).catch(() => {}); }
         else { time = model.trimOut; setPlaying(false); }
       }
       applyCamera(time);
@@ -2282,6 +2447,8 @@ export function createEditor() {
     floods.clear();
     applyLook(scene());
     floods.sync(scene()).then(() => applyTimeEffects(null));
+    models?.clear();
+    models?.sync(scene()).then(() => applyTimeEffects(null));
     rebuild();
     showEditView();
     renderScenes();
@@ -2336,7 +2503,8 @@ export function createEditor() {
     try {
       const blob = await renderStill({
         map, width, height,
-        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
+        beforeFrame: (s2, m, tt) => seekScene(s2, tt, layerTiming),
+        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 }); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2) => gradeFilter(s2.look.grade),
         background: spaceBg,
@@ -2346,7 +2514,7 @@ export function createEditor() {
           const lens = lensFor(s2, m, tt, (ll) => map.project(ll).y / frame.h);
           if (lens?.dof) drawDepthOfField(ctx, mc, 0, 0, mc.width, mc.height, full, { ...lens, filter: gradeFilter(s2.look.grade) }, unit);
           drawGradeWash(ctx, full, s2.look.grade);
-          renderScene(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full });
+          renderScene(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full, exact: true });
           drawVignette(ctx, full, +s2.camera.lens?.vignette || 0);
           renderCaptions(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full });
           drawAttribution(ctx, themeAttribution(s2.look), unit, width, height);
@@ -2409,11 +2577,14 @@ export function createEditor() {
         durationOf: (sc) => buildScene(sc, frame.w, frame.h).duration,
         mapFilter: (sc) => gradeFilter(sc.look.grade),
         background: spaceBg,
-        mixAudio: (project.audio || []).some((t) => !t.muted) ? (d) => mixProject(project, d) : null,
+        mixAudio: (project.audio || []).some((t) => !t.muted) || hasSound(project) ? (d) => mixProject(project, d, soundEvents()) : null,
+        beforeFrame: (sc, m, t) => seekScene(sc, t, layerTiming),
         prepareScene: async (sc) => {
           await applyLook(sc);
           floods.clear();
           await floods.sync(sc);
+          models.clear();
+          await models.sync(sc);
           await preloadSignImages(sc.signs);
           await loadFonts(sc);
           bldFactor = null;
@@ -2430,8 +2601,9 @@ export function createEditor() {
           const mc = map.getCanvas();
           const lens = lensFor(sc, m, t, (ll) => map.project(ll).y / frame.h);
           if (lens?.dof) drawDepthOfField(ctx, mc, 0, 0, mc.width, mc.height, full, { ...lens, filter: gradeFilter(sc.look.grade) }, unit);
+          if (sc.look.zoomBlur) drawZoomBlur(ctx, mc, 0, 0, mc.width, mc.height, full, zoomSpeedAt(m, t), +sc.look.zoomBlurAmount || 1);
           drawGradeWash(ctx, full, sc.look.grade);
-          renderScene(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full });
+          renderScene(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full, exact: true });
           drawVignette(ctx, full, +sc.camera.lens?.vignette || 0);
           renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full });
           drawAttribution(ctx, themeAttribution(sc.look), unit, width, height);
@@ -2453,7 +2625,7 @@ export function createEditor() {
       a.download = name;
       a.hidden = false;
       a.textContent = `Download ${ext.toUpperCase()} · ${(blob.size / 1e6).toFixed(1)} MB`;
-      if ((project.audio || []).some((t) => !t.muted) && !result.audio) toast('This browser could not encode the soundtrack, so the video is silent', 4200);
+      if (((project.audio || []).some((t) => !t.muted) || hasSound(project)) && !result.audio) toast('This browser could not encode the soundtrack, so the video is silent', 4200);
       $('#render-title').textContent = 'Your video is ready';
       $('#render-status').textContent = `${name} · ${codec === 'avc' ? 'H.264' : codec.toUpperCase()} · made in ${fmtShort((performance.now() - t0) / 1000)}`;
       $('#render-bar').style.width = '100%';
@@ -2491,7 +2663,10 @@ export function createEditor() {
       project = p;
       project.scenes.forEach(migrateScene);
       project.audio ||= [];
-      offsetCache = null;
+      project.models ||= [];
+      project.sound = { ...defaultSound(), ...(project.sound || {}) };
+      offsetCache = null; eventsCache = null;
+      models?.clear();
       selLayer = null; drawing = null; pickOrigin = null;
       floods.clear();
       $('#resolution-top').value = String(project.resolution);
@@ -2519,6 +2694,7 @@ export function createEditor() {
       cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(tick);
       floods.sync(scene()).then(() => applyTimeEffects(null));
+      models.sync(scene()).then(() => applyTimeEffects(null));
       loadFonts(scene()).then(repaint);
       renderCamSelects();
       if (opts.importFile) await importRoute(opts.importFile);

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="css/app.css" />
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <script type="importmap">{ "imports": { "three": "./js/vendor/three/three.module.js" } }</script>
 </head>
 <body>
 
@@ -188,6 +189,10 @@
           <button data-add="strike"><i>💥</i>Blast</button>
           <button data-add="bombing"><i>✈</i>Bombing run</button>
           <button data-add="capture"><i>⚑</i>Capture area</button>
+          <button data-add="model3d"><i>🧊</i>3D model</button>
+          <button data-add="model3dpath"><i>✈️</i>3D model on a path</button>
+          <button data-add="videofx"><i>🎞</i>Effect clip (video)</button>
+          <button id="upload-model-btn" type="button"><i>⇪</i>Upload GLB / glTF</button>
         </div>
         <span class="label-caps">Infographics &amp; HUD</span>
         <div class="add-grid fx" id="add-info">
@@ -199,6 +204,8 @@
           <button data-add="hud" data-variant="drone"><i>⌖</i>Drone HUD</button>
           <button data-add="hud" data-variant="satellite"><i>▦</i>Satellite HUD</button>
           <button data-add="hud" data-variant="target"><i>◎</i>Target lock</button>
+          <button data-add="flicker"><i>▌</i>Flicker text</button>
+          <button data-add="flicker" data-anim="glitch"><i>▚</i>Glitch text</button>
         </div>
         <span class="label-caps">Bring in</span>
         <div class="btn-row bring">
@@ -236,6 +243,7 @@
             <label class="row sub-row"><span>Show</span><select data-look="cloudMode"><option value="zoom">Only while zooming</option><option value="always">Always (fog)</option></select></label>
             <label class="row sub-row"><span>Amount</span><input type="range" min="0.1" max="1.5" step="0.05" data-look="cloudAmount" /></label>
           </div>
+          <label class="row"><span>Zoom blur (warp while zooming)</span><input type="checkbox" class="switch" data-look="zoomBlur" /></label>
           <label class="row"><span>3D buildings</span><input type="checkbox" class="switch" data-look="buildings3d" /></label>
           <label class="row" id="rlabels-row"><span>Place names on top</span><input type="checkbox" class="switch" data-look="rasterLabels" /></label>
           <label class="row" id="rroads-row"><span>Main roads on top</span><input type="checkbox" class="switch" data-look="rasterRoads" /></label>
@@ -433,6 +441,17 @@
         <p class="note small"><i class="dot"></i> Resolution, frame rate and video shape apply to the whole project. Transitions show in the rendered video.</p>
         <div class="group">
           <h4>Sound</h4>
+          <div class="snd-box" id="snd-box">
+            <label class="row"><span>Cinematic sound effects</span><input type="checkbox" class="switch" id="snd-auto" /></label>
+            <div id="snd-opts">
+              <p class="note small">Explosions, bombs, aircraft and rocket engines, HUD beeps and glitches, flicker-text typing, and wind &amp; whooshes when the camera zooms — made automatically from your layers and camera.</p>
+              <label class="row sub-row"><span>Effects volume</span><input type="range" min="0" max="2" step="0.05" id="snd-sfxvol" /></label>
+              <label class="row sub-row"><span>Wind &amp; whoosh on zooms</span><input type="checkbox" class="switch" id="snd-wind" /></label>
+              <label class="row sub-row"><span>Background score</span><select id="snd-music"></select></label>
+              <label class="row sub-row"><span>Score volume</span><input type="range" min="0" max="2" step="0.05" id="snd-musvol" /></label>
+              <div class="btn-row"><button class="btn sm" id="snd-test" type="button">▶ Test sounds</button></div>
+            </div>
+          </div>
           <div class="btn-row"><button class="btn sm" id="audio-add">♪ Add music…</button><button class="btn sm" id="audio-rec">🎙 Record voiceover</button></div>
           <p class="note small" id="audio-note">Voiceovers start at the playhead; the animation plays while you talk. Drag the bars on the timeline to move them.</p>
           <ul class="audio-list" id="audio-list"></ul>
@@ -626,7 +645,8 @@
       <li><b>Route.</b> Click on the map to place points, or load a GPX / KML / KMZ / IGC file. The line curves smoothly through your points. Click the line to add a point, double-click a point for a sharp corner, drag points to move them, and click a point to pause there or split the leg.</li>
       <li><b>Legs.</b> Each leg has a way of travelling — walk, car, train, ferry, plane and more — with its own symbol and line style. Use <i>+ New leg</i> to switch.</li>
       <li><b>Layers.</b> Draw or import boundaries, areas, floods, lines, points, animated symbols, text and captions. Each has its own animation and timing — trace a boundary, spread a flood from a point, raise water over real terrain, pulse a symbol, type out a caption.</li>
-      <li><b>Space &amp; defence.</b> In the Layers step add satellite passes, the ISS orbit, launch sites, 3D ships/jets/drones, missile and drone paths, blasts, bombing runs and capture areas — plus charts, counters and HUD overlays.</li>
+      <li><b>Space &amp; defence.</b> In the Layers step add satellite passes, the ISS orbit, launch sites, 3D ships/jets/drones, missile and drone paths, blasts, bombing runs and capture areas — plus charts, counters, HUD overlays and flicker text. Add <i>3D model</i> (built-in or <i>Upload GLB / glTF</i>) or an <i>Effect clip</i> video. Select an item and drag its square handle to resize it, the round handle to rotate it.</li>
+      <li><b>Sound.</b> Cinematic sound effects are added automatically — explosions, aircraft, HUD beeps, wind when the camera zooms. Pick a background score and volumes in Preview &amp; export; switch sound off for any layer in its settings.</li>
       <li><b>Globe.</b> Turn on the globe in Look, then pick “Earth zoom from space” in Camera. Search a place or type coordinates like <kbd>25.2, 55.27</kbd> to fly there.</li>
       <li><b>Look.</b> Pick a map theme, place names, 3D mountains, line colour and symbol.</li>
       <li><b>Signs.</b> Add boards, flags, photos and more. They pop up when the line reaches them.</li>
@@ -664,6 +684,8 @@
 <input type="file" id="file-csv" accept=".csv,.tsv,.txt,text/csv" hidden />
 <input type="file" id="file-audio" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac" hidden />
 <input type="file" id="file-marker" accept="image/*" hidden />
+<input type="file" id="file-model" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden />
+<input type="file" id="file-video" accept="video/*,.mp4,.webm,.mov" hidden />
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/app.js"></script>

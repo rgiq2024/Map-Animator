@@ -173,3 +173,30 @@ export function starfield(w = 1600, h = 1000) {
   starCanvas = c;
   return c;
 }
+
+/**
+ * Radial zoom blur ("warp" while the camera dives in or pulls out): stacks scaled, faded copies of the map.
+ * src region (sx,sy,sw,sh) of `src` maps onto dest rect `fr`. speed = zoom levels per second.
+ */
+export function drawZoomBlur(ctx, src, sx, sy, sw, sh, fr, speed, amount = 1) {
+  const k = Math.min(1, Math.max(0, (Math.abs(speed) - 0.6) / 2.4)) * amount;
+  if (k < 0.02) return;
+  const n = 5;
+  const cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.clip();
+  for (let i = 1; i <= n; i++) {
+    const s = 1 + (i / n) * 0.09 * k * (speed > 0 ? 1 : 0.8);
+    ctx.globalAlpha = (0.42 * k) / i ** 0.6 / 1.6;
+    const w = fr.w * s, h = fr.h * s;
+    try { ctx.drawImage(src, sx, sy, sw, sh, cx - w / 2, cy - h / 2, w, h); } catch { /* not ready */ }
+  }
+  // speed lines toward the edges
+  ctx.globalAlpha = 0.25 * k;
+  const g = ctx.createRadialGradient(cx, cy, Math.min(fr.w, fr.h) * 0.25, cx, cy, Math.hypot(fr.w, fr.h) * 0.55);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(225,235,255,0.55)');
+  ctx.fillStyle = g;
+  ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+  ctx.restore();
+}

@@ -134,9 +134,15 @@ const blobToDataURL = (b) => new Promise((res, rej) => { const r = new FileReade
 /** Project file contents including embedded audio. */
 export async function projectFileJSON(p) {
   const media = {};
-  for (const t of p.audio || []) {
-    const b = await getMedia(t.id);
-    if (b) media[t.id] = await blobToDataURL(b);
+  const ids = new Set((p.audio || []).map((t) => t.id));
+  for (const m of p.models || []) ids.add(m.id);
+  for (const sc of p.scenes || []) for (const L of sc.layers || []) {
+    if (L.kind === 'videofx' && L.style?.media) ids.add(L.style.media);
+    if (L.kind === 'model3d' && String(L.style?.source || '').startsWith('media:')) ids.add(L.style.source.slice(6));
+  }
+  for (const id of ids) {
+    const b = await getMedia(id);
+    if (b) media[id] = await blobToDataURL(b);
   }
   return JSON.stringify({ ...p, format: 'map-animator', version: 3, media });
 }
