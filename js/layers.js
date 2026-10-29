@@ -115,6 +115,7 @@ export function newLayer(kind, geom, opts = {}) {
   }[kind];
   const L = { ...base, anim: S.anim, style: { ...S.style } };
   if (S.duration) L.duration = S.duration;
+  if (S.hold) L.hold = S.hold;
   if (opts.preset && SYMBOL_PRESETS[opts.preset]) {
     const p = SYMBOL_PRESETS[opts.preset];
     Object.assign(L.style, { marker: p.marker, color: p.color, effect: p.effect, emoji: p.emoji || L.style.emoji, sprite: p.sprite || L.style.sprite, heading: 0 });

@@ -26,6 +26,12 @@ import { TEMPLATES as QS_TEMPLATES, openQuickStart } from './quickstart.js';
 import { IMG_KINDS, readGeoImages, storeImage, imageFor, preloadImages, mediaOf, quadOf, quadGeom, quadFromBounds, quadBounds, rotateQuad, scaleQuad, moveQuad, fixAspect, labelFromName } from './geoimage.js';
 import { WaybackLayers, waybackReleases, yearlyReleases } from './wayback.js';
 import { thermalFilter } from './hudplus.js';
+import { drawLetterbox, TITLE_LOOKS } from './titles.js';
+import { NEWS_LOOKS } from './news.js';
+import { drawScreenEffects, effectFilter, shakeAt, EFFECT_LOOKS } from './screenfx.js';
+import { SOUND_LIBRARY, SOUND_NAMES } from './sfx.js';
+import { previewLibSound } from './audio.js';
+import { getMedia } from './store.js';
 import { SPRITES } from './sprites.js';
 import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
@@ -164,7 +170,13 @@ export function createEditor() {
   }
 
   const joinFilters = (...f) => f.filter((x) => x && x !== 'none').join(' ') || 'none';
-  const mapFilterAt = (sc, t) => joinFilters(gradeFilter(sc.look.grade), thermalFilter(sc, t, layerTiming));
+  const mapFilterAt = (sc, t) => joinFilters(gradeFilter(sc.look.grade), thermalFilter(sc, t, layerTiming), effectFilter(sc, t, layerTiming));
+  /** Put the camera at c, plus any camera-shake effect. */
+  function jumpCam(c, sc, t) {
+    map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 });
+    const [dx, dy] = shakeAt(sc, t, layerTiming);
+    if (dx || dy) { const p = map.project(c.center); const q = map.unproject([p.x + dx, p.y + dy]); map.jumpTo({ center: [q.lng, q.lat] }); }
+  }
   let starURL = null;
   function setSpaceBackground(on) {
     const el = $('#map');
@@ -266,8 +278,14 @@ export function createEditor() {
       edit: viewMode === 'edit' ? { step, activeLeg, selPoint, hoverPoint, selSign, selLayer, drawing, dpr: px } : null,
     });
     drawVignette(octx, fr, +scene().camera.lens?.vignette || 0);
+    drawLetterbox(octx, fr, scene().look, t, unit);
     hits.boxes = [];
     renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: hits.boxes });
+    {
+      const mc = map.getCanvas();
+      const k = mc.width / stage.clientWidth;
+      drawScreenEffects(octx, scene(), { frame: fr, unit, time: t, src: { canvas: mc, sx: frame.x * k, sy: frame.y * k, sw: frame.w * k, sh: frame.h * k } }, layerTiming);
+    }
     if (viewMode === 'edit' && step === 'layers' && selLayer) {
       const b = hits.boxes.findLast?.((q) => q.id === selLayer);
       if (b) { octx.save(); octx.setLineDash([6 * px, 4 * px]); octx.strokeStyle = '#2d7ff9'; octx.lineWidth = 1.5 * px; octx.strokeRect(b.x - 4 * px, b.y - 4 * px, b.w + 8 * px, b.h + 8 * px); octx.restore(); }
@@ -839,6 +857,8 @@ export function createEditor() {
           <option value="">Auto (${LINE_STYLES[mode.style || 'solid']})</option>
           ${Object.entries(LINE_STYLES).map(([k, v]) => `<option value="${k}" ${leg.lineStyle === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select></label>
+        <label class="row"><span>Speed <small class="muted" data-speed-out>${(+leg.speed || 1).toFixed(2)}×</small></span><input type="range" min="0.2" max="4" step="0.05" data-speed value="${+leg.speed || 1}"/></label>
+        <p class="note small">Slower or faster than the other legs — the line takes longer or shorter on this part.</p>
         ${leg.track ? '<p class="note small">This leg follows an imported track.</p>' : ''}
         ${!leg.track && !mode.air ? `<label class="row"><span>Smooth curves</span><input type="checkbox" class="switch" data-smooth ${leg.smooth !== false ? 'checked' : ''}/></label>` : ''}
         ${canSnap ? `<label class="row"><span>Follow roads <small class="muted">${esc(snapStatus)}</small></span><input type="checkbox" class="switch" data-snap ${leg.snap ? 'checked' : ''}/></label>` : ''}
@@ -870,7 +890,13 @@ export function createEditor() {
     if (e.target.matches('[data-smooth]')) leg.smooth = e.target.checked;
     if (e.target.matches('[data-snap]')) leg.snap = e.target.checked;
     if (e.target.matches('[data-custom]')) leg.color = e.target.value;
+    if (e.target.matches('[data-speed]')) leg.speed = +e.target.value;
     commit();
+  });
+  $('#leg-pop').addEventListener('input', (e) => {
+    if (!e.target.matches('[data-speed]')) return;
+    const o = $('#leg-pop [data-speed-out]');
+    if (o) o.textContent = `${(+e.target.value).toFixed(2)}×`;
   });
 
   // ---------------------------------------------------------------- legs panel
@@ -1081,6 +1107,7 @@ export function createEditor() {
     if (kind === 'wayback') { cancelDrawing(); addWayback(); return; }
     let pathModel = false;
     if (kind === 'model3dpath') { kind = 'model3d'; pathModel = true; }
+    if (kind === 'treerow') { kind = 'trees'; pathModel = true; }
     if (!pathModel && !LAYER_KINDS[kind].geom) { addLayer(newLayer(kind, null, { start: newStart() })); return; }
     setViewMode('edit');
     const g = pathModel ? 'line' : LAYER_KINDS[kind].geom;
@@ -1131,7 +1158,9 @@ export function createEditor() {
       geom = { type: 'LineString', coordinates: d.coords };
     } else geom = { type: 'Point', coordinates: d.coords[0] };
     const L = newLayer(d.kind, geom, { start: newStart(), preset: d.preset });
-    if (d.pathModel) { L.style.motion = 'move'; L.name = '3D model on a path'; L.duration = 6; }
+    if (d.pathModel && L.kind === 'model3d') { L.style.motion = 'move'; L.name = '3D model on a path'; L.duration = 6; }
+    if (d.pathModel && L.kind === 'trees') L.name = 'Tree row';
+    if (L.kind === 'trees' && !d.pathModel && map.getPitch() < 20) toast('Tilt the map (Camera step) to see the trees standing up in 3D', 3600);
     cancelDrawing();
     addLayer(L);
     if (L.kind === 'videofx' && !L.style.media) $('#file-video').click();
@@ -1234,6 +1263,40 @@ export function createEditor() {
   $('#add-fx').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#upload-model-btn').onclick = () => $('#file-model').click();
   $('#add-img').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  $('#add-nature').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  // titles, TV news, effects and videos (screen layers)
+  for (const sel of ['#add-titles', '#add-effects']) $(sel).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    cancelDrawing();
+    const kind = b.dataset.add;
+    const L = newLayer(kind, null, { start: newStart() });
+    const lk = b.dataset.look;
+    if (lk) L.style.look = lk;
+    if (kind === 'title') {
+      L.name = TITLE_LOOKS[lk] || 'Title';
+      const T = {
+        opener: ['YOUR STORY', 'A FILM BY YOUR NAME', 'Cinzel'], cinematic: ['THE JOURNEY', 'BASED ON A TRUE ROUTE', 'Archivo'], glitch: ['SIGNAL LOST', 'TRANSMISSION 07', 'Archivo'],
+        chapter: ['The Desert Crossing', 'CHAPTER ONE', 'Playfair Display'], location: ['DUBAI, UAE', `${fmtLatLon(map.getCenter())} · ${new Date().getFullYear()}`, ''],
+        credits: ['', '', 'Inter'], quote: ['The journey is the destination', 'Ancient proverb', 'Playfair Display'], ending: ['THE END', 'Thanks for watching', 'Cinzel'],
+      }[lk];
+      if (T) [L.style.text, L.style.sub, L.style.font] = T;
+      if (lk === 'credits') { L.duration = 10; L.hold = 0.5; }
+      if (lk === 'location') { L.duration = 2; L.hold = 2.5; }
+      if (lk === 'ending') { L.duration = 3; L.hold = 0; L.style.dim = 0.5; }
+      if (lk === 'opener' || lk === 'cinematic') L.style.dim = 0.25;
+    }
+    if (kind === 'news') { L.name = NEWS_LOOKS[lk] || 'News'; if (lk === 'breaking' || lk === 'headline') { L.duration = 1; L.hold = 5; } }
+    if (kind === 'hudtext') {
+      L.name = 'News ticker';
+      Object.assign(L.style, { look: 'ticker', text: 'Satellite imagery confirms new construction\nRescue teams reach the flooded district\nMarkets close higher\nMore updates to follow', position: 'bottom', color: '#d71920', bg: '#0b0d12', tagBg: '#d71920', textColor: '#ffffff', label: 'BREAKING', clock: '20:45', upper: true, bold: true });
+    }
+    if (kind === 'effect') { L.name = EFFECT_LOOKS[lk] || 'Effect'; if (lk === 'flash') { L.duration = 0.8; L.hold = 0.01; } if (lk === 'shake') { L.duration = 1.5; L.hold = 0.01; } if (lk === 'focus') { L.duration = 2; L.hold = 0.01; } if (lk === 'glitch') { L.duration = 1; L.hold = 0.5; } }
+    if (kind === 'video') L.name = 'Video';
+    addLayer(L);
+    if (L.style.font) loadFonts(scene()).then(repaint);
+    if (kind === 'video') $('#file-video').click();
+  });
   $('#add-info').addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
     if (!b) return;
@@ -1298,6 +1361,7 @@ export function createEditor() {
     h += fRow('Animation', fSel('anim', L.anim, ANIMS[L.kind]));
     h += `<div class="time3"><label>Starts at (s)${fNum('start', L.start)}</label><label>Animates for (s)${fNum('duration', L.duration)}</label><label>Then stays (s)${fNum('hold', L.hold || 0)}</label></div>`;
     h += `<p class="hint-line">“Then stays” 0 = until the end of the scene. <button class="link strong" data-act="atPlayhead">Start at the playhead</button></p>`;
+    h += `<div class="btn-row speed-row"><span class="muted small">Speed</span><button class="btn sm" data-act="speed" data-k="2">½× slower</button><button class="btn sm" data-act="speed" data-k="1.25">Slower</button><button class="btn sm" data-act="speed" data-k="0.8">Faster</button><button class="btn sm" data-act="speed" data-k="0.5">2× faster</button></div>`;
     if (L.kind === 'boundary' || L.kind === 'area') {
       h += '<h5>Outline</h5>' + fRow('Colour', fColor('style.stroke', s.stroke)) + fRow('Width', fRange('style.width', s.width, 0, 14, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Glow', fSw('style.glow', s.glow));
       h += '<h5>Fill</h5>' + fRow('Colour', fColor('style.fill', s.fill)) + fRow('Opacity', fRange('style.fillOpacity', s.fillOpacity, 0, 1, 0.05));
@@ -1360,7 +1424,8 @@ export function createEditor() {
           h += `<div class="btn-row"><button class="btn sm" data-act="uploadModel">Upload your own GLB / glTF…</button></div><p class="hint-line">Use a single .glb file (or .gltf with embedded textures). Free models: Sketchfab, Poly Pizza, NASA 3D Resources. Drag the square handle on the map to resize, the round one to rotate.</p>`;
         } else if (type === 'video') {
           h += `<div class="btn-row"><button class="btn sm" data-act="uploadVideo">${v ? 'Change clip…' : 'Choose a video clip…'}</button><span class="muted small">${esc(L.style.name || (v ? 'Clip loaded' : 'MP4 / WebM / MOV'))}</span></div>`;
-          h += '<p class="hint-line">Stock explosion, fire or smoke clips on a black background blend in automatically. Drag the square handle on the map to resize, the round one to rotate.</p>';
+          if (L.kind === 'video') h += `${v ? '<div class="btn-row"><button class="btn sm" data-act="videoSound">♪ Use the clip’s sound</button></div>' : ''}<p class="hint-line">Drag the video on the frame to place it anywhere.</p>`;
+          else h += '<p class="hint-line">Stock explosion, fire or smoke clips on a black background blend in automatically. Drag the square handle on the map to resize, the round one to rotate.</p>';
         }
         else h += `<label class="field"><span>${label}</span>${fText(path, v)}</label>`;
       }
@@ -1435,12 +1500,33 @@ export function createEditor() {
     if (a === 'markerImg') $('#file-marker').click();
     if (a === 'uploadModel') $('#file-model').click();
     if (a === 'uploadVideo') $('#file-video').click();
+    if (a === 'videoSound') {
+      (async () => {
+        try {
+          const blob = await getMedia(L.style.media);
+          if (!blob) return;
+          const tr = await addAudioFile(project, new File([blob], L.style.name || 'Video sound', { type: blob.type }), 'music', +projTime(L.start).toFixed(2));
+          tr.fadeIn = 0.2; tr.fadeOut = 0.5; tr.volume = 1;
+          tr.name = `${L.name} (sound)`;
+          renderAudioList(); renderTimeline(); save();
+          toast('The clip’s sound was added to the soundtrack');
+        } catch { toast('This clip has no sound this browser can read'); }
+      })();
+    }
     if (a === 'zoom') zoomToLayer(L);
     if (a === 'del') deleteLayer(L.id);
     if (a === 'dup') { const c = JSON.parse(JSON.stringify(L)); c.id = `ly_${Math.random().toString(36).slice(2, 9)}`; c.name = `${L.name} copy`; addLayer(c); }
     if (a === 'up' && i < ls.length - 1) { pushUndo(); [ls[i], ls[i + 1]] = [ls[i + 1], ls[i]]; commitLayers(); }
     if (a === 'down' && i > 0) { pushUndo(); [ls[i], ls[i - 1]] = [ls[i - 1], ls[i]]; commitLayers(); }
     if (a === 'atPlayhead') { pushUndo(); L.start = +time.toFixed(2); renderLayerEditor(); commitLayers(); }
+    if (a === 'speed') {
+      pushUndo();
+      const k = +e.target.closest('[data-k]').dataset.k;
+      L.duration = +Math.max(0.1, (+L.duration || 1) * k).toFixed(2);
+      if (L.kind === 'timeseries') L.style.per = +Math.max(0.2, (+L.style.per || 2) * k).toFixed(2);
+      if (L.kind === 'videofx' || L.kind === 'video') L.style.speed = +Math.min(4, Math.max(0.25, (+L.style.speed || 1) / k)).toFixed(2);
+      renderLayerEditor(); commitLayers();
+    }
     if (a === 'origin') { cancelDrawing(); pickOrigin = L.id; setViewMode('edit'); stage.classList.add('placing'); showHint('Click where the water starts · Esc to cancel'); }
     if (a === 'autoLevel') {
       const st = floods?.items.get(L.id)?.grid?.stats;
@@ -1490,6 +1576,7 @@ export function createEditor() {
       toast('3D model added — drag it on the map, resize with the square handle');
     } catch (err) { toast(err.message || 'Could not read that model'); }
   });
+  function fmtLatLon(c) { return `${Math.abs(c.lat).toFixed(2)}°${c.lat >= 0 ? 'N' : 'S'} ${Math.abs(c.lng).toFixed(2)}°${c.lng >= 0 ? 'E' : 'W'}`; }
   // ---------------------------------------------------------------- georeferenced images, before/after, time series
   let geoPick = null;
   /** A quad filling part of the current video frame, with the picture's proportions (h / w). */
@@ -1517,12 +1604,20 @@ export function createEditor() {
     const s = L.style, fr = s.frames || [];
     let h = '';
     if (s.source === 'wayback') {
-      const now = new Date().getFullYear();
-      const yrs = []; for (let y = 2014; y <= now; y++) yrs.push(y);
-      const ysel = (id, v) => `<select id="${id}">${yrs.map((y) => `<option ${y === v ? 'selected' : ''}>${y}</option>`).join('')}</select>`;
       h += '<h5>Satellite dates (Esri World Imagery Wayback)</h5>';
-      h += `<div class="wb-pick">${fRow('From', ysel('wb-from', fr[0]?.year || now - 6))}${fRow('To', ysel('wb-to', fr.at(-1)?.year || now))}${fRow('Every', `<select id="wb-step"><option value="1">year</option><option value="2">2 years</option><option value="3">3 years</option></select>`)}<button class="btn sm" data-act="wbLoad">Use these dates</button></div>`;
-      h += '<p class="hint-line">Archived Esri World Imagery, one image per year. Imagery only changes where Esri updated it, so pick a well-covered place (cities usually change most). Imagery © Esri and its partners.</p>';
+      if (!wbList) {
+        h += '<div class="btn-row"><button class="btn sm" data-act="wbList">Show all available dates…</button></div>';
+      } else {
+        const f = wbFilter;
+        h += `<div class="wb-pick"><div class="wb-range"><label>From<input type="date" id="wb-from" value="${f.from}"></label><label>To<input type="date" id="wb-to" value="${f.to}"></label></div>`;
+        h += fRow('Show', `<select id="wb-gran"><option value="all" ${f.gran === 'all' ? 'selected' : ''}>Every release (${wbList.length})</option><option value="month" ${f.gran === 'month' ? 'selected' : ''}>One per month</option><option value="year" ${f.gran === 'year' ? 'selected' : ''}>One per year</option></select>`);
+        h += fRow('Label as', `<select id="wb-fmt"><option value="year" ${f.fmt === 'year' ? 'selected' : ''}>2021</option><option value="month" ${f.fmt === 'month' ? 'selected' : ''}>Mar 2021</option><option value="date" ${f.fmt === 'date' ? 'selected' : ''}>14 Mar 2021</option></select>`);
+        const have = new Set(fr.map((x) => x.release));
+        const list = wbFiltered();
+        h += `<div class="wb-list">${list.map((r) => `<label class="wb-item"><input type="checkbox" data-wb="${r.num}" ${have.has(r.num) ? 'checked' : ''}><span>${r.date}</span></label>`).join('') || '<p class="muted small">No releases in that range.</p>'}</div>`;
+        h += `<div class="btn-row wrap"><button class="btn sm" data-act="wbAll">Tick all ${list.length}</button><button class="btn sm" data-act="wbNone">Untick all</button><button class="btn sm primary" data-act="wbUse">Use ticked dates</button></div></div>`;
+      }
+      h += '<p class="hint-line">Archived Esri World Imagery releases (roughly monthly since 2014). Imagery only changes where Esri updated it, so pick a well-covered place — cities usually change most. Imagery © Esri and its partners.</p>';
     } else {
       h += '<h5>Images (in order)</h5>';
     }
@@ -1530,6 +1625,18 @@ export function createEditor() {
     if (s.source !== 'wayback') h += '<div class="btn-row"><button class="btn sm" data-act="addFrames">Add images…</button><button class="btn sm" data-act="frSort">Sort by label</button></div><p class="hint-line">All images share the same place on the map. Labels are taken from years in the file names (e.g. dubai_2019.jpg).</p>';
     return h;
   }
+  let wbList = null;
+  const wbFilter = { from: '2014-01-01', to: new Date().toISOString().slice(0, 10), gran: 'year', fmt: 'year' };
+  function wbFiltered() {
+    const f = wbFilter;
+    const inRange = (wbList || []).filter((r) => r.date >= f.from && r.date <= f.to);
+    if (f.gran === 'all') return inRange;
+    const by = new Map();
+    for (const r of inRange) by.set(f.gran === 'year' ? r.date.slice(0, 4) : r.date.slice(0, 7), r);
+    return [...by.values()];
+  }
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const wbLabel = (r, fmt) => (fmt === 'year' ? r.date.slice(0, 4) : fmt === 'month' ? `${MONTHS[+r.date.slice(5, 7) - 1]} ${r.date.slice(0, 4)}` : `${+r.date.slice(8, 10)} ${MONTHS[+r.date.slice(5, 7) - 1]} ${r.date.slice(0, 4)}`);
   function setSeriesDuration(L) { L.duration = +(Math.max(1, (L.style.frames || []).length) * (+L.style.per || 2)).toFixed(2); }
   async function addWayback() {
     const L = newLayer('timeseries', null, { start: newStart() });
@@ -1548,6 +1655,13 @@ export function createEditor() {
       if (map.getZoom() < 12) toast('Zoom in to a city to see the imagery change through the years', 4200);
     } catch { toast('Could not load the Wayback imagery list — check your connection', 4200); }
   }
+  $('#layer-editor').addEventListener('change', (e) => {
+    const id = e.target.id;
+    if (!['wb-from', 'wb-to', 'wb-gran', 'wb-fmt'].includes(id)) return;
+    wbFilter[{ 'wb-from': 'from', 'wb-to': 'to', 'wb-gran': 'gran', 'wb-fmt': 'fmt' }[id]] = e.target.value;
+    if (id === 'wb-fmt') { const L = selLayer && layerById(selLayer); if (L?.style.source === 'wayback' && wbList) { pushUndo(); for (const f of L.style.frames || []) { const r = wbList.find((x) => x.num === f.release); if (r) f.label = wbLabel(r, wbFilter.fmt); } save(); repaint(); } }
+    renderLayerEditor();
+  });
   $('#file-geoimg').addEventListener('change', async (e) => {
     const files = [...e.target.files];
     e.target.value = '';
@@ -1639,6 +1753,24 @@ export function createEditor() {
     if (a === 'frDown' && i < fr.length - 1) { pushUndo(); [fr[i + 1], fr[i]] = [fr[i], fr[i + 1]]; renderLayerEditor(); commitLayers(); }
     if (a === 'frDel') { pushUndo(); fr.splice(i, 1); setSeriesDuration(L); renderLayerEditor(); commitLayers(); }
     if (a === 'frSort') { pushUndo(); fr.sort((x, y) => String(x.label).localeCompare(String(y.label), undefined, { numeric: true })); renderLayerEditor(); commitLayers(); }
+    if (a === 'wbList') {
+      try { toast('Loading Wayback dates…'); wbList = await waybackReleases(); renderLayerEditor(); }
+      catch { toast('Could not load the Wayback imagery list — check your connection', 4200); }
+    }
+    if (a === 'wbAll' || a === 'wbNone') $$('#layer-editor [data-wb]').forEach((c) => { c.checked = a === 'wbAll'; });
+    if (a === 'wbUse') {
+      const ids = new Set($$('#layer-editor [data-wb]').filter((c) => c.checked).map((c) => +c.dataset.wb));
+      const keep = (L.style.frames || []).filter((f) => ids.has(f.release) && !wbFiltered().some((r) => r.num === f.release));
+      const pick = wbFiltered().filter((r) => ids.has(r.num));
+      const all = [...keep.map((f) => wbList.find((r) => r.num === f.release)).filter(Boolean), ...pick].sort((x, y) => x.date.localeCompare(y.date));
+      if (!all.length) { toast('Tick at least one date'); return; }
+      if (all.length > 60) { toast('Up to 60 dates at a time — narrow the range'); return; }
+      pushUndo();
+      L.style.frames = all.map((r) => ({ release: r.num, url: r.url, date: r.date, year: r.year, label: wbLabel(r, wbFilter.fmt) }));
+      setSeriesDuration(L);
+      renderLayerEditor();
+      commitLayers();
+    }
     if (a === 'wbLoad') {
       const from = +$('#wb-from').value, to = +$('#wb-to').value, step = +$('#wb-step').value;
       try {
@@ -1658,7 +1790,7 @@ export function createEditor() {
     const f = e.target.files[0];
     e.target.value = '';
     const L = selLayer && layerById(selLayer);
-    if (!f || !L || L.kind !== 'videofx') return;
+    if (!f || !L || (L.kind !== 'videofx' && L.kind !== 'video')) return;
     if (f.size > 200e6) { toast('That clip is very large — use one under 200 MB'); return; }
     const id = `vd_${Math.random().toString(36).slice(2, 10)}`;
     await putMedia(id, f);
@@ -2317,6 +2449,7 @@ export function createEditor() {
     $('#render-preset').value = '';
     renderAudioList();
     renderSoundSettings();
+    renderLibrary();
   }
   const PRESETS = {
     yt1080: ['16:9', 1080, 30], yt4k: ['16:9', 2160, 30], reel: ['9:16', 1080, 30], igpost: ['4:5', 1080, 30],
@@ -2363,6 +2496,37 @@ export function createEditor() {
     const demo = [{ t: 0, type: 'hudboot', p: {} }, { t: 0.5, type: 'whistle', p: { dur: 0.8 } }, { t: 1.3, type: 'explosion', p: { size: 1.2 } }, { t: 2.6, type: 'jet', p: { dur: 3 } }];
     pf({ ...project, audio: [], sound: { ...project.sound, auto: true, music: 'none' } }, 0, 1, demo, 6).catch(() => {});
   };
+  // sound library
+  let libCat = Object.keys(SOUND_LIBRARY)[0];
+  function renderLibrary() {
+    $('#lib-cats').innerHTML = Object.keys(SOUND_LIBRARY).map((c) => `<button type="button" data-cat="${esc(c)}" class="${c === libCat ? 'active' : ''}">${esc(c)}</button>`).join('');
+    $('#lib-list').innerHTML = Object.entries(SOUND_LIBRARY[libCat]).map(([k, n]) => `<div class="lib-item"><span>${esc(n)}</span><button class="mini" data-play="${k}" title="Listen">▶</button><button class="mini" data-place="${k}" title="Place at the playhead">+</button></div>`).join('');
+    const list = project.sfx || [];
+    $('#lib-placed').innerHTML = list.map((c, i) => `<li data-i="${i}"><span>${esc(SOUND_NAMES[c.type] || c.type)}</span><input type="number" step="0.1" min="0" data-f="t" value="${(+c.t).toFixed(2)}" title="Starts at (s, whole video)"><input type="range" min="0" max="2" step="0.05" data-f="vol" value="${c.vol ?? 1}" title="Volume"><button class="mini" data-del="${i}" title="Remove">✕</button></li>`).join('');
+  }
+  $('#lib-cats').addEventListener('click', (e) => { const b = e.target.closest('[data-cat]'); if (b) { libCat = b.dataset.cat; renderLibrary(); } });
+  $('#lib-list').addEventListener('click', (e) => {
+    const pl = e.target.closest('[data-play]'), pc = e.target.closest('[data-place]');
+    if (pl) previewLibSound(pl.dataset.play).catch(() => {});
+    if (pc) {
+      pushUndo();
+      (project.sfx ||= []).push({ type: pc.dataset.place, t: +projTime(viewMode === 'play' ? time : model.trimIn).toFixed(2), vol: 1, dur: 2.5 });
+      eventsCache = null; renderLibrary(); renderTimeline(); save();
+      toast(`${SOUND_NAMES[pc.dataset.place]} placed at the playhead`);
+    }
+  });
+  $('#lib-placed').addEventListener('change', (e) => {
+    const li = e.target.closest('li[data-i]'); if (!li) return;
+    const c = project.sfx[+li.dataset.i]; if (!c) return;
+    pushUndo();
+    c[e.target.dataset.f] = Math.max(0, +e.target.value || 0);
+    eventsCache = null; renderTimeline(); save();
+  });
+  $('#lib-placed').addEventListener('click', (e) => {
+    const d = e.target.closest('[data-del]'); if (!d) return;
+    pushUndo(); project.sfx.splice(+d.dataset.del, 1); eventsCache = null; renderLibrary(); renderTimeline(); save();
+  });
+
   function renderAudioList() {
     const ul = $('#audio-list');
     const tracks = project.audio || [];
@@ -2496,7 +2660,7 @@ export function createEditor() {
   // ---------------------------------------------------------------- playback & timeline
   function applyCamera(t) {
     const c = model.cameraAt(t);
-    map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 });
+    jumpCam(c, scene(), t);
     applyTimeEffects(t);
   }
   /** Things inside the map that change with time: terrain floods and growing 3D buildings. */
@@ -2534,7 +2698,7 @@ export function createEditor() {
   /** Automatic sound effects for the whole project (cached until something changes). */
   let eventsCache = null;
   function soundEvents() {
-    const key = JSON.stringify([project.scenes.map((s) => [s.layers, s.camera, s.legs.length, s.trimIn, s.trimOut, s.transition, s.edits]), project.sound, frame.w, frame.h]);
+    const key = JSON.stringify([project.scenes.map((s) => [s.layers, s.camera, s.legs.length, s.trimIn, s.trimOut, s.transition, s.edits]), project.sound, project.sfx, frame.w, frame.h]);
     if (eventsCache?.key === key) return eventsCache.ev;
     let ev = [];
     try { ev = buildEvents(project, project.scenes.map((sc) => buildScene(sc, frame.w, frame.h))); } catch (err) { console.warn('sound events', err); }
@@ -2589,6 +2753,9 @@ export function createEditor() {
   const tl = createTimeline({
     scene, model: () => (project ? model : null), project: () => project, fps: () => project?.fps || 30,
     toast,
+    soundName: (k) => SOUND_NAMES[k],
+    sceneTimeOf: (pt) => { const o = pt - sceneOffset(); if (o < -1e-6 || o > model.duration + 1e-6) return null; return model.srcTime ? model.srcTime(o) : model.trimIn + o; },
+    sfxChanged: () => { eventsCache = null; if (step === 'export') renderLibrary(); },
     getTime: () => time,
     seek(t) { time = clamp(t, 0, model.total); setViewMode('play'); setPlaying(false); applyCamera(time); tl.playhead(); repaint(); },
     isPlaying: () => playing,
@@ -2841,7 +3008,7 @@ export function createEditor() {
         map, width, height,
         beforeFrame: (s2, m, tt) => seekScene(s2, tt, layerTiming),
         prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
-        applyCamera: (m, tt) => { const c = m.cameraAt(tt); map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 }); applyTimeEffects(tt, sc, m); },
+        applyCamera: (m, tt) => { const c = m.cameraAt(tt); jumpCam(c, sc, tt); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2, tt) => mapFilterAt(s2, tt),
         background: spaceBg,
         drawFrame: (ctx, s2, m, tt) => {
@@ -2852,7 +3019,9 @@ export function createEditor() {
           drawGradeWash(ctx, full, s2.look.grade);
           renderScene(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full, exact: true });
           drawVignette(ctx, full, +s2.camera.lens?.vignette || 0);
-          renderCaptions(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full });
+          drawLetterbox(ctx, full, s2.look, tt, unit);
+          renderCaptions(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full, exact: true });
+          drawScreenEffects(ctx, s2, { frame: full, unit, time: tt, src: { canvas: mc, sx: 0, sy: 0, sw: mc.width, sh: mc.height } }, layerTiming);
           drawAttribution(ctx, themeAttribution(s2.look), unit, width, height);
         },
       }, sc, t);
@@ -2931,7 +3100,7 @@ export function createEditor() {
         },
         applyCamera: (m, t) => {
           const c = m.cameraAt(t);
-          map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 });
+          jumpCam(c, expScene, t);
           applyTimeEffects(t, expScene, m);
         },
         drawFrame: (ctx, sc, m, t) => {
@@ -2943,7 +3112,9 @@ export function createEditor() {
           drawGradeWash(ctx, full, sc.look.grade);
           renderScene(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full, exact: true });
           drawVignette(ctx, full, +sc.camera.lens?.vignette || 0);
-          renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full });
+          drawLetterbox(ctx, full, sc.look, t, unit);
+          renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full, exact: true });
+          drawScreenEffects(ctx, sc, { frame: full, unit, time: t, src: { canvas: mc, sx: 0, sy: 0, sw: mc.width, sh: mc.height } }, layerTiming);
           drawAttribution(ctx, themeAttribution(sc.look), unit, width, height);
         },
         onStatus: (s) => { $('#render-status').textContent = s; },
@@ -3073,6 +3244,7 @@ function migrateScene(sc) {
   c.orbitSpeed ??= 12;
   sc.markers ||= [];
   sc.edits ||= { cuts: [], holds: [] };
+  sc.look.letterbox ??= 'none';
   sc.trimIn ??= 0;
   if (sc.trimOut === undefined) sc.trimOut = null;
   sc.transition ||= 'cut';

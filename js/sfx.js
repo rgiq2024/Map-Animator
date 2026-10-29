@@ -3,7 +3,7 @@
 // typing). Everything is generated with Web Audio, so it works offline and exports into the MP4.
 
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -215,6 +215,93 @@ const SYN = {
   },
 };
 
+// more library sounds
+Object.assign(SYN, {
+  riser(ctx, out, w, p) {
+    const d = clamp(p.dur || 2.5, 0.5, 10), v = p.vol ?? 1;
+    const n = src(ctx, 'white', w, d); const f = filt(ctx, 'bandpass', 300, 2);
+    f.frequency.setValueAtTime(200, w); f.frequency.exponentialRampToValueAtTime(6000, w + d);
+    const g = env(ctx, w, [[d * 0.9, 0.5 * v], [d, 0.001, 1]]);
+    n.connect(f).connect(g).connect(out); g.connect(reverb(ctx, out));
+    const o = osc(ctx, 'sawtooth', 110, w, d); o.frequency.exponentialRampToValueAtTime(880, w + d);
+    const of = filt(ctx, 'lowpass', 1200); const og = env(ctx, w, [[d * 0.9, 0.08 * v], [d, 0.001, 1]]);
+    o.connect(of).connect(og).connect(out);
+  },
+  hit(ctx, out, w, p) {
+    const v = p.vol ?? 1;
+    const o = osc(ctx, 'sine', 90, w, 1.8); o.frequency.exponentialRampToValueAtTime(32, w + 1.5);
+    const g = env(ctx, w, [[0.005, 1.3 * v], [1.8, 0.001, 1]]); o.connect(g).connect(out);
+    const n = src(ctx, 'white', w, 0.6); const f = filt(ctx, 'lowpass', 3000);
+    const ng = env(ctx, w, [[0.003, 0.8 * v], [0.5, 0.001, 1]]); n.connect(f).connect(ng).connect(out); ng.connect(reverb(ctx, out));
+  },
+  sub(ctx, out, w, p) {
+    const v = p.vol ?? 1;
+    const o = osc(ctx, 'sine', 48, w, 3); o.frequency.exponentialRampToValueAtTime(26, w + 2.8);
+    const g = env(ctx, w, [[0.02, 1.4 * v], [3, 0.001, 1]]); o.connect(g).connect(out);
+  },
+  static(ctx, out, w, p) {
+    const d = clamp(p.dur || 1.2, 0.2, 10), v = p.vol ?? 1;
+    const n = src(ctx, 'white', w, d); const f = filt(ctx, 'bandpass', 2400, 0.6);
+    const g = env(ctx, w, [[0.03, 0.35 * v], [d - 0.05, 0.3 * v], [d, 0.001, 1]]);
+    n.connect(f).connect(g).connect(out);
+    for (let t = 0; t < d; t += 0.08) if (Math.random() < 0.3) SYN.beep(ctx, out, w + t, { freq: 400 + Math.random() * 1600, vol: 0.15 * v });
+  },
+  radio(ctx, out, w, p) {
+    SYN.static(ctx, out, w, { dur: 0.25, vol: p.vol });
+    const o = osc(ctx, 'sine', 1000, w + 0.2, 0.18); const g = env(ctx, w + 0.2, [[0.005, 0.12 * (p.vol ?? 1)], [0.17, 0.001, 1]]); o.connect(g).connect(out);
+  },
+  heartbeat(ctx, out, w, p) {
+    const n = clamp(Math.round((p.dur || 3) / 0.9), 1, 30), v = p.vol ?? 1;
+    for (let i = 0; i < n; i++) for (const [dt, a] of [[0, 1], [0.22, 0.7]]) {
+      const t = w + i * 0.9 + dt;
+      const o = osc(ctx, 'sine', 62, t, 0.25); o.frequency.exponentialRampToValueAtTime(38, t + 0.2);
+      const g = env(ctx, t, [[0.01, 0.9 * v * a], [0.22, 0.001, 1]]); o.connect(g).connect(out);
+    }
+  },
+  shutter(ctx, out, w, p) {
+    const v = p.vol ?? 1;
+    for (const dt of [0, 0.07]) { const n = src(ctx, 'white', w + dt, 0.04); const f = filt(ctx, 'highpass', 1800); const g = env(ctx, w + dt, [[0.002, 0.5 * v], [0.04, 0.001, 1]]); n.connect(f).connect(g).connect(out); }
+  },
+  alarm(ctx, out, w, p) {
+    const d = clamp(p.dur || 2, 0.5, 10), v = p.vol ?? 1;
+    const o = osc(ctx, 'square', 700, w, d); const lfo = osc(ctx, 'sine', 2, w, d); const lg = ctx.createGain(); lg.gain.value = 250; lfo.connect(lg).connect(o.frequency);
+    const f = filt(ctx, 'lowpass', 2500); const g = env(ctx, w, [[0.05, 0.08 * v], [d - 0.05, 0.08 * v], [d, 0.001, 1]]);
+    o.connect(f).connect(g).connect(out);
+  },
+  click(ctx, out, w, p) { const o = osc(ctx, 'square', 2400, w, 0.02); const g = env(ctx, w, [[0.001, 0.15 * (p.vol ?? 1)], [0.018, 0.001, 1]]); o.connect(g).connect(out); },
+  swoosh(ctx, out, w, p) { SYN.whoosh(ctx, out, w, { dur: 0.45, vol: p.vol ?? 1 }); },
+  thunder(ctx, out, w, p) {
+    const v = p.vol ?? 1;
+    const n = src(ctx, 'brown', w, 5); const f = filt(ctx, 'lowpass', 900); f.frequency.exponentialRampToValueAtTime(120, w + 4.5);
+    const g = env(ctx, w, [[0.05, 1.3 * v], [0.4, 0.7 * v], [1.2, 1.0 * v], [5, 0.001, 1]]);
+    n.connect(f).connect(g).connect(out); g.connect(reverb(ctx, out));
+    SYN.hit(ctx, out, w, { vol: v * 0.5 });
+  },
+  crowd(ctx, out, w, p) {
+    const d = clamp(p.dur || 3, 0.5, 20), v = p.vol ?? 1;
+    const n = src(ctx, 'pink', w, d); const f = filt(ctx, 'bandpass', 900, 0.8);
+    const g = env(ctx, w, [[0.5, 0.35 * v], [d - 0.5, 0.35 * v], [d, 0.001, 1]]);
+    n.connect(f).connect(g).connect(out);
+  },
+  gunshot(ctx, out, w, p) {
+    const v = p.vol ?? 1;
+    const n = src(ctx, 'white', w, 0.5); const f = filt(ctx, 'lowpass', 5000); f.frequency.exponentialRampToValueAtTime(400, w + 0.3);
+    const g = env(ctx, w, [[0.002, 1.1 * v], [0.35, 0.001, 1]]); n.connect(f).connect(g).connect(out); g.connect(reverb(ctx, out));
+  },
+  sonar(ctx, out, w, p) { SYN.ping(ctx, out, w, { freq: 880, vol: p.vol }); },
+});
+/** The sound library: sounds you can drop on the timeline. */
+export const SOUND_LIBRARY = {
+  'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
+  'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
+  'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', rocket: 'Rocket launch' },
+  'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
+  'Ambience': { wind: 'Wind', crowd: 'Crowd murmur' },
+};
+export const SOUND_NAMES = Object.assign({}, ...Object.values(SOUND_LIBRARY));
+/** Play one library sound now (preview). */
+export function previewSound(ctx, out, type, p = {}) { const fn = SYN[type]; if (fn) fn(ctx, out, ctx.currentTime + 0.05, { dur: 2.5, n: 16, ...p }); }
+
 // ---------------------------------------------------------------- music beds
 const NOTE = (n) => 440 * 2 ** ((n - 69) / 12);
 function pad(ctx, out, w, d, notes, v, type = 'sawtooth', cutoff = 900) {
@@ -286,7 +373,7 @@ const MODE_SND = { plane: 'airliner', jet3d: 'jet', airliner3d: 'airliner', heli
 export function buildEvents(project, models) {
   const snd = { ...defaultSound(), ...(project.sound || {}) };
   const ev = [];
-  if (!snd.auto) return ev;
+  if (!snd.auto) { for (const c of project.sfx || []) if (!c.muted && SYN[c.type]) ev.push({ t: Math.max(0, +c.t || 0), type: c.type, p: { dur: +c.dur || 2.5, n: 16, vol: +c.vol || 1 } }); return ev.sort((a, b) => a.t - b.t); }
   let off = 0;
   project.scenes.forEach((sc, si) => {
     const m = models[si];
@@ -334,6 +421,22 @@ export function buildEvents(project, models) {
         else if (s.look === 'terminal' || s.look === 'telemetry') push(t0, 'type', { n: (s.text || '').length, dur: Math.max(0.5, D), vol: vol * 0.7 });
         else if (s.look === 'stamp') push(t0 + 0.12, 'braam', { vol: vol * 0.5 });
         else push(t0, 'glitch', { dur: 0.3, vol: vol * 0.6 });
+      } else if (L.kind === 'title') {
+        const lk = s.look || 'opener';
+        if (lk === 'opener' || lk === 'ending') push(t0, 'braam', { vol: vol * 0.8 });
+        else if (lk === 'cinematic') { push(Math.max(0, t0 - 1.6), 'riser', { dur: 1.6, vol: vol * 0.7 }); push(t0, 'hit', { vol }); }
+        else if (lk === 'glitch') push(t0, 'glitch', { dur: Math.min(1.2, D), vol });
+        else if (lk === 'chapter') push(t0, 'hit', { vol: vol * 0.6 });
+        else if (lk === 'location') push(t0, 'type', { n: (s.text || '').length + (s.sub || '').length, dur: D, vol: vol * 0.8 });
+      } else if (L.kind === 'news') {
+        if (s.look === 'breaking') { push(t0, 'hit', { vol: vol * 0.7 }); push(t0 + 0.05, 'swoosh', { vol }); }
+        else push(t0, 'swoosh', { vol: vol * 0.6 });
+      } else if (L.kind === 'effect') {
+        if (s.look === 'glitch' || s.look === 'chroma') push(t0, 'glitch', { dur: Math.min(1.5, D), vol });
+        else if (s.look === 'vhs') push(t0, 'static', { dur: 0.6, vol: vol * 0.6 });
+        else if (s.look === 'flash') push(t0, 'hit', { vol: vol * 0.7 });
+        else if (s.look === 'shake') push(t0, 'sub', { vol });
+        else if (s.look === 'rain') push(t0, 'wind', { dur: Math.max(2, D), vol: vol * 0.5 });
       } else if (L.kind === 'compare') {
         push(t0 + 0.1, 'whoosh', { dur: Math.min(2.5, D), vol: vol * 0.6 });
       } else if (L.kind === 'timeseries') {
@@ -378,6 +481,8 @@ export function buildEvents(project, models) {
     // transition whoosh
     if (si < project.scenes.length - 1 && (sc.transition || 'cut') !== 'cut') ev.push({ t: Math.max(0, off - 0.5), type: 'whoosh', p: { dur: 1, vol: 0.7 } });
   });
+  // sounds placed from the library (project time)
+  for (const c of project.sfx || []) if (!c.muted && SYN[c.type]) ev.push({ t: Math.max(0, +c.t || 0), type: c.type, p: { dur: +c.dur || 2.5, n: 16, vol: +c.vol || 1 } });
   return ev.sort((a, b) => a.t - b.t);
 }
 
@@ -397,4 +502,4 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
   scheduleMusic(ctx, mus, snd.music, from, to, when);
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none'); };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).length > 0; };

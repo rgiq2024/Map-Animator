@@ -34,7 +34,126 @@ function trace(ctx, proj, coords) {
   }
 }
 
+/** Screen points of a line, split where it wraps around the world. */
+function screenRuns(proj, coords) {
+  const runs = [];
+  let cur = [], prev = null;
+  for (const c of coords) {
+    const p = proj(c);
+    if (prev && Math.abs(p[0] - prev[0]) > proj.worldPx / 2) { if (cur.length > 1) runs.push(cur); cur = []; }
+    cur.push(p); prev = p;
+  }
+  if (cur.length > 1) runs.push(cur);
+  return runs;
+}
+/** A polyline shifted sideways by d pixels (mitred, clamped). */
+function offsetLine(pts, d) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[i], c = pts[Math.min(pts.length - 1, i + 1)];
+    let n1x = -(b[1] - a[1]), n1y = b[0] - a[0], n2x = -(c[1] - b[1]), n2y = c[0] - b[0];
+    const l1 = Math.hypot(n1x, n1y) || 1, l2 = Math.hypot(n2x, n2y) || 1;
+    n1x /= l1; n1y /= l1; n2x /= l2; n2y /= l2;
+    if (i === 0) { n1x = n2x; n1y = n2y; }
+    if (i === pts.length - 1) { n2x = n1x; n2y = n1y; }
+    let nx = n1x + n2x, ny = n1y + n2y;
+    const nl = Math.hypot(nx, ny) || 1;
+    nx /= nl; ny /= nl;
+    const k = Math.min(2.5, 1 / Math.max(0.2, nx * n1x + ny * n1y));
+    out.push([b[0] + nx * d * k, b[1] + ny * d * k]);
+  }
+  return out;
+}
+const pathOf = (ctx, pts) => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); };
+/** 3D-looking tracks: railway (ballast, sleepers, two steel rails), road and bus lane, with a drop shadow. */
+function strokeTrack(ctx, proj, coords, color, style, w) {
+  const runs = screenRuns(proj, coords);
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const pts of runs) {
+    // shadow
+    ctx.save();
+    ctx.translate(w * 0.35, w * 0.55);
+    ctx.filter = `blur(${Math.max(1, w * 0.45)}px)`;
+    pathOf(ctx, pts); ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = w * 3.6; ctx.stroke();
+    ctx.restore();
+    if (style === 'rail3d') {
+      pathOf(ctx, pts); ctx.strokeStyle = '#7d756b'; ctx.lineWidth = w * 3.4; ctx.stroke();           // ballast
+      pathOf(ctx, pts); ctx.strokeStyle = '#968e83'; ctx.lineWidth = w * 2.8; ctx.stroke();
+      ctx.save(); ctx.lineCap = 'butt'; ctx.setLineDash([w * 0.5, w * 0.62]);
+      pathOf(ctx, pts); ctx.strokeStyle = '#4e3b2a'; ctx.lineWidth = w * 2.5; ctx.stroke();         // sleepers
+      ctx.restore();
+      for (const sgn of [-1, 1]) {
+        const r = offsetLine(pts, sgn * w * 0.72);
+        pathOf(ctx, r); ctx.strokeStyle = '#3b3f45'; ctx.lineWidth = w * 0.42; ctx.stroke();
+        pathOf(ctx, r); ctx.strokeStyle = '#d9dee4'; ctx.lineWidth = w * 0.2; ctx.stroke();
+      }
+      // coloured line marker in the middle so the route colour still reads
+      ctx.save(); ctx.globalAlpha = 0.85; pathOf(ctx, pts); ctx.strokeStyle = color; ctx.lineWidth = w * 0.22; ctx.stroke(); ctx.restore();
+    } else {
+      const bus = style === 'bus3d';
+      pathOf(ctx, pts); ctx.strokeStyle = bus ? '#7a1f1a' : '#24272b'; ctx.lineWidth = w * 3.4; ctx.stroke();  // kerb
+      pathOf(ctx, pts); ctx.strokeStyle = bus ? '#b5352c' : '#3b3f45'; ctx.lineWidth = w * 3.0; ctx.stroke();  // surface
+      pathOf(ctx, pts); ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = w * 1.4; ctx.stroke();      // sheen
+      for (const sgn of [-1, 1]) { const r = offsetLine(pts, sgn * w * 1.25); pathOf(ctx, r); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = Math.max(1, w * 0.14); ctx.stroke(); }
+      ctx.save(); ctx.lineCap = 'butt'; ctx.setLineDash([w * 1.1, w * 1.0]);
+      pathOf(ctx, pts); ctx.strokeStyle = bus ? '#ffffff' : '#ffd23f'; ctx.lineWidth = Math.max(1, w * 0.18); ctx.stroke();
+      ctx.restore();
+      ctx.save(); ctx.globalAlpha = 0.9; ctx.setLineDash([0.001, w * 6]); pathOf(ctx, pts); ctx.strokeStyle = color; ctx.lineWidth = w * 0.7; ctx.stroke(); ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+/** Height (px) of a lifted 3D flight arc for a leg. */
+export function flightLift(proj, L, unit) {
+  let len = 0, prev = null;
+  for (let i = 0; i < L.coords.length; i += Math.max(1, Math.floor(L.coords.length / 60))) { const p = proj(L.coords[i]); if (prev) len += Math.hypot(p[0] - prev[0], p[1] - prev[1]); prev = p; }
+  return Math.max(24 * unit, Math.min(240 * unit, len * 0.2));
+}
+/** Flight arc lifted off the map with a ground shadow and hanging lines. */
+function strokeFlight(ctx, proj, L, coords, color, w, unit) {
+  const H = flightLift(proj, L, unit);
+  const total = L.coords.length - 1 || 1;
+  const n = coords.length;
+  const ground = coords.map(proj);
+  const lift = (i) => Math.sin(Math.PI * Math.min(1, i / total)) * H;
+  const air = ground.map((p, i) => [p[0], p[1] - lift(Math.min(i, total))]);
+  if (n > 1) {
+    const last = coords.at(-1);
+    air[n - 1] = [ground[n - 1][0], ground[n - 1][1] - liftAt(L, last) * H];
+  }
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // ground shadow
+  ctx.setLineDash([w * 1.2, w * 1.4]);
+  pathOf(ctx, ground); ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = w * 0.8; ctx.stroke();
+  ctx.setLineDash([]);
+  // curtain
+  const step = Math.max(1, Math.floor(n / 24));
+  ctx.strokeStyle = hexA(color, 0.22); ctx.lineWidth = Math.max(1, w * 0.18);
+  for (let i = 0; i < n; i += step) { ctx.beginPath(); ctx.moveTo(ground[i][0], ground[i][1]); ctx.lineTo(air[i][0], air[i][1]); ctx.stroke(); }
+  // glowing arc
+  ctx.shadowColor = hexA(color, 0.8); ctx.shadowBlur = w * 2.2;
+  pathOf(ctx, air); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = w * 1.5; ctx.stroke();
+  ctx.shadowBlur = 0;
+  pathOf(ctx, air); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.stroke();
+  ctx.restore();
+}
+/** 0…1 lift factor at a point of a leg (by nearest vertex). */
+function liftAt(L, pt) {
+  let best = 0, bd = Infinity;
+  const step = Math.max(1, Math.floor(L.coords.length / 400));
+  for (let i = 0; i < L.coords.length; i += step) { const c = L.coords[i]; const d = (c[0] - pt[0]) ** 2 + (c[1] - pt[1]) ** 2; if (d < bd) { bd = d; best = i; } }
+  return Math.sin(Math.PI * (best / Math.max(1, L.coords.length - 1)));
+}
+function hexA(hex, a) {
+  const h = String(hex || '#ff4a2b').replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 function strokeLeg(ctx, proj, coords, color, style, w, outline) {
+  if (style === 'rail3d' || style === 'road3d' || style === 'bus3d') { strokeTrack(ctx, proj, coords, color, style, w); return; }
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -199,7 +318,7 @@ export function renderScene(ctx, o) {
   const out = { signBoxes: [], legBadges: [], handles: [], layerHandles: [], proj };
   const edit = o.edit;
   const tokens = o.tokens || tokensAt(model, time);
-  const lo = { scene, proj, unit, time, frame: o.frame, tokens, exact: o.exact };
+  const lo = { scene, proj, unit, time, frame: o.frame, tokens, exact: o.exact, pitch: map.getPitch() };
   drawLayers(ctx, lo, 'below');
 
   // ---- route lines ----
@@ -215,7 +334,8 @@ export function renderScene(ctx, o) {
       } else if (legEnd > st.drawn + 1e-6) continue;
     }
     const active = edit && edit.step === 'route' && edit.activeLeg === L.li;
-    strokeLeg(ctx, proj, coords, L.color, L.style, active ? w * 1.15 : w, look.outline !== false);
+    if (L.style === 'flight3d') strokeFlight(ctx, proj, L, coords, L.color, active ? w * 1.15 : w, unit);
+    else strokeLeg(ctx, proj, coords, L.color, L.style, active ? w * 1.15 : w, look.outline !== false);
   }
 
   // ---- editing: leg badges + handles ----
@@ -339,7 +459,9 @@ export function renderScene(ctx, o) {
   // ---- travel symbol ----
   if (model.drawable.length) {
     if (st && st.point) {
-      drawSymbol(ctx, look, st.L, ...proj(st.point), st.heading - map.getBearing(), unit, time);
+      const sp = proj(st.point);
+      if (st.L.style === 'flight3d') sp[1] -= flightLift(proj, st.L, unit) * Math.sin(Math.PI * clamp(st.dist / Math.max(1e-9, st.L.m.length), 0, 1));
+      drawSymbol(ctx, look, st.L, sp[0], sp[1], st.heading - map.getBearing(), unit, time);
     } else if (!st) {
       const L = model.drawable.at(-1);
       const end = L.coords.at(-1);

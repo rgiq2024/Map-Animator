@@ -193,6 +193,43 @@
           <button data-add="wayback"><i>🛰</i>Satellite through time</button>
         </div>
         <p class="muted small add-note">Images: PNG/JPG (with a .pgw/.jgw/.wld world file), GeoTIFF, or KML/KMZ ground overlays — or any picture you line up by hand.</p>
+        <span class="label-caps">Nature</span>
+        <div class="add-grid fx" id="add-nature">
+          <button data-add="trees"><i>🌳</i>Trees (forest area)</button>
+          <button data-add="treerow"><i>🌴</i>Tree row (along a line)</button>
+        </div>
+        <span class="label-caps">Titles &amp; TV news</span>
+        <div class="add-grid fx" id="add-titles">
+          <button data-add="title" data-look="opener"><i>🎬</i>Opening title</button>
+          <button data-add="title" data-look="cinematic"><i>✦</i>Cinematic title</button>
+          <button data-add="title" data-look="glitch"><i>▚</i>Glitch title</button>
+          <button data-add="title" data-look="chapter"><i>Ⅰ</i>Chapter card</button>
+          <button data-add="title" data-look="location"><i>⌖</i>Location stamp</button>
+          <button data-add="title" data-look="credits"><i>≡</i>Rolling credits</button>
+          <button data-add="title" data-look="quote"><i>❝</i>Quote</button>
+          <button data-add="title" data-look="ending"><i>■</i>End title</button>
+          <button data-add="news" data-look="bug"><i>📺</i>Channel logo</button>
+          <button data-add="news" data-look="live"><i>●</i>LIVE badge</button>
+          <button data-add="news" data-look="breaking"><i>⚡</i>Breaking news</button>
+          <button data-add="news" data-look="headline"><i>▭</i>News lower third</button>
+          <button data-add="hudtext" data-look="ticker"><i>⇆</i>News ticker</button>
+        </div>
+        <span class="label-caps">Effects &amp; video</span>
+        <div class="add-grid fx" id="add-effects">
+          <button data-add="video"><i>▶</i>Video</button>
+          <button data-add="effect" data-look="grain"><i>░</i>Film grain</button>
+          <button data-add="effect" data-look="oldfilm"><i>🎞</i>Old film</button>
+          <button data-add="effect" data-look="vhs"><i>📼</i>VHS</button>
+          <button data-add="effect" data-look="glitch"><i>▚</i>Glitch</button>
+          <button data-add="effect" data-look="chroma"><i>◑</i>Colour split</button>
+          <button data-add="effect" data-look="lightleak"><i>☀</i>Light leak</button>
+          <button data-add="effect" data-look="flash"><i>⚡</i>Flash</button>
+          <button data-add="effect" data-look="shake"><i>〰</i>Camera shake</button>
+          <button data-add="effect" data-look="focus"><i>◎</i>Focus pull</button>
+          <button data-add="effect" data-look="rain"><i>🌧</i>Rain</button>
+          <button data-add="effect" data-look="snow"><i>❄</i>Snow</button>
+          <button data-add="effect" data-look="fog"><i>🌫</i>Fog</button>
+        </div>
         <span class="label-caps">Space &amp; defence</span>
         <div class="add-grid fx" id="add-fx">
           <button data-add="satellite"><i>🛰️</i>Satellite pass</button>
@@ -273,6 +310,8 @@
             <label class="row sub-row"><span>Show</span><select data-look="cloudMode"><option value="zoom">Only while zooming</option><option value="always">Always (fog)</option></select></label>
             <label class="row sub-row"><span>Amount</span><input type="range" min="0.1" max="1.5" step="0.05" data-look="cloudAmount" /></label>
           </div>
+          <label class="row"><span>Cinema bars (letterbox)</span><select data-look="letterbox"><option value="none">None</option><option value="2.39">2.39 : 1 (scope)</option><option value="2">2 : 1</option><option value="1.85">1.85 : 1</option></select></label>
+          <label class="row sub-row"><span>Bars slide in at the start</span><input type="checkbox" class="switch" data-look="letterboxAnim" /></label>
           <label class="row"><span>Zoom blur (warp while zooming)</span><input type="checkbox" class="switch" data-look="zoomBlur" /></label>
           <label class="row"><span>3D buildings</span><input type="checkbox" class="switch" data-look="buildings3d" /></label>
           <label class="row" id="rlabels-row"><span>Place names on top</span><input type="checkbox" class="switch" data-look="rasterLabels" /></label>
@@ -486,6 +525,13 @@
               <div class="btn-row"><button class="btn sm" id="snd-test" type="button">▶ Test sounds</button></div>
             </div>
           </div>
+          <div class="sfx-lib">
+            <span class="label-caps">Sound library</span>
+            <div class="lib-cats" id="lib-cats"></div>
+            <div class="lib-list" id="lib-list"></div>
+            <p class="note small">▶ listens · <b>+</b> places the sound at the playhead (drag it on the timeline's Audio row to move it).</p>
+            <ul class="lib-placed" id="lib-placed"></ul>
+          </div>
           <div class="btn-row"><button class="btn sm" id="audio-add">♪ Add music…</button><button class="btn sm" id="audio-rec">🎙 Record voiceover</button></div>
           <p class="note small" id="audio-note">Voiceovers start at the playhead; the animation plays while you talk. Drag the bars on the timeline to move them.</p>
           <ul class="audio-list" id="audio-list"></ul>
@@ -687,6 +733,8 @@
       <li><b>Layers.</b> Draw or import boundaries, areas, floods, lines, points, animated symbols, text and captions. Each has its own animation and timing — trace a boundary, spread a flood from a point, raise water over real terrain, pulse a symbol, type out a caption.</li>
       <li><b>Space &amp; defence.</b> In the Layers step add satellite passes, the ISS orbit, launch sites, 3D ships/jets/drones, missile and drone paths, blasts, bombing runs and capture areas — plus charts, counters, HUD overlays and flicker text. Add <i>3D model</i> (built-in or <i>Upload GLB / glTF</i>) or an <i>Effect clip</i> video. Select an item and drag its square handle to resize it, the round handle to rotate it.</li>
       <li><b>Imagery.</b> Add a georeferenced image (PNG/JPG with its world file, a GeoTIFF or a KML/KMZ overlay) or any picture and line it up by dragging its corners. Use <i>Before / after</i> to swipe between two images, <i>Images through time</i> for a year-by-year sequence, or <i>Satellite through time</i> for archived Esri imagery.</li>
+      <li><b>Film &amp; TV.</b> Add opening/cinematic/end titles, rolling credits, a channel logo, BREAKING NEWS and a ticker from <i>Titles &amp; TV news</i>; cinema bars are in Look. Add your own video, film grain, VHS, glitch, rain or camera shake from <i>Effects &amp; video</i>. Drop sounds from the sound library in Preview &amp; export.</li>
+      <li><b>Speed &amp; tracks.</b> Click a leg to change its speed or pick a 3D track (railway, bus lane, road, flight arc). Use the Slower / Faster buttons on any layer.</li>
       <li><b>Timeline edits.</b> Shift + drag across the timeline and press Delete to cut a section out; <i>Freeze</i> holds the picture at the playhead; <i>+1 s</i> makes the scene longer. Captions, charts and HUD text can be dragged anywhere on the video.</li>
       <li><b>Sound.</b> Cinematic sound effects are added automatically — explosions, aircraft, HUD beeps, wind when the camera zooms. Pick a background score and volumes in Preview &amp; export; switch sound off for any layer in its settings.</li>
       <li><b>Globe.</b> Turn on the globe in Look, then pick “Earth zoom from space” in Camera. Search a place or type coordinates like <kbd>25.2, 55.27</kbd> to fly there.</li>

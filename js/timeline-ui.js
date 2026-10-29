@@ -82,6 +82,10 @@ export function createTimeline(api) {
       const s1 = s0 + len;
       if (s1 < 0 || s0 > T) return '';
       return `<div class="ab ${tr.kind}" data-id="${tr.id}" style="left:${pct(Math.max(0, s0))};width:${pct(Math.min(T, s1) - Math.max(0, s0))}" title="${esc(tr.name)} · drag to move"><span>${tr.kind === 'voice' ? '🎙' : '♪'} ${esc(tr.name)}</span></div>`;
+    }).join('') + (api.project().sfx || []).map((c, i) => {
+      const st = api.sceneTimeOf ? api.sceneTimeOf(c.t) : c.t - off + m.trimIn;
+      if (st == null || st < 0 || st > T) return '';
+      return `<i class="sfxm" data-i="${i}" style="left:${pct(st)}" title="${esc(api.soundName?.(c.type) || c.type)} · drag to move · double-click to remove"></i>`;
     }).join('');
 
     // trim shades & handles
@@ -162,6 +166,18 @@ export function createTimeline(api) {
     if (range) { range = null; }
     let drag = null;
     const tgt = e.target;
+    const sfxm = tgt.closest('.sfxm');
+    if (sfxm) {
+      const c = api.project().sfx[+sfxm.dataset.i];
+      if (e.detail === 2) { api.pushUndo(); api.project().sfx.splice(+sfxm.dataset.i, 1); api.commit(); api.sfxChanged?.(); return; }
+      const p0 = c.t;
+      inner.setPointerCapture(e.pointerId);
+      const x0 = e.clientX; let mv = false;
+      const move = (ev) => { if (!mv) { api.pushUndo(); mv = true; } c.t = Math.max(0, +(p0 + ((ev.clientX - x0) / W()) * total()).toFixed(2)); render(); };
+      const up = () => { inner.removeEventListener('pointermove', move); inner.removeEventListener('pointerup', up); if (mv) { api.commit(); api.sfxChanged?.(); } };
+      inner.addEventListener('pointermove', move); inner.addEventListener('pointerup', up);
+      return;
+    }
     const lb = tgt.closest('.lb'), sig = tgt.closest('.sig'), kf = tgt.closest('.kf'), mk = tgt.closest('.mk'), ab = tgt.closest('.ab'), lineb = tgt.closest('.lineb'), trimH = tgt.closest('.trim-h');
     if (trimH) {
       const which = trimH.classList.contains('in') ? 'in' : 'out';

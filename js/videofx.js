@@ -32,13 +32,16 @@ const localTime = (L, tau, dur) => {
 export async function seekScene(scene, t, layerTiming) {
   const jobs = [];
   for (const L of scene.layers || []) {
-    if (L.kind !== 'videofx' || L.hidden || !L.style.media) continue;
+    if ((L.kind !== 'videofx' && L.kind !== 'video') || L.hidden || !L.style.media) continue;
     const v = videoFor(L.style.media);
     if (!v) continue;
     if (!v.ready) await new Promise((res) => { const to = setTimeout(res, 4000); v.el.addEventListener('loadeddata', () => { clearTimeout(to); res(); }, { once: true }); });
     const tm = layerTiming(L, t);
     if (!tm.visible) continue;
-    const target = localTime(L, tm.tau, v.el.duration || 0);
+    const dur = v.el.duration || 0;
+    let target;
+    if (L.kind === 'video') { target = Math.max(0, tm.tau) * (+L.style.speed || 1) + (+L.style.trim || 0); if (L.style.loop && dur > 0) target %= dur; target = Math.min(target, Math.max(0, dur - 0.04)); }
+    else target = localTime(L, tm.tau, dur);
     if (Math.abs(v.el.currentTime - target) < 0.001) continue;
     jobs.push(new Promise((res) => { const to = setTimeout(res, 3000); v.el.addEventListener('seeked', () => { clearTimeout(to); res(); }, { once: true }); v.el.currentTime = target; }));
   }

@@ -46,7 +46,7 @@ export async function pickCodec(width, height, fps) {
   return null;
 }
 
-export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through' };
+export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through', slide: 'Slide in', push: 'Push', whip: 'Whip pan', iris: 'Circle reveal', flash: 'Flash', blur: 'Blur dissolve', glitch: 'Glitch', spin: 'Spin zoom', bars: 'Venetian blinds' };
 
 /**
  * @param o.scenes array of scenes
@@ -138,6 +138,7 @@ async function forEachFrame(o, ctx, emit, canvas) {
   snap.width = width; snap.height = height;
   const sctx = snap.getContext('2d');
   let haveSnap = false;
+  let cur = null;
   for (let si = 0; si < o.scenes.length; si++) {
     const scene = o.scenes[si];
     o.onStatus?.(`Loading the map for ${scene.name}…`);
@@ -161,6 +162,39 @@ async function forEachFrame(o, ctx, emit, canvas) {
       if (haveSnap && tau < prevD) {
         const u = tau / prevD;
         const e = 0.5 - 0.5 * Math.cos(Math.PI * u);
+        if (['slide', 'push', 'whip', 'iris', 'flash', 'blur', 'glitch', 'spin', 'bars'].includes(prevTr)) {
+          cur ||= Object.assign(document.createElement('canvas'), { width, height });
+          const cc = cur.getContext('2d');
+          cc.clearRect(0, 0, width, height); cc.drawImage(canvas, 0, 0);
+          ctx.save();
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
+          if (prevTr === 'slide') { ctx.drawImage(snap, 0, 0); ctx.drawImage(cur, width * (1 - e), 0); }
+          if (prevTr === 'push') { ctx.drawImage(snap, -width * e, 0); ctx.drawImage(cur, width * (1 - e), 0); }
+          if (prevTr === 'whip') {
+            const steps = 6;
+            for (let k = 0; k < steps; k++) {
+              const ee = Math.min(1, e + (k / steps) * 0.12);
+              ctx.globalAlpha = 1 / (k + 1);
+              ctx.drawImage(snap, -width * ee, 0); ctx.drawImage(cur, width * (1 - ee), 0);
+            }
+            ctx.globalAlpha = 1;
+          }
+          if (prevTr === 'iris') { ctx.drawImage(snap, 0, 0); ctx.beginPath(); ctx.arc(width / 2, height / 2, Math.hypot(width, height) * 0.5 * e, 0, Math.PI * 2); ctx.clip(); ctx.drawImage(cur, 0, 0); }
+          if (prevTr === 'flash') { ctx.drawImage(e < 0.5 ? snap : cur, 0, 0); ctx.fillStyle = `rgba(255,255,255,${1 - Math.abs(e - 0.5) * 2})`; ctx.fillRect(0, 0, width, height); }
+          if (prevTr === 'blur') { ctx.filter = `blur(${(1 - e) * 18}px)`; ctx.drawImage(cur, 0, 0); ctx.filter = `blur(${e * 18}px)`; ctx.globalAlpha = 1 - e; ctx.drawImage(snap, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = 1; }
+          if (prevTr === 'spin') { ctx.drawImage(cur, 0, 0); ctx.globalAlpha = 1 - e; ctx.translate(width / 2, height / 2); ctx.rotate(e * 0.9); ctx.scale(1 + e * 1.5, 1 + e * 1.5); ctx.drawImage(snap, -width / 2, -height / 2); }
+          if (prevTr === 'bars') { ctx.drawImage(snap, 0, 0); const n = 10, bh = height / n; ctx.beginPath(); for (let k = 0; k < n; k++) ctx.rect(0, k * bh, width, bh * e); ctx.clip(); ctx.drawImage(cur, 0, 0); }
+          if (prevTr === 'glitch') {
+            ctx.drawImage(e < 0.5 ? snap : cur, 0, 0);
+            const n = 14;
+            for (let k = 0; k < n; k++) {
+              const r1 = Math.abs(Math.sin((k + 1) * 12.9898 + i * 78.233)) % 1, r2 = Math.abs(Math.sin((k + 3) * 4.1414 + i * 3.7)) % 1;
+              const y = r1 * height, h = (0.02 + r2 * 0.08) * height;
+              ctx.drawImage(r2 < 0.5 ? snap : cur, 0, y, width, h, (r1 - 0.5) * width * 0.15 * (1 - Math.abs(e - 0.5) * 2), y, width, h);
+            }
+          }
+          ctx.restore();
+        }
         ctx.save();
         if (prevTr === 'dissolve') { ctx.globalAlpha = 1 - e; ctx.drawImage(snap, 0, 0); }
         if (prevTr === 'wipe') { ctx.beginPath(); ctx.rect(width * e, 0, width * (1 - e), height); ctx.clip(); ctx.drawImage(snap, 0, 0); ctx.restore(); ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(width * e - 2, 0, 4, height); }

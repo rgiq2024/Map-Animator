@@ -1,7 +1,7 @@
 // Soundtrack: music files and recorded voiceovers. Tracks sit on the project timeline (seconds from the
 // start of the whole video). Used for live preview and mixed + encoded into the MP4 on export.
 import { getMedia, putMedia } from './store.js';
-import { scheduleAll, hasSound } from './sfx.js';
+import { scheduleAll, hasSound, previewSound } from './sfx.js';
 
 export const SR = 48000;
 const buffers = new Map();
@@ -183,4 +183,13 @@ export async function encodeAudio(buffer, picked, muxer) {
   await enc.flush();
   enc.close();
   if (err) throw err;
+}
+
+/** Hear one library sound now. */
+export async function previewLibSound(type, vol = 1) {
+  const ctx = ctxLive();
+  if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+  const bus = masterBus(ctx, ctx.destination);
+  previewSound(ctx, bus, type, { vol });
+  setTimeout(() => { try { bus.disconnect(); } catch { /* ignore */ } }, 7000);
 }

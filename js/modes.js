@@ -6,6 +6,7 @@ export const MODE_GROUPS = [
   { name: 'On land', modes: ['car', 'caravan', 'motorhome', 'bus', 'truck', 'tuktuk', 'motorcycle', 'offroad', 'atv', 'snowmobile', 'bicycle', 'steamtrain', 'train', 'speedtrain', 'tram'] },
   { name: 'On water', modes: ['boat', 'sailboat', 'cruise', 'ferry', 'kayak'] },
   { name: 'In the air', modes: ['plane', 'helicopter', 'balloon', 'paraglider', 'rocket'] },
+  { name: 'Transport · 3D tracks', modes: ['bus3d', 'car3d', 'train3d', 'metro3d', 'flight3d', 'jetflight3d'] },
   { name: 'Military & space · 3D', modes: ['jet3d', 'airliner3d', 'heli3d', 'drone3d', 'quad3d', 'missile3d', 'warship3d', 'cargo3d', 'sub3d', 'tank3d', 'sat3d'] },
 ];
 
@@ -51,9 +52,15 @@ export const MODES = {
   sub3d:      { label: 'Submarine', icon: '🚢', sprite: 'submarine', style: 'dotted' },
   tank3d:     { label: 'Tank', icon: '🪖', sprite: 'tank', style: 'dashed', route: 'car' },
   sat3d:      { label: 'Satellite', icon: '🛰️', sprite: 'satellite', style: 'dashed', air: true },
+  bus3d:      { label: 'Bus · 3D bus lane', icon: '🚌', style: 'bus3d', route: 'car' },
+  car3d:      { label: 'Car · 3D road', icon: '🚗', style: 'road3d', route: 'car' },
+  train3d:    { label: 'Train · 3D railway track', icon: '🚆', style: 'rail3d' },
+  metro3d:    { label: 'Metro · 3D track', icon: '🚇', style: 'rail3d' },
+  flight3d:   { label: 'Plane · 3D flight arc', icon: '✈️', style: 'flight3d', air: true, rot: -45 },
+  jetflight3d:{ label: 'Airliner · 3D flight arc', icon: '✈️', sprite: 'airliner', style: 'flight3d', air: true },
 };
 
-export const LINE_STYLES = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', rail: 'Railway' };
+export const LINE_STYLES = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', rail: 'Railway', rail3d: 'Railway track (3D)', road3d: 'Road (3D)', bus3d: 'Bus lane (3D)', flight3d: 'Flight arc (3D, lifted)' };
 
 export const modeOf = (leg) => MODES[leg?.mode] || MODES.line;
 export const lineStyleOf = (leg) => leg?.lineStyle || modeOf(leg).style || 'solid';

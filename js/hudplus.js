@@ -348,21 +348,34 @@ export function drawHudText(ctx, L, tm, o) {
     ctx.fillStyle = col; ctx.textAlign = 'center';
     rows.forEach((l, i) => ctx.fillText(l, 0, -H / 2 + pad + lh * (i + 0.5)));
   } else if (st === 'ticker') {
-    ctx.fillStyle = 'rgba(6,8,12,0.82)'; ctx.fillRect(x, y, W, H);
-    ctx.fillStyle = col; ctx.fillRect(x, y, W, 3 * unit);
-    const label = s.label || 'BREAKING';
+    const bg = s.bg || 'rgba(6,8,12,0.88)', tagBg = s.tagBg || col, txtCol = s.textColor || '#ffffff';
+    ctx.fillStyle = bg; ctx.fillRect(x, y, W, H);
+    ctx.fillStyle = tagBg; ctx.fillRect(x, y, W, 3 * unit);
+    const label = s.label ?? 'BREAKING';
     ctx.font = `900 ${fs}px ${UI}`;
-    const lw = ctx.measureText(label).width + 26 * unit;
-    const txt = `${rows.join('   •   ')}   •   `;
-    ctx.font = `600 ${fs}px ${F}`;
-    const twd = ctx.measureText(txt).width;
-    const off = ((t * 90 * unit * (+s.speed || 1)) % twd);
-    ctx.save(); ctx.beginPath(); ctx.rect(x + lw, y, W - lw, H); ctx.clip();
-    ctx.fillStyle = '#fff';
+    const lw = label ? ctx.measureText(label).width + 26 * unit : 0;
+    const clk = s.clock ? (() => { const m = String(s.clock).match(/(\d{1,2}):(\d{2})/); let sec = (m ? +m[1] * 3600 + +m[2] * 60 : 0) + Math.floor(t); sec %= 86400; return `${String(Math.floor(sec / 3600)).padStart(2, '0')}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}`; })() : '';
+    const cw = clk ? ctx.measureText('00:00').width + 22 * unit : 0;
+    const sep = `   ${s.sep || '•'}   `;
+    const items = rows.map((r) => (s.upper ? r.toUpperCase() : r));
+    const txt = items.join(sep) + sep;
+    ctx.font = `${s.bold ? 800 : 600} ${fs}px ${F}`;
+    const twd = Math.max(1, ctx.measureText(txt).width);
+    let off = (t * 90 * unit * (+s.speed || 1)) % twd;
+    if (s.dir === 'right') off = twd - off;
+    ctx.save(); ctx.beginPath(); ctx.rect(x + lw, y, W - lw - cw, H); ctx.clip();
+    ctx.fillStyle = txtCol;
     for (let xx = x + lw - off; xx < x + W; xx += twd) ctx.fillText(txt, xx + 10 * unit, y + H / 2 + 1);
     ctx.restore();
-    ctx.fillStyle = col; ctx.fillRect(x, y, lw, H);
-    ctx.fillStyle = '#fff'; ctx.font = `900 ${fs}px ${UI}`; ctx.fillText(label, x + 13 * unit, y + H / 2 + 1);
+    if (label) {
+      ctx.fillStyle = tagBg; ctx.fillRect(x, y, lw, H);
+      ctx.beginPath(); ctx.moveTo(x + lw, y); ctx.lineTo(x + lw + 10 * unit, y + H / 2); ctx.lineTo(x + lw, y + H); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = s.tagText || '#fff'; ctx.font = `900 ${fs}px ${UI}`; ctx.fillText(label, x + 13 * unit, y + H / 2 + 1);
+    }
+    if (clk) {
+      ctx.fillStyle = s.clockBg || '#111318'; ctx.fillRect(x + W - cw, y, cw, H);
+      ctx.fillStyle = '#fff'; ctx.font = `800 ${fs}px ${F}`; ctx.fillText(clk, x + W - cw + 11 * unit, y + H / 2 + 1);
+    }
   }
   ctx.restore();
 }

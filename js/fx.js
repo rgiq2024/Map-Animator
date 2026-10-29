@@ -5,6 +5,10 @@ import { drawExplosion, drawPuff } from './explosion.js';
 import { drawVideoFx } from './videofx.js';
 import { placeAt, CUSTOM_POS } from './place.js';
 import { HUD_PLUS, drawHUDPlus, HUDTEXT_STYLES, drawHudText, TARGET_STYLES, drawTarget, FLICKER_PLUS } from './hudplus.js';
+import { drawTrees, TREE_TYPES } from './trees.js';
+import { drawTitle, TITLE_LOOKS } from './titles.js';
+import { drawNews, NEWS_LOOKS } from './news.js';
+import { EFFECT_LOOKS, drawVideoLayer } from './screenfx.js';
 import { drawImageLayer, drawCompareLayer, drawSeriesLayer, drawSeriesLabel } from './geoimage.js';
 
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
@@ -46,6 +50,11 @@ export const FX_KINDS = {
   image:     { name: 'Georeferenced image', icon: '🖼', geom: 'image', desc: 'An image, scan, drone photo or GeoTIFF fitted onto the map' },
   compare:   { name: 'Before / after', icon: '◐', geom: 'image', desc: 'Swipe or fade between a pre and a post image' },
   timeseries:{ name: 'Images through time', icon: '🗓', geom: 'image', desc: 'A sequence of images or satellite dates with a year label' },
+  trees:     { name: 'Trees', icon: '🌳', geom: 'polygon', desc: 'A forest filling an area, or a row of trees along a line' },
+  title:     { name: 'Film title', icon: '🎬', geom: null, desc: 'Opening, cinematic, chapter, location, credits, quote or end titles' },
+  news:      { name: 'TV news graphic', icon: '📺', geom: null, desc: 'Channel logo, LIVE badge, BREAKING NEWS banner or news lower third' },
+  effect:    { name: 'Effect', icon: '✨', geom: null, desc: 'Film grain, old film, VHS, glitch, light leak, flash, rain, snow, shake…' },
+  video:     { name: 'Video', icon: '▶', geom: null, desc: 'Your own video, full screen or picture-in-picture' },
 };
 export const FX_ANIMS = {
   satellite: { pass: 'Fly over' }, iss: { pass: 'Orbit' }, launch: { launch: 'Lift off' },
@@ -62,6 +71,11 @@ export const FX_ANIMS = {
   image: { fade: 'Fade in', wipe: 'Wipe in', none: 'No animation' },
   compare: { reveal: 'Reveal' },
   timeseries: { play: 'Play through the dates', fade: 'Fade in, then play' },
+  trees: { grow: 'Grow one by one', fade: 'Fade in', none: 'Already there' },
+  title: { in: 'Animate in' },
+  news: { in: 'Animate in' },
+  effect: { on: 'On' },
+  video: { fade: 'Fade in', pop: 'Pop in', none: 'Cut in' },
 };
 export const FX_DEFAULTS = {
   satellite: { anim: 'pass', duration: 6, style: { sprite: 'satellite', color: '#36d1ff', size: 1, alt: 80, imaging: true, swathKm: 60, beam: true, track: true, label: 'IMAGING SAT' } },
@@ -81,6 +95,11 @@ export const FX_DEFAULTS = {
   target: { anim: 'lock', duration: 2, style: { look: 'lock', color: '#ffd23f', lockColor: '#ff3b30', size: 1, label: 'TGT-01', lockText: 'LOCKED', sub: '', showCoords: true } },
   image: { anim: 'fade', duration: 1.5, style: { media: '', name: '', opacity: 1, crs: '3857', blend: 'normal', border: false, borderColor: '#ffffff', dir: 'lr' } },
   compare: { anim: 'reveal', duration: 4, style: { media: '', media2: '', mode: 'swipe', dir: 'lr', cycles: 2, labels: true, labelA: 'BEFORE', labelB: 'AFTER', lineColor: '#ffffff', editSplit: 0.5, opacity: 1, crs: '3857' } },
+  title: { anim: 'in', duration: 2.5, hold: 2.5, style: { look: 'opener', text: 'Your title', sub: 'A film by …', lines: 'Directed by: Your Name\nMap animation: GIS One Map Animator\n\nMusic\nScore: Original soundtrack\n\nThanks for watching', font: 'Cinzel', color: '#ffffff', accent: '#e8c27a', size: 1, dim: 0, flare: true, position: 'center' } },
+  news: { anim: 'in', duration: 0.8, style: { look: 'bug', channel: 'NEWS', media: '', text: 'Major flooding hits the coastal district', sub: 'Rescue teams on the ground · more updates soon', tag: 'BREAKING NEWS', location: 'DUBAI', clock: '20:45', showClock: true, live: true, color: '#d71920', bg: '', textColor: '', size: 1, font: '', position: '', opacity: 0.92 } },
+  effect: { anim: 'on', duration: 4, hold: 0, style: { look: 'grain', amount: 1, color: '#ff8a3d', speed: 1, label: 'PLAY ▶', stamp: 'AUG 14 1996' } },
+  video: { anim: 'fade', duration: 6, style: { media: '', name: '', fit: 'pip', width: 0.36, position: 'top-right', radius: 10, border: 3, borderColor: '#ffffff', shadow: true, caption: '', opacity: 1, speed: 1, trim: 0, loop: false } },
+  trees: { anim: 'grow', duration: 2.5, style: { type: 'mixed', density: 40, height: 14, size: 1, exaggerate: 3, spacing: 12, bothSides: true, view: 'auto', seed: 0 } },
   timeseries: { anim: 'play', duration: 8, style: { source: 'files', frames: [], per: 2, fade: 0.8, label: 'show', labelSize: 1, labelColor: '#ffffff', accent: '#ffb020', bar: true, labelBox: true, position: 'bottom-left', editFrame: 0, opacity: 1, crs: '3857' } },
 };
 const VEHICLES = { missile: 'Missile (arc)', rocket: 'Rocket (high arc)', drone: 'Drone', quad: 'Quadcopter', jet: 'Fighter jet', helicopter: 'Helicopter', airliner: 'Airliner' };
@@ -110,13 +129,18 @@ export const FX_FORMS = {
     ['style.coords', 'Show coordinates', 'switch', null, (L) => !['radar', 'mission', 'scanner'].includes(L.style.variant)],
     ['style.rec', 'REC and timecode', 'switch', null, (L) => !HUD_PLUS[L.style.variant]],
     ['style.scan', 'Scan lines', 'switch', null, (L) => !HUD_PLUS[L.style.variant]]],
-  hudtext: [['style.look', 'Style', 'select', HUDTEXT_STYLES], ['style.text', 'Text (one line each; “Label: value” for telemetry)', 'textarea', null, (L) => L.style.look !== 'coords'], ['style.label', 'Tag', 'text', null, (L) => L.style.look === 'ticker'], ['style.speed', 'Scroll speed', 'range', [0.2, 3, 0.05], (L) => L.style.look === 'ticker'], ['style.angle', 'Angle (°)', 'range', [-30, 30, 1], (L) => L.style.look === 'stamp'], ['style.live', 'Numbers tick live', 'switch', null, (L) => L.style.look === 'telemetry'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour (empty = automatic)', 'color'], ['style.size', 'Size', 'range', [0.5, 3, 0.05]], ['style.font', 'Font', 'font']],
+  hudtext: [['style.look', 'Style', 'select', HUDTEXT_STYLES], ['style.text', 'Text (one line each; “Label: value” for telemetry)', 'textarea', null, (L) => L.style.look !== 'coords'], ['style.label', 'Tag (empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.speed', 'Scroll speed', 'range', [0.1, 4, 0.05], (L) => L.style.look === 'ticker'], ['style.dir', 'Scrolls', 'select', { left: 'Right to left', right: 'Left to right' }, (L) => L.style.look === 'ticker'], ['style.sep', 'Separator', 'select', { '•': '•', '|': '|', '◆': '◆', '■': '■', '—': '—', '★': '★' }, (L) => L.style.look === 'ticker'], ['style.bg', 'Bar colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.tagBg', 'Tag colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.textColor', 'Text colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.upper', 'CAPITALS', 'switch', null, (L) => L.style.look === 'ticker'], ['style.bold', 'Bold', 'switch', null, (L) => L.style.look === 'ticker'], ['style.clock', 'Clock (e.g. 20:45, empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.angle', 'Angle (°)', 'range', [-30, 30, 1], (L) => L.style.look === 'stamp'], ['style.live', 'Numbers tick live', 'switch', null, (L) => L.style.look === 'telemetry'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour (empty = automatic)', 'color'], ['style.size', 'Size', 'range', [0.5, 3, 0.05]], ['style.font', 'Font', 'font']],
   target: [['style.look', 'Marker', 'select', TARGET_STYLES], ['style.color', 'Colour while acquiring', 'color'], ['style.lockColor', 'Colour when locked', 'color'], ['style.size', 'Size', 'range', [0.3, 4, 0.05]], ['style.label', 'Label', 'text'], ['style.lockText', 'Text when locked', 'text'], ['style.sub', 'Extra line', 'text'], ['style.showCoords', 'Show coordinates', 'switch']],
   image: [['style.media', 'Image', 'image'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', multiply: 'Multiply (scans, old maps)', screen: 'Screen (dark backgrounds)' }], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
   compare: [['style.media', 'Before image', 'image'], ['style.media2', 'After image', 'image'], ['style.mode', 'Effect', 'select', { swipe: 'Swipe across', pingpong: 'Swipe back and forth', split: 'Slide to split screen', fade: 'Cross-fade' }], ['style.dir', 'Swipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.style.mode !== 'fade'], ['style.cycles', 'Times back and forth', 'number', 1, (L) => L.style.mode === 'pingpong'], ['style.labels', 'BEFORE / AFTER tags', 'switch'], ['style.labelA', 'Before tag', 'text', null, (L) => L.style.labels !== false], ['style.labelB', 'After tag', 'text', null, (L) => L.style.labels !== false], ['style.lineColor', 'Line colour', 'color'], ['style.editSplit', 'Preview split while editing', 'range', [0, 1, 0.01]], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
+  title: [['style.look', 'Style', 'select', TITLE_LOOKS], ['style.text', 'Title', 'text', null, (L) => L.style.look !== 'credits'], ['style.sub', 'Second line', 'text', null, (L) => L.style.look !== 'credits'], ['style.lines', 'Credits (“Role: Name” per line, plain lines are headings)', 'textarea', null, (L) => L.style.look === 'credits'], ['style.font', 'Font', 'font'], ['style.color', 'Colour', 'color'], ['style.accent', 'Accent colour', 'color'], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]], ['style.dim', 'Darken the picture', 'range', [0, 1, 0.05]], ['style.flare', 'Light sweep', 'switch', null, (L) => L.style.look === 'cinematic'], ['style.position', 'Position', 'select', { center: 'Default', ...CUSTOM_POS }, (L) => L.style.look !== 'credits']],
+  news: [['style.look', 'Style', 'select', NEWS_LOOKS], ['style.channel', 'Channel name', 'text'], ['style.media', 'Logo image (optional)', 'image'], ['style.text', 'Headline', 'text', null, (L) => ['breaking', 'headline'].includes(L.style.look)], ['style.sub', 'Second line', 'text', null, (L) => ['breaking', 'headline'].includes(L.style.look)], ['style.tag', 'Banner text', 'text', null, (L) => L.style.look === 'breaking'], ['style.location', 'Location', 'text', null, (L) => L.style.look === 'live'], ['style.live', 'LIVE under the logo', 'switch', null, (L) => L.style.look === 'bug'], ['style.showClock', 'Clock', 'switch', null, (L) => L.style.look !== 'bug'], ['style.clock', 'Clock starts at', 'text', null, (L) => L.style.look !== 'bug' && L.style.showClock], ['style.color', 'Channel colour', 'color'], ['style.bg', 'Bar colour', 'color', null, (L) => L.style.look !== 'bug'], ['style.textColor', 'Text colour', 'color', null, (L) => L.style.look !== 'bug'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]], ['style.opacity', 'Opacity', 'range', [0.2, 1, 0.01], (L) => L.style.look === 'bug'], ['style.font', 'Font', 'font'], ['style.position', 'Position', 'select', { '': 'Default', 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', ...CUSTOM_POS }]],
+  effect: [['style.look', 'Effect', 'select', EFFECT_LOOKS], ['style.amount', 'Strength', 'range', [0.05, 2, 0.05]], ['style.color', 'Colour', 'color', null, (L) => ['flash', 'lightleak'].includes(L.style.look)], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05], (L) => ['rain', 'snow', 'shake'].includes(L.style.look)], ['style.label', 'Corner text', 'text', null, (L) => L.style.look === 'vhs'], ['style.stamp', 'Date stamp', 'text', null, (L) => L.style.look === 'vhs']],
+  video: [['style.media', 'Video', 'video'], ['style.fit', 'Show as', 'select', { pip: 'Picture in picture', full: 'Full screen' }], ['style.width', 'Width', 'range', [0.1, 1, 0.01], (L) => L.style.fit !== 'full'], ['style.position', 'Position', 'select', { ...POS }, (L) => L.style.fit !== 'full'], ['style.radius', 'Rounded corners', 'range', [0, 40, 1], (L) => L.style.fit !== 'full'], ['style.border', 'Border', 'range', [0, 12, 0.5], (L) => L.style.fit !== 'full'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.fit !== 'full'], ['style.caption', 'Caption tag', 'text', null, (L) => L.style.fit !== 'full'], ['style.shadow', 'Shadow', 'switch', null, (L) => L.style.fit !== 'full'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.speed', 'Playback speed', 'range', [0.25, 3, 0.05]], ['style.trim', 'Start the clip at (s)', 'number', 0.1], ['style.loop', 'Loop', 'switch']],
+  trees: [['style.type', 'Trees', 'select', TREE_TYPES], ['style.density', 'Trees per hectare', 'range', [2, 200, 1], (L) => L.geom?.type === 'Polygon'], ['style.spacing', 'Spacing (m)', 'range', [4, 60, 1], (L) => L.geom?.type === 'LineString'], ['style.bothSides', 'Both sides of the line', 'switch', null, (L) => L.geom?.type === 'LineString'], ['style.height', 'Tree height (m)', 'range', [3, 40, 1]], ['style.exaggerate', 'Exaggerate size', 'range', [1, 8, 0.1]], ['style.view', 'Look', 'select', { auto: 'Side view when tilted, from above when flat', side: 'Always side view' }], ['style.seed', 'Shuffle', 'number', 1]],
   timeseries: [['style.frames', 'Dates', 'frames'], ['style.per', 'Seconds per date', 'number', 0.1], ['style.fade', 'Cross-fade (s)', 'number', 0.1], ['style.editFrame', 'Preview date while editing', 'range', [0, 30, 1]], ['style.label', 'Year label', 'select', { show: 'Show', none: 'Hide' }], ['style.position', 'Label position', 'select', POS, (L) => L.style.label !== 'none'], ['style.labelSize', 'Label size', 'range', [0.4, 2.5, 0.05], (L) => L.style.label !== 'none'], ['style.labelColor', 'Label colour', 'color', null, (L) => L.style.label !== 'none'], ['style.accent', 'Accent colour', 'color', null, (L) => L.style.label !== 'none'], ['style.bar', 'Timeline bar under the year', 'switch', null, (L) => L.style.label !== 'none'], ['style.labelBox', 'Dark box behind', 'switch', null, (L) => L.style.label !== 'none'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
 };
-export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext']);
+export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext', 'title', 'news', 'effect', 'video']);
 export const FX_BELOW = new Set(['capture']);
 
 // ---------------------------------------------------------------- geometry helpers
@@ -1098,6 +1122,11 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'target': if (phase === 'above') drawTarget(ctx, L, tm, proj, unit); break;
     case 'image': if (phase === 'below') drawImageLayer(ctx, L, tm, proj, unit, true); break;
     case 'compare': if (phase === 'below') drawCompareLayer(ctx, L, tm, proj, unit, frame); break;
+    case 'trees': if (phase === 'above') drawTrees(ctx, L, tm, o); break;
+    case 'title': if (phase === 'captions' && frame) drawTitle(ctx, L, tm, o); break;
+    case 'news': if (phase === 'captions' && frame) drawNews(ctx, L, tm, o); break;
+    case 'video': if (phase === 'captions' && frame) drawVideoLayer(ctx, L, tm, o); break;
+    case 'effect': break; // drawn over the whole picture by screenfx.js
     case 'timeseries':
       if (phase === 'below') drawSeriesLayer(ctx, L, tm, proj, unit);
       else if (phase === 'captions' && frame) drawSeriesLabel(ctx, L, tm, frame, unit);
@@ -1124,7 +1153,8 @@ export function drawFX(ctx, L, tm, o, phase) {
 }
 /** Which phases an FX kind draws in. */
 export function fxPhases(kind) {
-  if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext') return ['captions'];
+  if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
+  if (kind === 'effect') return [];
   if (kind === 'image' || kind === 'compare') return ['below'];
   if (kind === 'timeseries') return ['below', 'captions'];
   if (kind === 'model3d') return [];

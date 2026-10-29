@@ -161,7 +161,7 @@ export function buildScene(scene, fw, fh) {
     for (let k = 0; k < cuts.length - 1; k++) {
       const a = cuts[k], b = cuts[k + 1];
       const frac = L.m.length > 0 ? (b - a) / L.m.length : 1;
-      runs.push({ L, from: a, to: b, weight: Math.max(1e-9, (L.merc * frac)) ** 0.75, pauseAfter: pauses[k + 1] || 0 });
+      runs.push({ L, from: a, to: b, weight: Math.max(1e-9, (L.merc * frac)) ** 0.75 / Math.max(0.05, +L.leg?.speed || 1), pauseAfter: pauses[k + 1] || 0 });
     }
   }
   const firstPause = scene.legs[0]?.points[0]?.pause > 0 ? +scene.legs[0].points[0].pause : 0;
