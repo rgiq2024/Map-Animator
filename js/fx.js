@@ -3,6 +3,9 @@
 import { drawSprite, drawRocketSide, SPRITES } from './sprites.js';
 import { drawExplosion, drawPuff } from './explosion.js';
 import { drawVideoFx } from './videofx.js';
+import { placeAt, CUSTOM_POS } from './place.js';
+import { HUD_PLUS, drawHUDPlus, HUDTEXT_STYLES, drawHudText, TARGET_STYLES, drawTarget, FLICKER_PLUS } from './hudplus.js';
+import { drawImageLayer, drawCompareLayer, drawSeriesLayer, drawSeriesLabel } from './geoimage.js';
 
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
 const MONO = '"JetBrains Mono",ui-monospace,Menlo,monospace';
@@ -38,6 +41,11 @@ export const FX_KINDS = {
   flicker:   { name: 'Flicker text', icon: '▌', geom: null, desc: 'Glitchy, decoding, flickering text with sound' },
   chart:     { name: 'Chart', icon: '📊', geom: null, desc: 'Animated bar, line or donut chart, counter or progress bar' },
   hud:       { name: 'HUD', icon: '⌖', geom: null, desc: 'Drone, satellite or targeting head-up display' },
+  hudtext:   { name: 'HUD text', icon: '▤', geom: null, desc: 'Telemetry, alert, terminal, coordinates, stamp or ticker text — place it anywhere' },
+  target:    { name: 'Target marker', icon: '◎', geom: 'point', desc: 'Lock-on brackets, crosshair, reticle or radar ping on a spot' },
+  image:     { name: 'Georeferenced image', icon: '🖼', geom: 'image', desc: 'An image, scan, drone photo or GeoTIFF fitted onto the map' },
+  compare:   { name: 'Before / after', icon: '◐', geom: 'image', desc: 'Swipe or fade between a pre and a post image' },
+  timeseries:{ name: 'Images through time', icon: '🗓', geom: 'image', desc: 'A sequence of images or satellite dates with a year label' },
 };
 export const FX_ANIMS = {
   satellite: { pass: 'Fly over' }, iss: { pass: 'Orbit' }, launch: { launch: 'Lift off' },
@@ -46,9 +54,14 @@ export const FX_ANIMS = {
   vehicle: { move: 'Move along the path' },
   model3d: { pop: 'Pop in', fade: 'Fade in', none: 'No animation' },
   videofx: { play: 'Play the clip' },
-  flicker: { decode: 'Decode (scrambled letters)', flicker: 'Flicker on', glitch: 'Glitch (RGB split)', type: 'Typewriter' },
+  flicker: { decode: 'Decode (scrambled letters)', flicker: 'Flicker on', glitch: 'Glitch (RGB split)', type: 'Typewriter', ...FLICKER_PLUS },
   chart: { grow: 'Grow', fade: 'Fade in', none: 'No animation' },
   hud: { boot: 'Boot up', fade: 'Fade in', none: 'No animation' },
+  hudtext: { flicker: 'Flicker on', fade: 'Fade in', none: 'No animation' },
+  target: { lock: 'Acquire and lock' },
+  image: { fade: 'Fade in', wipe: 'Wipe in', none: 'No animation' },
+  compare: { reveal: 'Reveal' },
+  timeseries: { play: 'Play through the dates', fade: 'Fade in, then play' },
 };
 export const FX_DEFAULTS = {
   satellite: { anim: 'pass', duration: 6, style: { sprite: 'satellite', color: '#36d1ff', size: 1, alt: 80, imaging: true, swathKm: 60, beam: true, track: true, label: 'IMAGING SAT' } },
@@ -63,10 +76,15 @@ export const FX_DEFAULTS = {
   videofx: { anim: 'play', duration: 3, style: { media: '', name: '', size: 1, rotation: 0, blend: 'screen', opacity: 1, loop: false, speed: 1, anchor: 'ground', flip: false, boom: true } },
   flicker: { anim: 'decode', duration: 1.6, style: { text: 'TARGET ACQUIRED', sub: 'GRID 25.20N 55.27E', position: 'center', color: '#7CFF7C', size: 1, box: true, cursor: true, font: '', keepFlicker: true } },
   chart: { anim: 'grow', duration: 1.6, style: { type: 'bar', title: 'Chart title', data: 'Dubai: 3.6\nAbu Dhabi: 1.5\nSharjah: 1.8\nAjman: 0.5', position: 'bottom-right', size: 1, accent: '#ff6b35', prefix: '', suffix: ' M', font: '' } },
-  hud: { anim: 'boot', duration: 1.2, style: { variant: 'drone', color: '#7CFF7C', label: 'UAV-01', coords: true, rec: true, scan: true } },
+  hud: { anim: 'boot', duration: 1.2, style: { variant: 'drone', color: '#7CFF7C', label: 'UAV-01', coords: true, rec: true, scan: true, polarity: 'white', text: 'MISSION: RECON ALPHA\nOBJECTIVE: SURVEY THE AREA\nASSETS: UAV-01, SAT-07\nSTATUS: IN PROGRESS', range: '50 KM', speed: 1, size: 1, position: 'bottom-right', classified: true } },
+  hudtext: { anim: 'flicker', duration: 1, style: { look: 'telemetry', text: 'SPD: 420 KTS\nALT: 12500 FT\nFUEL: 64 %\nSIGNAL: STRONG', color: '', size: 1, font: '', position: 'top-left', label: 'BREAKING', speed: 1, angle: -8, live: true } },
+  target: { anim: 'lock', duration: 2, style: { look: 'lock', color: '#ffd23f', lockColor: '#ff3b30', size: 1, label: 'TGT-01', lockText: 'LOCKED', sub: '', showCoords: true } },
+  image: { anim: 'fade', duration: 1.5, style: { media: '', name: '', opacity: 1, crs: '3857', blend: 'normal', border: false, borderColor: '#ffffff', dir: 'lr' } },
+  compare: { anim: 'reveal', duration: 4, style: { media: '', media2: '', mode: 'swipe', dir: 'lr', cycles: 2, labels: true, labelA: 'BEFORE', labelB: 'AFTER', lineColor: '#ffffff', editSplit: 0.5, opacity: 1, crs: '3857' } },
+  timeseries: { anim: 'play', duration: 8, style: { source: 'files', frames: [], per: 2, fade: 0.8, label: 'show', labelSize: 1, labelColor: '#ffffff', accent: '#ffb020', bar: true, labelBox: true, position: 'bottom-left', editFrame: 0, opacity: 1, crs: '3857' } },
 };
 const VEHICLES = { missile: 'Missile (arc)', rocket: 'Rocket (high arc)', drone: 'Drone', quad: 'Quadcopter', jet: 'Fighter jet', helicopter: 'Helicopter', airliner: 'Airliner' };
-const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', center: 'Centre' };
+const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', center: 'Centre', ...CUSTOM_POS };
 /** Form fields for the layer editor: [path, label, type, options]. */
 export const FX_FORMS = {
   satellite: [['style.sprite', 'Satellite', 'select', { satellite: 'Imaging satellite', iss: 'Space station' }], ['style.label', 'Label', 'text'], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.alt', 'Height above map', 'range', [0, 220, 2]], ['style.imaging', 'Images the ground', 'switch'], ['style.swathKm', 'Swath width (km)', 'number', 1], ['style.beam', 'Show sensor beam', 'switch'], ['style.track', 'Show ground track', 'switch']],
@@ -81,9 +99,24 @@ export const FX_FORMS = {
   model3d: [['style.source', 'Model', 'model'], ['style.color', 'Accent colour (built-in models)', 'color'], ['style.size', 'Size', 'range', [0.1, 6, 0.05]], ['style.sizeMode', 'Size is', 'select', { screen: 'The same on screen at any zoom', real: 'Real-world metres (× size)' }], ['style.altitude', 'Height above ground', 'range', [0, 400, 1]], ['style.heading', 'Heading (°)', 'range', [-180, 180, 1]], ['style.pitch', 'Pitch (°)', 'range', [-90, 90, 1]], ['style.roll', 'Roll (°)', 'range', [-180, 180, 1]], ['style.motion', 'Motion', 'select', { none: 'None', move: 'Move along the path', spin: 'Spin', float: 'Float up and down' }], ['style.spinSpeed', 'Spin speed (°/s)', 'number', 1], ['style.yawOffset', 'Model faces (° offset)', 'number', 1], ['style.playAnim', 'Play the model’s own animation', 'switch']],
   videofx: [['style.media', 'Clip', 'video'], ['style.size', 'Size', 'range', [0.1, 6, 0.05]], ['style.rotation', 'Rotation (°)', 'range', [-180, 180, 1]], ['style.blend', 'Background', 'select', { screen: 'Black background (screen blend)', lighter: 'Black background (add light)', normal: 'Transparent / normal' }], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.anchor', 'Anchor', 'select', { ground: 'Bottom on the point (explosions)', center: 'Centred on the point' }], ['style.speed', 'Playback speed', 'range', [0.25, 3, 0.05]], ['style.loop', 'Loop', 'switch'], ['style.flip', 'Mirror', 'switch'], ['style.boom', 'Add explosion sound', 'switch']],
   flicker: [['style.text', 'Text', 'text'], ['style.sub', 'Second line', 'text'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.font', 'Font', 'font'], ['style.box', 'Dark box behind', 'switch'], ['style.cursor', 'Blinking cursor', 'switch'], ['style.keepFlicker', 'Keep flickering a little', 'switch']],
-  hud: [['style.variant', 'Style', 'select', { drone: 'Drone camera', satellite: 'Satellite feed', target: 'Target lock', minimal: 'Minimal frame' }], ['style.color', 'Colour', 'color'], ['style.label', 'Label', 'text'], ['style.coords', 'Show coordinates', 'switch'], ['style.rec', 'REC and timecode', 'switch'], ['style.scan', 'Scan lines', 'switch']],
+  hud: [['style.variant', 'Style', 'select', { drone: 'Drone camera', satellite: 'Satellite feed', target: 'Target lock', minimal: 'Minimal frame', ...HUD_PLUS }], ['style.color', 'Colour', 'color'], ['style.label', 'Label', 'text'],
+    ['style.text', 'Briefing lines', 'textarea', null, (L) => L.style.variant === 'mission'],
+    ['style.polarity', 'Polarity', 'select', { white: 'White hot', black: 'Black hot' }, (L) => L.style.variant === 'thermal'],
+    ['style.range', 'Range label', 'text', null, (L) => L.style.variant === 'radar'],
+    ['style.speed', 'Sweep speed', 'range', [0.2, 3, 0.05], (L) => L.style.variant === 'radar'],
+    ['style.size', 'Size', 'range', [0.5, 2.5, 0.05], (L) => ['radar', 'mission'].includes(L.style.variant)],
+    ['style.position', 'Position', 'select', POS, (L) => ['radar', 'mission'].includes(L.style.variant)],
+    ['style.classified', '“Classified” tag', 'switch', null, (L) => L.style.variant === 'tactical'],
+    ['style.coords', 'Show coordinates', 'switch', null, (L) => !['radar', 'mission', 'scanner'].includes(L.style.variant)],
+    ['style.rec', 'REC and timecode', 'switch', null, (L) => !HUD_PLUS[L.style.variant]],
+    ['style.scan', 'Scan lines', 'switch', null, (L) => !HUD_PLUS[L.style.variant]]],
+  hudtext: [['style.look', 'Style', 'select', HUDTEXT_STYLES], ['style.text', 'Text (one line each; “Label: value” for telemetry)', 'textarea', null, (L) => L.style.look !== 'coords'], ['style.label', 'Tag', 'text', null, (L) => L.style.look === 'ticker'], ['style.speed', 'Scroll speed', 'range', [0.2, 3, 0.05], (L) => L.style.look === 'ticker'], ['style.angle', 'Angle (°)', 'range', [-30, 30, 1], (L) => L.style.look === 'stamp'], ['style.live', 'Numbers tick live', 'switch', null, (L) => L.style.look === 'telemetry'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour (empty = automatic)', 'color'], ['style.size', 'Size', 'range', [0.5, 3, 0.05]], ['style.font', 'Font', 'font']],
+  target: [['style.look', 'Marker', 'select', TARGET_STYLES], ['style.color', 'Colour while acquiring', 'color'], ['style.lockColor', 'Colour when locked', 'color'], ['style.size', 'Size', 'range', [0.3, 4, 0.05]], ['style.label', 'Label', 'text'], ['style.lockText', 'Text when locked', 'text'], ['style.sub', 'Extra line', 'text'], ['style.showCoords', 'Show coordinates', 'switch']],
+  image: [['style.media', 'Image', 'image'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', multiply: 'Multiply (scans, old maps)', screen: 'Screen (dark backgrounds)' }], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
+  compare: [['style.media', 'Before image', 'image'], ['style.media2', 'After image', 'image'], ['style.mode', 'Effect', 'select', { swipe: 'Swipe across', pingpong: 'Swipe back and forth', split: 'Slide to split screen', fade: 'Cross-fade' }], ['style.dir', 'Swipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.style.mode !== 'fade'], ['style.cycles', 'Times back and forth', 'number', 1, (L) => L.style.mode === 'pingpong'], ['style.labels', 'BEFORE / AFTER tags', 'switch'], ['style.labelA', 'Before tag', 'text', null, (L) => L.style.labels !== false], ['style.labelB', 'After tag', 'text', null, (L) => L.style.labels !== false], ['style.lineColor', 'Line colour', 'color'], ['style.editSplit', 'Preview split while editing', 'range', [0, 1, 0.01]], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
+  timeseries: [['style.frames', 'Dates', 'frames'], ['style.per', 'Seconds per date', 'number', 0.1], ['style.fade', 'Cross-fade (s)', 'number', 0.1], ['style.editFrame', 'Preview date while editing', 'range', [0, 30, 1]], ['style.label', 'Year label', 'select', { show: 'Show', none: 'Hide' }], ['style.position', 'Label position', 'select', POS, (L) => L.style.label !== 'none'], ['style.labelSize', 'Label size', 'range', [0.4, 2.5, 0.05], (L) => L.style.label !== 'none'], ['style.labelColor', 'Label colour', 'color', null, (L) => L.style.label !== 'none'], ['style.accent', 'Accent colour', 'color', null, (L) => L.style.label !== 'none'], ['style.bar', 'Timeline bar under the year', 'switch', null, (L) => L.style.label !== 'none'], ['style.labelBox', 'Dark box behind', 'switch', null, (L) => L.style.label !== 'none'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
 };
-export const FX_SCREEN = new Set(['chart', 'hud', 'flicker']);
+export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext']);
 export const FX_BELOW = new Set(['capture']);
 
 // ---------------------------------------------------------------- geometry helpers
@@ -678,6 +711,7 @@ function drawChart(ctx, L, tm, frame, unit) {
   const accent = s.accent || '#ff6b35';
   const colors = [accent, ...PALETTE.filter((c) => c !== accent)];
   ctx.save();
+  placeAt(ctx, L, frame, x, y, W, H);
   ctx.globalAlpha *= alpha;
   ctx.fillStyle = 'rgba(12,14,18,0.78)';
   ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, W, H, 12 * unit); else ctx.rect(x, y, W, H); ctx.fill();
@@ -931,6 +965,7 @@ function drawFlicker(ctx, L, tm, frame, unit) {
   const fl = rng(seed + Math.floor(tau * 30))();
   if (L.anim === 'flicker' && u < 1) alpha *= fl < 0.35 + u * 0.5 ? 1 : 0.08;
   if (L.anim === 'glitch' && u < 1) { split = (1 - u) * 6 * unit; jx = (fl - 0.5) * 14 * unit * (1 - u); alpha *= fl < 0.2 ? 0.3 : 1; }
+  if (L.anim === 'neon' && u < 1) alpha *= rng(seed + Math.floor(tau * 14))() < 0.15 + u * 0.95 ? 1 : 0.1;
   if (s.keepFlicker && u >= 1 && !tm.edit) { const f2 = rng(seed + Math.floor(tau * 12))(); if (f2 < 0.06) { alpha *= 0.35; split = 3 * unit; } }
   if (alpha <= 0.01) return;
   const F1 = `700 ${26 * k * unit}px ${fam(s.font, MONO)}`, F2 = `500 ${14 * k * unit}px ${fam(s.font, MONO)}`;
@@ -945,6 +980,7 @@ function drawFlicker(ctx, L, tm, frame, unit) {
   if (pos.includes('right')) x = frame.x + frame.w - m - W;
   if (pos.includes('top') || pos === 'top') y = frame.y + m;
   if (pos.includes('bottom') || pos === 'bottom') y = frame.y + frame.h - m - H;
+  placeAt(ctx, L, frame, x, y, W, H);
   x += jx;
   ctx.globalAlpha *= alpha;
   if (s.box !== false) {
@@ -966,18 +1002,56 @@ function drawFlicker(ctx, L, tm, frame, unit) {
       ctx.fillStyle = 'rgba(0,200,255,0.7)'; ctx.fillText(txt, tx + split, yy);
       ctx.globalCompositeOperation = 'source-over';
     }
-    ctx.shadowColor = hexA(col, 0.8); ctx.shadowBlur = 8 * unit;
+    ctx.shadowColor = hexA(col, 0.8); ctx.shadowBlur = (L.anim === 'neon' ? 22 : 8) * unit;
     ctx.fillStyle = col; ctx.fillText(txt, tx, yy);
+    if (L.anim === 'neon') ctx.fillText(txt, tx, yy);
     ctx.shadowBlur = 0;
   };
-  draw(t1, ty1, F1);
-  if (t2) draw(t2, ty2, F2);
-  if (s.cursor !== false && Math.sin(tau * 9) > 0) {
-    ctx.font = (t2 ? F2 : F1);
-    const last = t2 || t1;
-    const cw = ctx.measureText(last).width;
-    ctx.fillStyle = col;
-    ctx.fillRect(tx + cw + 3 * unit, (t2 ? ty2 : ty1) - 9 * unit * k, 9 * unit * k, 18 * unit * k);
+  const drawAll = () => {
+    draw(t1, ty1, F1);
+    if (t2) draw(t2, ty2, F2);
+    if (s.cursor !== false && Math.sin(tau * 9) > 0) {
+      ctx.font = (t2 ? F2 : F1);
+      const last = t2 || t1;
+      const cw = ctx.measureText(last).width;
+      ctx.fillStyle = col;
+      ctx.fillRect(tx + cw + 3 * unit, (t2 ? ty2 : ty1) - 9 * unit * k, 9 * unit * k, 18 * unit * k);
+    }
+  };
+  const glitchAfter = s.keepFlicker && u >= 1 && !tm.edit && rng(seed + 3 + Math.floor(tau * 10))() < 0.05;
+  if ((L.anim === 'slice' && u < 1) || glitchAfter && L.anim === 'slice') {
+    const amt = glitchAfter ? 0.25 : 1 - u;
+    const r = rng(seed + Math.floor(tau * 20));
+    const n = 7, sh = H / n;
+    for (let i = 0; i < n; i++) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x - W, y + i * sh, W * 3, sh + 0.5); ctx.clip();
+      ctx.translate((r() - 0.5) * 60 * unit * amt * (r() < 0.6 ? 1 : 0), 0);
+      drawAll();
+      ctx.restore();
+    }
+  } else if (L.anim === 'scan' && u < 1) {
+    const sy = y + H * easeOut(u);
+    ctx.save(); ctx.beginPath(); ctx.rect(x - 4, y - 4, W + 8, sy - y + 4); ctx.clip(); drawAll(); ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.shadowColor = col; ctx.shadowBlur = 14 * unit;
+    ctx.fillRect(x, sy - 1.5 * unit, W, 3 * unit);
+    ctx.shadowBlur = 0;
+  } else {
+    drawAll();
+  }
+  if (L.anim === 'redact') {
+    const e = easeOut(clamp(u * 1.15, 0, 1));
+    ctx.shadowBlur = 0;
+    for (const [txt, yy, F] of [[s.text || '', ty1, F1], [s.sub || '', ty2, F2]]) {
+      if (!txt) continue;
+      ctx.font = F;
+      const tw = ctx.measureText(txt).width;
+      const bx = tx + tw * e;
+      if (bx >= tx + tw) continue;
+      const bh = (F === F1 ? 26 : 15) * unit * k;
+      ctx.fillStyle = '#050505'; ctx.fillRect(bx - 2 * unit, yy - bh * 0.6, tx + tw - bx + 6 * unit, bh * 1.2);
+      ctx.fillStyle = col; ctx.fillRect(bx - 2 * unit, yy - bh * 0.6, 2 * unit, bh * 1.2);
+    }
   }
   ctx.restore();
 }
@@ -1020,6 +1094,14 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'flicker': if (phase === 'captions' && frame) drawFlicker(ctx, L, tm, frame, unit); break;
     case 'videofx': if (phase === 'above') drawVideoFx(ctx, L, tm, proj, unit, o.exact); break;
     case 'model3d': break; // drawn in 3D by models3d.js
+    case 'hudtext': if (phase === 'captions' && frame) drawHudText(ctx, L, tm, o); break;
+    case 'target': if (phase === 'above') drawTarget(ctx, L, tm, proj, unit); break;
+    case 'image': if (phase === 'below') drawImageLayer(ctx, L, tm, proj, unit, true); break;
+    case 'compare': if (phase === 'below') drawCompareLayer(ctx, L, tm, proj, unit, frame); break;
+    case 'timeseries':
+      if (phase === 'below') drawSeriesLayer(ctx, L, tm, proj, unit);
+      else if (phase === 'captions' && frame) drawSeriesLabel(ctx, L, tm, frame, unit);
+      break;
     case 'hud':
       if (phase === 'captions' && frame) {
         const zv = o.view?.zoomSpeed || 0;
@@ -1031,7 +1113,8 @@ export function drawFX(ctx, L, tm, o, phase) {
           ctx.globalAlpha *= r() < amt * 0.35 ? 0.25 : 1;
           ctx.translate((r() - 0.5) * 8 * unit * amt, 0);
         }
-        drawHUD(ctx, L, tm, frame, unit, o.view, o.time, proj);
+        if (HUD_PLUS[L.style.variant]) drawHUDPlus(ctx, L, tm, o);
+        else drawHUD(ctx, L, tm, frame, unit, o.view, o.time, proj);
         ctx.restore();
         hudGlitch(ctx, frame, unit, amt, hashStr(L.id) + Math.floor((o.time || 0) * 30), L.style.color);
       }
@@ -1041,7 +1124,9 @@ export function drawFX(ctx, L, tm, o, phase) {
 }
 /** Which phases an FX kind draws in. */
 export function fxPhases(kind) {
-  if (kind === 'chart' || kind === 'hud' || kind === 'flicker') return ['captions'];
+  if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext') return ['captions'];
+  if (kind === 'image' || kind === 'compare') return ['below'];
+  if (kind === 'timeseries') return ['below', 'captions'];
   if (kind === 'model3d') return [];
   if (kind === 'capture') return ['below'];
   if (kind === 'satellite' || kind === 'iss') return ['below', 'above'];

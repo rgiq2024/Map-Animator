@@ -138,6 +138,8 @@ export async function projectFileJSON(p) {
   for (const m of p.models || []) ids.add(m.id);
   for (const sc of p.scenes || []) for (const L of sc.layers || []) {
     if (L.kind === 'videofx' && L.style?.media) ids.add(L.style.media);
+    if ((L.kind === 'image' || L.kind === 'compare') && L.style) { if (L.style.media) ids.add(L.style.media); if (L.style.media2) ids.add(L.style.media2); }
+    if (L.kind === 'timeseries') for (const f of L.style?.frames || []) if (f.media) ids.add(f.media);
     if (L.kind === 'model3d' && String(L.style?.source || '').startsWith('media:')) ids.add(L.style.source.slice(6));
   }
   for (const id of ids) {

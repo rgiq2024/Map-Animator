@@ -13,6 +13,8 @@ export function createTimeline(api) {
   let zoom = 1;
   let snapOn = true;
   let razor = false;
+  let ranging = false;
+  let range = null; // { a, b } in scene time
   const state = { loop: false, rate: 1 };
 
   const total = () => api.model().total;
@@ -84,7 +86,13 @@ export function createTimeline(api) {
 
     // trim shades & handles
     $('#tl-trim').innerHTML = `<div class="shade" style="left:0;width:${pct(m.trimIn)}"></div><div class="shade" style="left:${pct(m.trimOut)};width:${pct(T - m.trimOut)}"></div>
-      <i class="trim-h in" style="left:${pct(m.trimIn)}" title="In point (I) · drag to trim the start"></i><i class="trim-h out" style="left:${pct(m.trimOut)}" title="Out point (O) · drag to trim the end"></i>`;
+      <i class="trim-h in" style="left:${pct(m.trimIn)}" title="In point (I) · drag to trim the start"></i><i class="trim-h out" style="left:${pct(m.trimOut)}" title="Out point (O) · drag to trim the end"></i>`
+      + (m.cuts || []).map((c, i) => `<div class="cut" data-i="${i}" style="left:${pct(c.a)};width:${pct(c.b - c.a)}" title="Deleted section ${c.a.toFixed(2)}–${c.b.toFixed(2)} s · the video skips it"><span>✂ ${(c.b - c.a).toFixed(1)} s</span><b data-restore="${i}" title="Restore this section">↺</b></div>`).join('')
+      + (m.holds || []).map((h) => `<div class="frz" data-at="${h.at}" style="left:${pct(h.at)}" title="Freeze ${h.dur.toFixed(1)} s · click for +1 s, double-click to remove"><span>❄ ${h.dur.toFixed(1)} s</span></div>`).join('')
+      + (range ? `<div class="rsel" style="left:${pct(range.a)};width:${pct(range.b - range.a)}"><span>${(range.b - range.a).toFixed(2)} s selected</span></div>` : '');
+    $('#tl-delsec').disabled = !(range && range.b - range.a > 0.02);
+    $('#tl-range').classList.toggle('active', ranging);
+    inner.classList.toggle('ranging', ranging);
     playhead();
     $('#tl-razor').classList.toggle('active', razor);
     $('#tl-snap').classList.toggle('active', snapOn);
@@ -128,6 +136,30 @@ export function createTimeline(api) {
     const m = api.model(), sc = api.scene();
     const t0 = timeAt(e.clientX);
     if (razor && !e.target.closest('.trim-h')) { api.splitAt(snap(t0)); razor = false; render(); return; }
+    const restore = e.target.closest('[data-restore]');
+    if (restore) { removeCut(m.cuts[+restore.dataset.restore]); return; }
+    const frz = e.target.closest('.frz');
+    if (frz) {
+      const at = +frz.dataset.at;
+      const ed = sc.edits ||= { cuts: [], holds: [] };
+      const h = (ed.holds ||= []).find((x) => Math.abs(x.at - at) < 1e-3);
+      if (e.detail === 2) { api.pushUndo(); ed.holds = ed.holds.filter((x) => x !== h); api.commit(); }
+      else api.seek(at);
+      return;
+    }
+    if (ranging || e.shiftKey) {
+      // drag out a section
+      inner.setPointerCapture(e.pointerId);
+      const a0 = snap(t0, 'range');
+      range = { a: a0, b: a0 };
+      const move = (ev) => { const t = snap(timeAt(ev.clientX), 'range'); range = { a: Math.min(a0, t), b: Math.max(a0, t) }; render(); };
+      const up = () => { inner.removeEventListener('pointermove', move); inner.removeEventListener('pointerup', up); if (range.b - range.a < 0.02) range = null; render(); };
+      inner.addEventListener('pointermove', move);
+      inner.addEventListener('pointerup', up);
+      render();
+      return;
+    }
+    if (range) { range = null; }
     let drag = null;
     const tgt = e.target;
     const lb = tgt.closest('.lb'), sig = tgt.closest('.sig'), kf = tgt.closest('.kf'), mk = tgt.closest('.mk'), ab = tgt.closest('.ab'), lineb = tgt.closest('.lineb'), trimH = tgt.closest('.trim-h');
@@ -219,6 +251,53 @@ export function createTimeline(api) {
   $('#tl-snap').onclick = () => { snapOn = !snapOn; render(); };
   $('#tl-razor').onclick = () => { razor = !razor; render(); };
   $('#tl-split').onclick = () => api.splitAt(api.getTime());
+  $('#tl-range').onclick = () => { ranging = !ranging; if (!ranging) range = null; render(); };
+  $('#tl-delsec').onclick = () => deleteSection();
+  $('#tl-freeze').onclick = () => freeze();
+  $('#tl-extend').onclick = () => extend();
+  $('#tl-clear-edits').onclick = () => { const sc = api.scene(); if (!sc.edits?.cuts?.length && !sc.edits?.holds?.length) return; api.pushUndo(); sc.edits = { cuts: [], holds: [] }; range = null; api.commit(); };
+  /** Delete the selected section: playback and the video jump over it. */
+  function deleteSection() {
+    if (!range || range.b - range.a < 0.02) return;
+    const sc = api.scene(), m = api.model();
+    const a = clamp(range.a, m.trimIn, m.trimOut), b = clamp(range.b, m.trimIn, m.trimOut);
+    if (b - a < 0.02) return;
+    const kept = m.duration - (b - a);
+    if (kept < 0.2) { api.toast?.('That would delete the whole scene'); return; }
+    api.pushUndo();
+    const ed = sc.edits ||= { cuts: [], holds: [] };
+    (ed.cuts ||= []).push({ a: +a.toFixed(3), b: +b.toFixed(3) });
+    ed.holds = (ed.holds || []).filter((h) => h.at < a || h.at > b);
+    range = null; ranging = false;
+    api.commit();
+    api.seek(Math.min(b, m.trimOut));
+  }
+  function removeCut(c) {
+    if (!c) return;
+    const sc = api.scene();
+    api.pushUndo();
+    sc.edits.cuts = (sc.edits.cuts || []).filter((x) => x.b <= c.a + 1e-6 || x.a >= c.b - 1e-6);
+    api.commit();
+  }
+  /** Hold the picture at the playhead (adds 1 s each time). */
+  function freeze(sec = 1) {
+    const sc = api.scene(), m = api.model();
+    const t = clamp(api.getTime(), m.trimIn, m.trimOut);
+    if ((m.cuts || []).some((c) => t > c.a && t < c.b)) { api.toast?.('Move the playhead out of the deleted section'); return; }
+    api.pushUndo();
+    const ed = sc.edits ||= { cuts: [], holds: [] };
+    const h = (ed.holds ||= []).find((x) => Math.abs(x.at - t) < 0.05);
+    if (h) h.dur = +(h.dur + sec).toFixed(2); else ed.holds.push({ at: +t.toFixed(3), dur: sec });
+    api.commit();
+  }
+  /** Longer scene: add time at the end (keeps the last picture). */
+  function extend(sec = 1) {
+    const sc = api.scene();
+    api.pushUndo();
+    sc.stillEnd = +((+sc.stillEnd || 0) + sec).toFixed(2);
+    if (sc.trimOut != null) sc.trimOut = null;
+    api.commit();
+  }
   $('#tl-marker').onclick = () => toggleMarker();
   $('#tl-in').onclick = () => setIn();
   $('#tl-out').onclick = () => setOut();
@@ -271,6 +350,11 @@ export function createTimeline(api) {
     if (l === 'l') { api.play(); return true; }
     if (l === 'j') { step(-api.fps()); return true; }
     if (l === 's') { snapOn = !snapOn; render(); return true; }
+    if (l === 'r') { ranging = !ranging; if (!ranging) range = null; render(); return true; }
+    if (l === 'f') { freeze(); return true; }
+    if (l === 'e') { extend(); return true; }
+    if ((k === 'Delete' || k === 'Backspace') && range) { deleteSection(); return true; }
+    if (k === 'Escape' && (range || ranging)) { range = null; ranging = false; render(); return true; }
     if (k === '=' || k === '+') { setZoom(zoom * 1.5); return true; }
     if (k === '-' || k === '_') { setZoom(zoom / 1.5); return true; }
     if (k === '\\') { setZoom(1); return true; }

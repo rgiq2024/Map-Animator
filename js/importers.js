@@ -87,6 +87,37 @@ export function parseGeoJSON(obj) {
   return { name: obj.name || '', tracks: tracks.filter((t) => t.length > 1), waypoints };
 }
 
+/** All entries of a zip file → Map(name → Uint8Array). */
+export async function unzipEntries(buf) {
+  const dv = new DataView(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 66000); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('Not a valid zip file');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  const out = new Map();
+  for (let n = 0; n < count; n++) {
+    const method = dv.getUint16(p + 10, true);
+    const csize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commentLen = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = dec.decode(new Uint8Array(buf, p + 46, nameLen));
+    p += 46 + nameLen + extraLen + commentLen;
+    if (name.endsWith('/')) continue;
+    const lNameLen = dv.getUint16(local + 26, true), lExtra = dv.getUint16(local + 28, true);
+    const data = new Uint8Array(buf, local + 30 + lNameLen + lExtra, csize);
+    if (method === 0) out.set(name, data);
+    else if (method === 8) {
+      const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      out.set(name, new Uint8Array(await new Response(stream).arrayBuffer()));
+    }
+  }
+  return out;
+}
+
 // Minimal ZIP reader (stored + deflate) for KMZ files.
 async function unzipFirst(buf, test) {
   const dv = new DataView(buf);

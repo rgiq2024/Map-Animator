@@ -8,10 +8,24 @@ const SPECS = {
   launch:  { r: (s, u) => 40 * u * (+s.size || 1), size: [0.1, 8] },
   model3d: { r: (s, u) => 38 * u * (+s.size || 1), size: [0.1, 8], rot: 'heading' },
   videofx: { r: (s, u) => 80 * u * (+s.size || 1), size: [0.1, 8], rot: 'rotation' },
+  target:  { r: (s, u) => 34 * u * (+s.size || 1) * 1.4, size: [0.3, 6] },
 };
+const QUAD_KINDS = new Set(['image', 'compare', 'timeseries']);
 
 /** Gizmo geometry for a layer, or null. */
 export function gizmoFor(L, proj, unit) {
+  if (L && QUAD_KINDS.has(L.kind) && L.geom?.type === 'Polygon') {
+    // georeferencing handles for images: scale (square) and rotate (round), around the image centre
+    const q = L.geom.coordinates[0].slice(0, 4).map(proj);
+    const cx = (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4, cy = (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4;
+    const tm = [(q[0][0] + q[1][0]) / 2, (q[0][1] + q[1][1]) / 2];
+    const dx = tm[0] - cx, dy = tm[1] - cy, l = Math.hypot(dx, dy) || 1;
+    const k = 30 * Math.max(1, unit * 0.8);
+    const br = q[2], bdx = br[0] - cx, bdy = br[1] - cy, bl = Math.hypot(bdx, bdy) || 1;
+    return { id: L.id, quad: true, cx, cy, R: bl, spec: {}, noCircle: true,
+      scale: { x: br[0] + (bdx / bl) * 18 * unit, y: br[1] + (bdy / bl) * 18 * unit },
+      rotate: { x: tm[0] + (dx / l) * k, y: tm[1] + (dy / l) * k, key: 'quad' } };
+  }
   const sp = L && L.geom?.type === 'Point' && SPECS[L.kind];
   if (!sp) return null;
   const s = L.style || {};
@@ -30,9 +44,11 @@ export function drawGizmo(ctx, g, dpr) {
   ctx.save();
   ctx.lineWidth = 1.5 * dpr;
   ctx.strokeStyle = 'rgba(45,127,249,.9)';
-  ctx.setLineDash([5 * dpr, 4 * dpr]);
-  ctx.beginPath(); ctx.arc(g.cx, g.cy, g.R, 0, Math.PI * 2); ctx.stroke();
-  ctx.setLineDash([]);
+  if (!g.noCircle) {
+    ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.beginPath(); ctx.arc(g.cx, g.cy, g.R, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
   if (g.rotate) {
     ctx.beginPath(); ctx.moveTo(g.cx, g.cy); ctx.lineTo(g.rotate.x, g.rotate.y); ctx.stroke();
     ctx.beginPath(); ctx.arc(g.rotate.x, g.rotate.y, 6.5 * dpr, 0, Math.PI * 2);

@@ -3,7 +3,7 @@
 // typing). Everything is generated with Web Audio, so it works offline and exports into the MP4.
 
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -290,8 +290,8 @@ export function buildEvents(project, models) {
   let off = 0;
   project.scenes.forEach((sc, si) => {
     const m = models[si];
-    const P = (t) => off + (t - m.trimIn);
-    const push = (t, type, p = {}) => { if (t >= m.trimIn - 0.01 && t <= m.trimOut) ev.push({ t: P(t), type, p }); };
+    const P = (t) => { const o = m.outTime ? m.outTime(t) : t - m.trimIn; return o == null ? null : off + o; };
+    const push = (t, type, p = {}) => { if (t >= m.trimIn - 0.01 && t <= m.trimOut) { const pt = P(Math.max(m.trimIn, t)); if (pt != null) ev.push({ t: pt, type, p }); } };
     for (const L of sc.layers || []) {
       if (L.hidden || L.style?.sound === false) continue;
       const s = L.style || {};
@@ -322,6 +322,23 @@ export function buildEvents(project, models) {
       } else if (L.kind === 'hud') {
         push(t0, 'hudboot', { vol });
         if (s.variant === 'target') push(t0 + D * 0.95, 'lock', { vol });
+        if (s.variant === 'radar') for (let k = 0; k < 12; k++) push(t0 + 0.6 + k * ((Math.PI * 2) / (1.6 * (+s.speed || 1))), 'ping', { vol: vol * 0.45 });
+        if (s.variant === 'mission') push(t0 + 0.2, 'type', { n: (s.text || '').length, dur: D * 0.95, vol: vol * 0.8 });
+        if (s.variant === 'scanner') push(t0 + 0.1, 'whoosh', { dur: 1.2, vol: vol * 0.5 });
+      } else if (L.kind === 'target') {
+        const lt = Math.max(0.3, D) * 0.75;
+        for (let k = 0; k < 6; k++) { const tt = t0 + (k / 6) * lt * (1 - k * 0.05); push(tt, 'beep', { freq: 1400 + k * 120, vol: vol * 0.4 }); }
+        push(t0 + lt, 'lock', { vol });
+      } else if (L.kind === 'hudtext') {
+        if (s.look === 'alert') for (let k = 0; k < 4; k++) push(t0 + k * 0.45, 'beep', { freq: 880, vol: vol * 0.6 });
+        else if (s.look === 'terminal' || s.look === 'telemetry') push(t0, 'type', { n: (s.text || '').length, dur: Math.max(0.5, D), vol: vol * 0.7 });
+        else if (s.look === 'stamp') push(t0 + 0.12, 'braam', { vol: vol * 0.5 });
+        else push(t0, 'glitch', { dur: 0.3, vol: vol * 0.6 });
+      } else if (L.kind === 'compare') {
+        push(t0 + 0.1, 'whoosh', { dur: Math.min(2.5, D), vol: vol * 0.6 });
+      } else if (L.kind === 'timeseries') {
+        const per = Math.max(0.2, +s.per || 2), n = (s.frames || []).length;
+        for (let k = 1; k < n; k++) push(t0 + k * per - Math.min(+s.fade || 0.8, per) * 0.5, 'whoosh', { dur: 0.7, vol: vol * 0.35 });
       } else if (L.kind === 'flicker') {
         push(t0, 'glitch', { dur: 0.35, vol });
         push(t0 + 0.1, 'type', { n: (s.text || '').length, dur: D * 0.8, vol });

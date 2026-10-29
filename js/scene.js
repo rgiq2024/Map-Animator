@@ -364,7 +364,8 @@ export function buildScene(scene, fw, fh) {
 
   const trimIn = clamp(+scene.trimIn || 0, 0, Math.max(0, total - 0.1));
   const trimOut = scene.trimOut != null ? clamp(+scene.trimOut, trimIn + 0.1, total) : total;
-  return { trimIn, trimOut, duration: trimOut - trimIn, keys, legs, drawable, runs, total, drawStart, drawEnd, stillStart, stillEnd, routeLen, fit, overview, stateAt, cameraAt, signTimes, fw, fh, intro: I, outro: O, mainEnd, layers, buildingsAt };
+  const tmap = timeMap(scene.edits, trimIn, trimOut);
+  return { trimIn, trimOut, duration: tmap.duration, pieces: tmap.pieces, cuts: tmap.cuts, holds: tmap.holds, srcTime: tmap.srcTime, outTime: tmap.outTime, keys, legs, drawable, runs, total, drawStart, drawEnd, stillStart, stillEnd, routeLen, fit, overview, stateAt, cameraAt, signTimes, fw, fh, intro: I, outro: O, mainEnd, layers, buildingsAt };
 }
 
 /** Like interpView, but zooms out in the middle when the two views are far apart (flyTo feel). */
@@ -376,6 +377,48 @@ export function flyPath(c0, c1, vw, vh) {
   const mid = { ...fitCamera(b, vw, vh, 0.25), bearing: 0, pitch: 0 };
   mid.zoom = Math.min(mid.zoom, c0.zoom, c1.zoom);
   return (u) => (u < 0.5 ? interpView(c0, mid, u * 2) : interpView(mid, c1, (u - 0.5) * 2));
+}
+
+/**
+ * Edits on the scene's own timeline: deleted sections (cuts) and freeze frames (holds).
+ * Output time o (0 … duration) ↔ scene time t.
+ */
+export function timeMap(edits, trimIn, trimOut) {
+  const ed = edits || {};
+  let cuts = (ed.cuts || []).map((c) => ({ a: Math.max(trimIn, Math.min(+c.a, +c.b)), b: Math.min(trimOut, Math.max(+c.a, +c.b)) })).filter((c) => c.b - c.a > 0.01).sort((x, y) => x.a - y.a);
+  const merged = [];
+  for (const c of cuts) { const last = merged.at(-1); if (last && c.a <= last.b) last.b = Math.max(last.b, c.b); else merged.push({ ...c }); }
+  cuts = merged;
+  // never cut everything
+  if (cuts.reduce((s, c) => s + c.b - c.a, 0) > trimOut - trimIn - 0.1) cuts = [];
+  const inCut = (t) => cuts.some((c) => t > c.a + 1e-6 && t < c.b - 1e-6);
+  const holds = (ed.holds || []).map((h) => ({ at: +h.at, dur: Math.max(0, +h.dur || 0) })).filter((h) => h.dur > 0.01 && h.at >= trimIn - 1e-6 && h.at <= trimOut + 1e-6 && !inCut(h.at)).sort((x, y) => x.at - y.at);
+  const pieces = [];
+  let o = 0, t = trimIn;
+  const playTo = (b) => { if (b - t > 1e-6) { pieces.push({ type: 'play', a: t, b, o0: o }); o += b - t; } t = b; };
+  const marks = [...cuts.map((c) => ({ x: c.a, cut: c })), ...holds.map((h) => ({ x: h.at, hold: h }))].sort((p, q) => p.x - q.x || (p.cut ? 1 : -1));
+  for (const m of marks) {
+    if (m.x < t - 1e-6 && !m.hold) { t = Math.max(t, m.cut.b); continue; }
+    playTo(Math.max(t, m.x));
+    if (m.hold) { pieces.push({ type: 'hold', at: t, dur: m.hold.dur, o0: o }); o += m.hold.dur; }
+    else t = Math.max(t, m.cut.b);
+  }
+  playTo(trimOut);
+  const duration = Math.max(0.1, o);
+  const srcTime = (oo) => {
+    if (!pieces.length) return trimIn;
+    for (const p of pieces) {
+      const len = p.type === 'play' ? p.b - p.a : p.dur;
+      if (oo < p.o0 + len - 1e-9) return p.type === 'play' ? p.a + Math.max(0, oo - p.o0) : p.at;
+    }
+    const last = pieces.at(-1);
+    return last.type === 'play' ? last.b : last.at;
+  };
+  const outTime = (tt) => {
+    for (const p of pieces) if (p.type === 'play' && tt >= p.a - 1e-6 && tt <= p.b + 1e-6) return p.o0 + (tt - p.a);
+    return null;
+  };
+  return { pieces, cuts, holds, duration, srcTime, outTime };
 }
 
 /** Default scene settings. */

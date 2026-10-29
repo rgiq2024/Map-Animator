@@ -122,7 +122,7 @@ async function drawOne(o, ctx, scene, model, t) {
   ctx.fillRect(0, 0, width, height);
   const bg = o.background?.(scene);
   if (bg) ctx.drawImage(bg, 0, 0, width, height);
-  const f = o.mapFilter?.(scene) || 'none';
+  const f = o.mapFilter?.(scene, t) || 'none';
   ctx.filter = f;
   ctx.drawImage(map.getCanvas(), 0, 0, width, height);
   ctx.filter = 'none';
@@ -150,7 +150,7 @@ async function forEachFrame(o, ctx, emit, canvas) {
     for (let i = 0; i < n; i++) {
       if (o.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
       const tau = i / fps;
-      const t = model.trimIn + tau;
+      const t = model.srcTime ? model.srcTime(tau) : model.trimIn + tau;
       await drawOne(o, ctx, scene, model, t);
       // ---- transitions ----
       const dip = (tr) => (tr === 'fadeBlack' ? '0,0,0' : tr === 'fadeWhite' ? '255,255,255' : null);

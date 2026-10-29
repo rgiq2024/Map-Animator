@@ -176,7 +176,7 @@ export function renderCaptions(ctx, o) {
   const fhCss = o.frame ? o.frame.h / o.px : 600;
   const altM = metresPerPixel(c.lat, o.map.getZoom()) * fhCss * 1.4;
   const view = { center: [c.lng, c.lat], zoom: o.map.getZoom(), bearing: o.map.getBearing(), pitch: o.map.getPitch(), altM, zoomSpeed: zoomSpeedAt(o.model, o.time) };
-  drawLayers(ctx, { scene: o.scene, proj, unit: o.unit, time: o.time, frame: o.frame, view, tokens: tokensAt(o.model, o.time) }, 'captions');
+  drawLayers(ctx, { scene: o.scene, proj, unit: o.unit, time: o.time, frame: o.frame, view, tokens: tokensAt(o.model, o.time), boxes: o.boxes, exact: o.exact }, 'captions');
 }
 
 /**

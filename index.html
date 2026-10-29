@@ -185,6 +185,14 @@
           <button data-add="freehand"><i>✎</i>Freehand</button>
           <button data-add="freearea"><i>✐</i>Freehand area</button>
         </div>
+        <span class="label-caps">Imagery</span>
+        <div class="add-grid fx" id="add-img">
+          <button data-add="image"><i>🖼</i>Georeferenced image</button>
+          <button data-add="compare"><i>◐</i>Before / after</button>
+          <button data-add="timeseries"><i>🗓</i>Images through time</button>
+          <button data-add="wayback"><i>🛰</i>Satellite through time</button>
+        </div>
+        <p class="muted small add-note">Images: PNG/JPG (with a .pgw/.jgw/.wld world file), GeoTIFF, or KML/KMZ ground overlays — or any picture you line up by hand.</p>
         <span class="label-caps">Space &amp; defence</span>
         <div class="add-grid fx" id="add-fx">
           <button data-add="satellite"><i>🛰️</i>Satellite pass</button>
@@ -195,6 +203,7 @@
           <button data-add="strike"><i>💥</i>Blast</button>
           <button data-add="bombing"><i>✈</i>Bombing run</button>
           <button data-add="capture"><i>⚑</i>Capture area</button>
+          <button data-add="target"><i>◎</i>Target marker</button>
           <button data-add="model3d"><i>🧊</i>3D model</button>
           <button data-add="model3dpath"><i>✈️</i>3D model on a path</button>
           <button data-add="videofx"><i>🎞</i>Effect clip (video)</button>
@@ -212,6 +221,21 @@
           <button data-add="hud" data-variant="target"><i>◎</i>Target lock</button>
           <button data-add="flicker"><i>▌</i>Flicker text</button>
           <button data-add="flicker" data-anim="glitch"><i>▚</i>Glitch text</button>
+          <button data-add="flicker" data-anim="slice"><i>☰</i>Slice glitch</button>
+          <button data-add="flicker" data-anim="scan"><i>▤</i>Scan reveal</button>
+          <button data-add="flicker" data-anim="redact"><i>▬</i>Redacted text</button>
+          <button data-add="flicker" data-anim="neon"><i>✦</i>Neon text</button>
+          <button data-add="hud" data-variant="tactical"><i>⊕</i>Tactical HUD</button>
+          <button data-add="hud" data-variant="radar"><i>◉</i>Radar scope</button>
+          <button data-add="hud" data-variant="thermal"><i>◍</i>Thermal camera</button>
+          <button data-add="hud" data-variant="scanner"><i>⇊</i>Terrain scanner</button>
+          <button data-add="hud" data-variant="mission"><i>▣</i>Mission briefing</button>
+          <button data-add="hudtext" data-look="telemetry"><i>≣</i>Telemetry text</button>
+          <button data-add="hudtext" data-look="alert"><i>⚠</i>Alert banner</button>
+          <button data-add="hudtext" data-look="terminal"><i>$_</i>Terminal text</button>
+          <button data-add="hudtext" data-look="coords"><i>⌖</i>Live coordinates</button>
+          <button data-add="hudtext" data-look="stamp"><i>▭</i>Stamp</button>
+          <button data-add="hudtext" data-look="ticker"><i>⇆</i>News ticker</button>
         </div>
         <span class="label-caps">Bring in</span>
         <div class="btn-row bring">
@@ -538,6 +562,12 @@
         <button class="tbtn wide" id="tl-out" title="Set out point at the playhead (O)">Out ]</button>
         <button class="tbtn" id="tl-clear-trim" title="Remove trimming"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         <span class="tsep"></span>
+        <button class="tbtn" id="tl-range" title="Select a section: drag across the timeline (or Shift + drag) (R)"><svg viewBox="0 0 24 24"><path d="M4 5v14M20 5v14M4 12h16"/><path d="M8 9l-4 3 4 3M16 9l4 3-4 3"/></svg></button>
+        <button class="tbtn wide" id="tl-delsec" title="Delete the selected section — the video jumps over it (Delete)" disabled><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg>Delete</button>
+        <button class="tbtn wide" id="tl-freeze" title="Freeze the picture at the playhead for 1 s more (F) · double-click a freeze to remove it"><svg viewBox="0 0 24 24"><path d="M12 2v20M4.9 4.9l14.2 14.2M2 12h20M4.9 19.1L19.1 4.9"/></svg>Freeze</button>
+        <button class="tbtn wide" id="tl-extend" title="Make the scene 1 s longer at the end (E)"><svg viewBox="0 0 24 24"><path d="M4 12h14M14 7l5 5-5 5M20 5v14"/></svg>+1 s</button>
+        <button class="tbtn" id="tl-clear-edits" title="Restore all deleted sections and freezes"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg></button>
+        <span class="tsep"></span>
         <button class="tbtn" id="tl-marker" title="Add / remove marker (M) · ↑↓ jump between markers"><svg viewBox="0 0 24 24"><path d="M6 3h12v13l-6 5-6-5z"/></svg></button>
         <button class="tbtn active" id="tl-snap" title="Snapping (S)"><svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0012 0V3M6 7h4M14 7h4"/></svg></button>
       </div>
@@ -656,6 +686,8 @@
       <li><b>Legs.</b> Each leg has a way of travelling — walk, car, train, ferry, plane and more — with its own symbol and line style. Use <i>+ New leg</i> to switch.</li>
       <li><b>Layers.</b> Draw or import boundaries, areas, floods, lines, points, animated symbols, text and captions. Each has its own animation and timing — trace a boundary, spread a flood from a point, raise water over real terrain, pulse a symbol, type out a caption.</li>
       <li><b>Space &amp; defence.</b> In the Layers step add satellite passes, the ISS orbit, launch sites, 3D ships/jets/drones, missile and drone paths, blasts, bombing runs and capture areas — plus charts, counters, HUD overlays and flicker text. Add <i>3D model</i> (built-in or <i>Upload GLB / glTF</i>) or an <i>Effect clip</i> video. Select an item and drag its square handle to resize it, the round handle to rotate it.</li>
+      <li><b>Imagery.</b> Add a georeferenced image (PNG/JPG with its world file, a GeoTIFF or a KML/KMZ overlay) or any picture and line it up by dragging its corners. Use <i>Before / after</i> to swipe between two images, <i>Images through time</i> for a year-by-year sequence, or <i>Satellite through time</i> for archived Esri imagery.</li>
+      <li><b>Timeline edits.</b> Shift + drag across the timeline and press Delete to cut a section out; <i>Freeze</i> holds the picture at the playhead; <i>+1 s</i> makes the scene longer. Captions, charts and HUD text can be dragged anywhere on the video.</li>
       <li><b>Sound.</b> Cinematic sound effects are added automatically — explosions, aircraft, HUD beeps, wind when the camera zooms. Pick a background score and volumes in Preview &amp; export; switch sound off for any layer in its settings.</li>
       <li><b>Globe.</b> Turn on the globe in Look, then pick “Earth zoom from space” in Camera. Search a place or type coordinates like <kbd>25.2, 55.27</kbd> to fly there.</li>
       <li><b>Look.</b> Pick a map theme, place names, 3D mountains, line colour and symbol.</li>
@@ -696,6 +728,7 @@
 <input type="file" id="file-marker" accept="image/*" hidden />
 <input type="file" id="file-model" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden />
 <input type="file" id="file-video" accept="video/*,.mp4,.webm,.mov" hidden />
+<input type="file" id="file-geoimg" multiple accept="image/*,.png,.jpg,.jpeg,.webp,.tif,.tiff,.pgw,.pngw,.jgw,.jpgw,.tfw,.wld,.j2w,.kml,.kmz" hidden />
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="js/app.js"></script>

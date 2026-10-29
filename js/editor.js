@@ -23,6 +23,9 @@ import { zoomSpeedAt } from './renderer.js';
 import { drawZoomBlur } from './effects.js';
 import { putMedia } from './store.js';
 import { TEMPLATES as QS_TEMPLATES, openQuickStart } from './quickstart.js';
+import { IMG_KINDS, readGeoImages, storeImage, imageFor, preloadImages, mediaOf, quadOf, quadGeom, quadFromBounds, quadBounds, rotateQuad, scaleQuad, moveQuad, fixAspect, labelFromName } from './geoimage.js';
+import { WaybackLayers, waybackReleases, yearlyReleases } from './wayback.js';
+import { thermalFilter } from './hudplus.js';
 import { SPRITES } from './sprites.js';
 import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
@@ -96,7 +99,7 @@ export function createEditor() {
   let rafId = 0;
   let dpr = window.devicePixelRatio || 1;
   let selLayer = null, drawing = null, pickOrigin = null;
-  let floods = null, bldFactor = null, models = null;
+  let floods = null, bldFactor = null, models = null, wayback = null;
 
   const scene = () => project.scenes[sceneIdx];
 
@@ -113,6 +116,7 @@ export function createEditor() {
     map.on('render', drawOverlay);
     floods = new TerrainFloods(map, (L) => { if (selLayer === L.id) renderLayerEditor(); rebuild(); save(); });
     models = new ModelLayer(map);
+    wayback = new WaybackLayers(map);
     map.on('error', (e) => console.warn('map:', e?.error?.message || e));
     map.on('movestart', (e) => {
       if (e.originalEvent && viewMode === 'play' && !exporting) setViewMode('edit');
@@ -151,6 +155,7 @@ export function createEditor() {
       bldFactor = null;
       floods?.attach();
       models?.attach();
+      wayback?.attach();
       $('#map').style.filter = gradeFilter(scene().look.grade);
       setSpaceBackground(scene().look.globe);
       applyTimeEffects(viewMode === 'play' ? time : null);
@@ -158,6 +163,8 @@ export function createEditor() {
     return stylePromise;
   }
 
+  const joinFilters = (...f) => f.filter((x) => x && x !== 'none').join(' ') || 'none';
+  const mapFilterAt = (sc, t) => joinFilters(gradeFilter(sc.look.grade), thermalFilter(sc, t, layerTiming));
   let starURL = null;
   function setSpaceBackground(on) {
     const el = $('#map');
@@ -259,7 +266,12 @@ export function createEditor() {
       edit: viewMode === 'edit' ? { step, activeLeg, selPoint, hoverPoint, selSign, selLayer, drawing, dpr: px } : null,
     });
     drawVignette(octx, fr, +scene().camera.lens?.vignette || 0);
-    renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr });
+    hits.boxes = [];
+    renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: hits.boxes });
+    if (viewMode === 'edit' && step === 'layers' && selLayer) {
+      const b = hits.boxes.findLast?.((q) => q.id === selLayer);
+      if (b) { octx.save(); octx.setLineDash([6 * px, 4 * px]); octx.strokeStyle = '#2d7ff9'; octx.lineWidth = 1.5 * px; octx.strokeRect(b.x - 4 * px, b.y - 4 * px, b.w + 8 * px, b.h + 8 * px); octx.restore(); }
+    }
     // dim everything outside the video frame
     octx.save();
     octx.fillStyle = 'rgba(30,32,38,0.58)';
@@ -413,10 +425,13 @@ export function createEditor() {
       const h = hits.layerHandles.find((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
       const gz = hits.gizmo && hitGizmo(hits.gizmo, p, overlay.width / stage.clientWidth);
       if (gz) { e.preventDefault(); startGizmo(gz, p, e); return; }
+      const box = hitBox(p);
+      if (box) { e.preventDefault(); startBoxDrag(box, p, e); return; }
       if (h) { e.preventDefault(); startDrag({ kind: 'vertex', id: h.id, ring: h.ring, i: h.i }, e); return; }
       const id = hitLayer(octx, scene().layers || [], hits.proj, p, unitNow());
       const L = id && layerById(id);
       if (L && L.geom?.type === 'Point') { e.preventDefault(); startDrag({ kind: 'lpoint', id }, e); return; }
+      if (L && IMG_KINDS.has(L.kind) && L.geom && L.id === selLayer && !L.locked) { e.preventDefault(); startDrag({ kind: 'lmove', id, last: [e.lngLat.lng, e.lngLat.lat] }, e); return; }
     }
     if (step === 'route') {
       const h = hitHandle(p);
@@ -429,6 +444,50 @@ export function createEditor() {
     }
   }
 
+  /** On-screen element (caption, chart, text…) under canvas point p. */
+  function hitBox(p) {
+    const bs = hits.boxes || [];
+    for (let i = bs.length - 1; i >= 0; i--) {
+      const b = bs[i];
+      if (p[0] >= b.x - 4 && p[0] <= b.x + b.w + 4 && p[1] >= b.y - 4 && p[1] <= b.y + b.h + 4) return b;
+    }
+    return null;
+  }
+  /** Drag an on-screen element anywhere in the video frame. */
+  function startBoxDrag(box, p0, e) {
+    const L = layerById(box.id);
+    if (!L) return;
+    map.dragPan.disable();
+    const snapshot = JSON.stringify({ scene: scene(), audio: project.audio || [] });
+    const rect = stage.getBoundingClientRect();
+    const k = overlay.width / stage.clientWidth;
+    const fr = { x: frame.x * k, y: frame.y * k, w: frame.w * k, h: frame.h * k };
+    const c0 = [box.x + box.w / 2, box.y + box.h / 2];
+    let moved = false;
+    stage.classList.add('dragging');
+    if (selLayer !== L.id) selectLayer(L.id);
+    const move = (ev) => {
+      const p = [(ev.clientX - rect.left) * k, (ev.clientY - rect.top) * k];
+      if (!moved && Math.hypot(p[0] - p0[0], p[1] - p0[1]) < 3) return;
+      moved = true;
+      const cx = box.lockX ? c0[0] : c0[0] + p[0] - p0[0], cy = box.lockY ? c0[1] : c0[1] + p[1] - p0[1];
+      L.style.position = 'custom';
+      L.style.pos = { x: +clamp((cx - fr.x) / fr.w, 0, 1).toFixed(4), y: +clamp((cy - fr.y) / fr.h, 0, 1).toFixed(4) };
+      repaint();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      map.dragPan.enable();
+      stage.classList.remove('dragging');
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+      if (moved) { undoStack.push(snapshot); updateUndo(); renderLayerEditor(); save(); }
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
+
   /** Resize / rotate the selected layer with its on-map handles. */
   function startGizmo(which, p0, e) {
     const g = hits.gizmo;
@@ -437,6 +496,7 @@ export function createEditor() {
     map.dragPan.disable();
     const snapshot = JSON.stringify({ scene: scene(), audio: project.audio || [] });
     const start = { ...L.style };
+    const startQuad = g.quad ? quadOf(L) : null;
     const rect = stage.getBoundingClientRect();
     const k = overlay.width / stage.clientWidth;
     let moved = false;
@@ -444,6 +504,19 @@ export function createEditor() {
     const move = (ev) => {
       moved = true;
       const p = [(ev.clientX - rect.left) * k, (ev.clientY - rect.top) * k];
+      if (startQuad) {
+        if (which === 'scale') {
+          const d0 = Math.max(4, Math.hypot(p0[0] - g.cx, p0[1] - g.cy)), d1 = Math.max(2, Math.hypot(p[0] - g.cx, p[1] - g.cy));
+          L.geom = quadGeom(scaleQuad(startQuad, d1 / d0));
+        } else {
+          const a0 = Math.atan2(p0[1] - g.cy, p0[0] - g.cx), a1 = Math.atan2(p[1] - g.cy, p[0] - g.cx);
+          let deg = ((a1 - a0) * 180) / Math.PI;
+          if (ev.shiftKey) deg = Math.round(deg / 15) * 15;
+          L.geom = quadGeom(rotateQuad(startQuad, deg));
+        }
+        repaint();
+        return;
+      }
       Object.assign(L.style, gizmoDrag(g, which, start, p0, p));
       if (L.kind === 'model3d') models?.update(scene(), viewMode === 'play' ? time : null, layerTiming);
       repaint();
@@ -471,7 +544,11 @@ export function createEditor() {
       if (!dragging.moved && Math.hypot(ev.clientX - dragging.x0, ev.clientY - dragging.y0) < 3) return;
       dragging.moved = true;
       const ll = map.unproject([ev.clientX - rect.left, ev.clientY - rect.top]);
-      if (dragging.kind === 'vertex' || dragging.kind === 'lpoint') {
+      if (dragging.kind === 'lmove') {
+        const Lm = layerById(dragging.id);
+        const q = Lm && quadOf(Lm);
+        if (q) { Lm.geom = quadGeom(moveQuad(q, ll.lng - dragging.last[0], ll.lat - dragging.last[1])); dragging.last = [ll.lng, ll.lat]; }
+      } else if (dragging.kind === 'vertex' || dragging.kind === 'lpoint') {
         moveLayerVertex(dragging, [+ll.lng.toFixed(6), +ll.lat.toFixed(6)]);
       } else if (dragging.kind === 'point') {
         const leg = scene().legs[dragging.li];
@@ -498,7 +575,7 @@ export function createEditor() {
       setTimeout(() => { suppressClick = false; }, 0);
       const d = dragging;
       dragging = null;
-      if ((d.kind === 'vertex' || d.kind === 'lpoint')) {
+      if ((d.kind === 'vertex' || d.kind === 'lpoint' || d.kind === 'lmove')) {
         if (d.moved) { undoStack.push(snapshot); updateUndo(); commitLayers(); } else selectLayer(d.id);
         return;
       }
@@ -566,7 +643,7 @@ export function createEditor() {
       const gz = hits.gizmo && hitGizmo(hits.gizmo, p, overlay.width / stage.clientWidth);
       stage.classList.toggle('on-rotate', gz === 'rotate');
       stage.classList.toggle('on-scale', gz === 'scale');
-      const onH = !!gz || hits.layerHandles.some((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
+      const onH = !!gz || !!hitBox(p) || hits.layerHandles.some((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
       stage.classList.toggle('on-handle', onH || !!hitLayer(octx, scene().layers || [], hits.proj, p, unitNow()));
       return;
     }
@@ -1000,6 +1077,8 @@ export function createEditor() {
       $$('#add-layer [data-add]').forEach((b) => b.classList.toggle('active', b.dataset.add === kind));
       return;
     }
+    if (kind === 'image' || kind === 'compare' || kind === 'timeseries') { cancelDrawing(); geoPick = { mode: 'new', kind }; $('#file-geoimg').click(); return; }
+    if (kind === 'wayback') { cancelDrawing(); addWayback(); return; }
     let pathModel = false;
     if (kind === 'model3dpath') { kind = 'model3d'; pathModel = true; }
     if (!pathModel && !LAYER_KINDS[kind].geom) { addLayer(newLayer(kind, null, { start: newStart() })); return; }
@@ -1071,6 +1150,8 @@ export function createEditor() {
     renderCamSelects();
     floods?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); renderFloodInfo(); });
     models?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); });
+    wayback?.sync(scene()); applyTimeEffects(viewMode === 'play' ? time : null);
+    preloadImages(scene()).then(repaint);
     eventsCache = null;
     save();
   }
@@ -1152,6 +1233,7 @@ export function createEditor() {
   $('#add-layer').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#add-fx').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#upload-model-btn').onclick = () => $('#file-model').click();
+  $('#add-img').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#add-info').addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
     if (!b) return;
@@ -1163,10 +1245,34 @@ export function createEditor() {
       if (T) { [L.style.title, L.style.data, L.style.prefix, L.style.suffix] = T; L.name = T[0]; }
       if (b.dataset.type === 'counter') L.duration = 2.5;
     }
-    if (b.dataset.anim) { L.anim = b.dataset.anim; if (b.dataset.anim === 'glitch') { L.style.text = 'SIGNAL INTERCEPTED'; L.style.color = '#ff4d4d'; L.name = 'Glitch text'; } }
+    if (b.dataset.anim) {
+      L.anim = b.dataset.anim;
+      const T = { glitch: ['Glitch text', 'SIGNAL INTERCEPTED', '#ff4d4d'], slice: ['Slice glitch', 'SYSTEM BREACH', '#ff3bd4'], scan: ['Scan reveal', 'AREA SCANNED', '#36d1ff'], redact: ['Redacted text', 'OPERATION NIGHTFALL', '#ffffff'], neon: ['Neon text', 'OPEN 24/7', '#ff4fd8'] }[b.dataset.anim];
+      if (T) [L.name, L.style.text, L.style.color] = T;
+      if (b.dataset.anim === 'redact') { L.style.sub = 'FILE 07 · EYES ONLY'; L.duration = 2.2; }
+      if (b.dataset.anim === 'neon') { L.style.box = false; L.style.sub = ''; L.style.cursor = false; }
+    }
+    if (b.dataset.look) {
+      L.style.look = b.dataset.look;
+      const T = {
+        telemetry: ['Telemetry', 'SPD: 420 KTS\nALT: 12500 FT\nHDG: 274\nFUEL: 64 %\nLINK: STRONG', 'top-left'],
+        alert: ['Alert banner', 'INCOMING THREAT DETECTED', 'top'],
+        terminal: ['Terminal', 'connect sat-link --secure\nhandshake ........ OK\ndownloading imagery 100%\naccess granted', 'bottom-left'],
+        coords: ['Live coordinates', '', 'bottom-right'],
+        stamp: ['Stamp', 'CLASSIFIED', 'top-right'],
+        ticker: ['News ticker', 'Satellite imagery confirms new construction\nRescue teams reach the flooded district\nMore updates to follow', 'bottom'],
+      }[b.dataset.look];
+      if (T) { [L.name, L.style.text, L.style.position] = T; }
+      if (b.dataset.look === 'stamp') L.anim = 'fade';
+    }
     if (b.dataset.variant) {
       L.style.variant = b.dataset.variant;
-      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock' }[b.dataset.variant];
+      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock', tactical: 'Tactical HUD', radar: 'Radar scope', thermal: 'Thermal camera', scanner: 'Terrain scanner', mission: 'Mission briefing' }[b.dataset.variant];
+      if (b.dataset.variant === 'thermal') { L.style.color = '#ffffff'; L.style.label = 'FLIR-1'; }
+      if (b.dataset.variant === 'mission') { L.style.position = 'top-left'; L.style.label = 'MISSION BRIEFING'; L.duration = 4; }
+      if (b.dataset.variant === 'radar') L.style.label = 'AIR SEARCH';
+      if (b.dataset.variant === 'scanner') { L.style.label = 'ANALYZING TERRAIN'; L.duration = 6; }
+      if (b.dataset.variant === 'tactical') L.style.label = 'TACTICAL';
       if (b.dataset.variant === 'satellite') { L.style.color = '#36d1ff'; L.style.label = 'SAT-01 LIVE'; }
       if (b.dataset.variant === 'target') { L.style.color = '#ff5a52'; L.style.label = 'TGT-07'; L.duration = 2; }
     }
@@ -1225,13 +1331,14 @@ export function createEditor() {
       h += `<label class="field"><span>Text</span>${fText('style.text', s.text)}</label><label class="field"><span>Second line</span>${fText('style.sub', s.sub, 'Optional')}</label>`;
       h += fRow('Font', fSel('style.font', s.font || '', FONTS));
       h += fRow('Layout', fSel('style.layout', s.layout, CAPTION_LAYOUTS));
-      if (!['lowerThird', 'band'].includes(s.layout)) h += fRow('Position', fSel('style.position', s.position, POSITIONS));
+      h += fRow('Position', fSel('style.position', ['lowerThird', 'band'].includes(s.layout) && s.position !== 'custom' ? '' : s.position, ['lowerThird', 'band'].includes(s.layout) ? { '': 'Default', custom: POSITIONS.custom } : POSITIONS));
       h += fRow('Accent', fColor('style.accent', s.accent)) + fRow('Size', fRange('style.size', s.size || 1, 0.6, 1.8, 0.05));
       h += '<p class="hint-line">Use {km} or {mi} to show the distance travelled so far.</p>';
     }
     if (FX_FORMS[L.kind]) {
       h += '<h5>Settings</h5>';
-      for (const [path, label, type, o] of FX_FORMS[L.kind]) {
+      for (const [path, label, type, o, when] of FX_FORMS[L.kind]) {
+        if (when && !when(L)) continue;
         const v = path.split('.').reduce((a, k) => a?.[k], L);
         if (type === 'select') h += fRow(label, fSel(path, v, o));
         else if (type === 'font') h += fRow(label, fSel(path, v || '', FONTS));
@@ -1240,7 +1347,12 @@ export function createEditor() {
         else if (type === 'switch') h += fRow(label, fSw(path, v));
         else if (type === 'number') h += fRow(label, fNum(path, v, o || 1));
         else if (type === 'textarea') h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea></label>`;
-        else if (type === 'model') {
+        else if (type === 'image') {
+          const im = v && imageFor(v);
+          h += `<div class="row img-pick"><span>${label}</span><span class="img-pick-r">${im?.ready ? `<i class="muted small">${im.w}×${im.h}</i>` : ''}<button class="btn sm" data-act="pickImg" data-field="${path}">${v ? 'Replace…' : 'Choose…'}</button></span></div>`;
+        } else if (type === 'frames') {
+          h += renderFrames(L);
+        } else if (type === 'model') {
           const opts = {};
           for (const [k, n] of Object.entries(BUILTIN_MODELS)) opts[`builtin:${k}`] = `${n} (built-in)`;
           for (const m of project.models || []) opts[`media:${m.id}`] = `${m.name} (yours)`;
@@ -1256,6 +1368,7 @@ export function createEditor() {
         h += '<h5>Sound</h5>' + fRow('Sound effects', fSw('style.sound', L.style.sound !== false));
         if (L.style.sound !== false) h += fRow('Volume', fRange('style.soundVol', L.style.soundVol ?? 1, 0, 2, 0.05));
       }
+      if (IMG_KINDS.has(L.kind) && L.geom) h += renderGeoref(L);
       if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
       if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
     }
@@ -1290,10 +1403,13 @@ export function createEditor() {
     if (el.type === 'range' || el.type === 'number') v = v === '' ? null : +v;
     if (key === 'style.count') v = Math.max(1, Math.min(40, Math.round(+v || 1)));
     if (key === 'style.weight') v = +v;
+    if (key.startsWith('geo:')) return;
     if (final) pushUndo();
+    if (key.startsWith('frame:')) { const [, i, f] = key.split(':'); const fr = L.style.frames?.[+i]; if (fr) fr[f] = v; repaint(); save(); return; }
     setPath(L, key, v);
     eventsCache = null;
-    if (key === 'anim' || key === 'style.marker' || key === 'style.layout' || key === 'style.sound') { renderLayerEditor(); commitLayers(); return; }
+    if (['style.per', 'style.fade'].includes(key) && L.kind === 'timeseries') { L.duration = +(Math.max(1, (L.style.frames || []).length) * (+L.style.per || 2)).toFixed(2); eventsCache = null; }
+    if (key === 'anim' || key === 'style.marker' || key === 'style.layout' || key === 'style.sound' || key === 'style.variant' || key === 'style.look' || key === 'style.mode' || (key === 'style.label' && L.kind === 'timeseries') || key === 'style.labels' || key === 'style.border' || key === 'style.position') { renderLayerEditor(); commitLayers(); return; }
     if (key === 'style.source' || key === 'style.color' && L.kind === 'model3d') { commitLayers(); return; }
     if (['start', 'duration', 'hold', 'style.levelFrom', 'style.levelTo'].includes(key) || key === 'name') {
       clearTimeout(layerEditTimer);
@@ -1374,6 +1490,170 @@ export function createEditor() {
       toast('3D model added — drag it on the map, resize with the square handle');
     } catch (err) { toast(err.message || 'Could not read that model'); }
   });
+  // ---------------------------------------------------------------- georeferenced images, before/after, time series
+  let geoPick = null;
+  /** A quad filling part of the current video frame, with the picture's proportions (h / w). */
+  function fitQuad(aspectHW = 0.66, frac = 0.6) {
+    let w = frame.w * frac, h = w * aspectHW;
+    if (h > frame.h * 0.8) { h = frame.h * 0.8; w = h / aspectHW; }
+    const cx = frame.x + frame.w / 2, cy = frame.y + frame.h / 2;
+    const ll = (x, y) => { const p = map.unproject([x, y]); return [p.lng, p.lat]; };
+    return [ll(cx - w / 2, cy - h / 2), ll(cx + w / 2, cy - h / 2), ll(cx + w / 2, cy + h / 2), ll(cx - w / 2, cy + h / 2)];
+  }
+  const fmtDeg = (v) => (+v).toFixed(6);
+  function renderGeoref(L) {
+    const q = quadOf(L);
+    const b = quadBounds(q);
+    let h = '<h5>Place it on the map (georeference)</h5>';
+    h += '<p class="hint-line">Drag the image to move it, the white corner squares to stretch each corner onto matching features, the round handle to rotate (Shift = 15° steps) and the blue square to resize. Lower the opacity to line it up with the map.</p>';
+    h += `<div class="btn-row wrap"><button class="btn sm" data-act="geoFit">Fit to the view</button><button class="btn sm" data-act="geoAspect">Fix proportions</button><button class="btn sm" data-act="geoRot" data-v="-1">⟲ 1°</button><button class="btn sm" data-act="geoRot" data-v="1">⟳ 1°</button><button class="btn sm" data-act="geoScale" data-v="0.97">Smaller</button><button class="btn sm" data-act="geoScale" data-v="1.03">Bigger</button></div>`;
+    h += `<div class="geo-bounds"><label>North<input data-b="geo:n" value="${fmtDeg(b.n)}"></label><label>South<input data-b="geo:s" value="${fmtDeg(b.s)}"></label><label>West<input data-b="geo:w" value="${fmtDeg(b.w)}"></label><label>East<input data-b="geo:e" value="${fmtDeg(b.e)}"></label></div>`;
+    h += '<div class="btn-row"><button class="btn sm" data-act="geoApply">Set to these bounds</button><button class="btn sm" data-act="zoom">Zoom to the image</button></div>';
+    h += fRow('Image projection', fSel('style.crs', L.style.crs || '3857', { 3857: 'Web Mercator (screenshots, tiles)', 4326: 'Latitude / longitude grid (WGS84)' }));
+    h += fRow('Lock position', fSw('locked', !!L.locked));
+    return h;
+  }
+  function renderFrames(L) {
+    const s = L.style, fr = s.frames || [];
+    let h = '';
+    if (s.source === 'wayback') {
+      const now = new Date().getFullYear();
+      const yrs = []; for (let y = 2014; y <= now; y++) yrs.push(y);
+      const ysel = (id, v) => `<select id="${id}">${yrs.map((y) => `<option ${y === v ? 'selected' : ''}>${y}</option>`).join('')}</select>`;
+      h += '<h5>Satellite dates (Esri World Imagery Wayback)</h5>';
+      h += `<div class="wb-pick">${fRow('From', ysel('wb-from', fr[0]?.year || now - 6))}${fRow('To', ysel('wb-to', fr.at(-1)?.year || now))}${fRow('Every', `<select id="wb-step"><option value="1">year</option><option value="2">2 years</option><option value="3">3 years</option></select>`)}<button class="btn sm" data-act="wbLoad">Use these dates</button></div>`;
+      h += '<p class="hint-line">Archived Esri World Imagery, one image per year. Imagery only changes where Esri updated it, so pick a well-covered place (cities usually change most). Imagery © Esri and its partners.</p>';
+    } else {
+      h += '<h5>Images (in order)</h5>';
+    }
+    h += `<ol class="frame-list">${fr.map((f, i) => `<li><span class="fr-n">${i + 1}</span><input data-b="frame:${i}:label" value="${esc(f.label || '')}" title="Label shown in the video"><small class="muted">${esc(f.date || f.name || '')}</small><span><button class="mini" data-act="frUp" data-i="${i}" title="Earlier">↑</button><button class="mini" data-act="frDown" data-i="${i}" title="Later">↓</button><button class="mini" data-act="frDel" data-i="${i}" title="Remove">✕</button></span></li>`).join('') || '<li class="empty">No dates yet.</li>'}</ol>`;
+    if (s.source !== 'wayback') h += '<div class="btn-row"><button class="btn sm" data-act="addFrames">Add images…</button><button class="btn sm" data-act="frSort">Sort by label</button></div><p class="hint-line">All images share the same place on the map. Labels are taken from years in the file names (e.g. dubai_2019.jpg).</p>';
+    return h;
+  }
+  function setSeriesDuration(L) { L.duration = +(Math.max(1, (L.style.frames || []).length) * (+L.style.per || 2)).toFixed(2); }
+  async function addWayback() {
+    const L = newLayer('timeseries', null, { start: newStart() });
+    L.style.source = 'wayback';
+    L.style.frames = [];
+    L.name = 'Satellite through time';
+    addLayer(L);
+    try {
+      toast('Loading Esri Wayback dates…');
+      const list = await waybackReleases();
+      const now = new Date().getFullYear();
+      L.style.frames = yearlyReleases(list, now - 6, now).map((r) => ({ release: r.num, url: r.url, date: r.date, year: r.year, label: String(r.year) }));
+      setSeriesDuration(L);
+      if (selLayer === L.id) renderLayerEditor();
+      commitLayers();
+      if (map.getZoom() < 12) toast('Zoom in to a city to see the imagery change through the years', 4200);
+    } catch { toast('Could not load the Wayback imagery list — check your connection', 4200); }
+  }
+  $('#file-geoimg').addEventListener('change', async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    const pick = geoPick;
+    geoPick = null;
+    if (!files.length || !pick) return;
+    let res;
+    try { toast('Reading images…'); res = await readGeoImages(files); } catch (err) { console.warn(err); toast(err.message || 'Could not read those files', 5200); return; }
+    const items = [];
+    for (const r of res) items.push({ ...r, id: await storeImage(r.blob) });
+    items.forEach((r) => { const im = imageFor(r.id); im.p.then(repaint); });
+    pushUndo();
+    const geoOf = (r) => (r.quad ? { q: r.quad, crs: r.crs } : { q: fitQuad(r.h / r.w), crs: '3857' });
+    let zoomTo = null;
+    if (pick.mode === 'new') {
+      const start = newStart();
+      const added = [];
+      if (pick.kind === 'image') {
+        for (const r of items) {
+          const g = geoOf(r);
+          const L = newLayer('image', quadGeom(g.q), { start, name: r.name });
+          Object.assign(L.style, { media: r.id, name: r.name, crs: g.crs });
+          added.push(L);
+          if (r.quad) zoomTo = L;
+        }
+      } else if (pick.kind === 'compare') {
+        const sorted = items.slice().sort((a, b) => labelFromName(a.name).localeCompare(labelFromName(b.name)));
+        const g = geoOf(sorted.find((r) => r.quad) || sorted[0]);
+        const L = newLayer('compare', quadGeom(g.q), { start, name: 'Before / after' });
+        Object.assign(L.style, { media: sorted[0].id, media2: sorted[1]?.id || '', crs: g.crs });
+        if (sorted.length >= 2) { L.style.labelA = labelFromName(sorted[0].name).match(/^\d{4}/) ? labelFromName(sorted[0].name) : 'BEFORE'; L.style.labelB = labelFromName(sorted[1].name).match(/^\d{4}/) ? labelFromName(sorted[1].name) : 'AFTER'; }
+        added.push(L);
+        if (sorted.some((r) => r.quad)) zoomTo = L;
+        if (sorted.length < 2) toast('Now choose the AFTER image in the layer settings', 4200);
+      } else {
+        const sorted = items.slice().sort((a, b) => labelFromName(a.name).localeCompare(labelFromName(b.name), undefined, { numeric: true }));
+        const g = geoOf(sorted.find((r) => r.quad) || sorted[0]);
+        const L = newLayer('timeseries', quadGeom(g.q), { start, name: 'Images through time' });
+        Object.assign(L.style, { source: 'files', crs: g.crs, frames: sorted.map((r) => ({ media: r.id, name: r.name, label: labelFromName(r.name) })) });
+        setSeriesDuration(L);
+        added.push(L);
+        if (sorted.some((r) => r.quad)) zoomTo = L;
+      }
+      layersOf().push(...added);
+      selLayer = added.at(-1).id;
+      setViewMode('edit');
+    } else {
+      const L = layerById(pick.id);
+      if (!L) return;
+      if (pick.mode === 'field') {
+        setPath(L, pick.field, items[0].id);
+        if (items[0].quad && (L.kind === 'image' || !quadOf(L))) { L.geom = quadGeom(items[0].quad); L.style.crs = items[0].crs; zoomTo = L; }
+        if (L.kind === 'compare' && pick.field === 'style.media2' && items[0].name.match(/(19|20)\d\d/)) L.style.labelB = labelFromName(items[0].name);
+      } else if (pick.mode === 'frames') {
+        (L.style.frames ||= []).push(...items.map((r) => ({ media: r.id, name: r.name, label: labelFromName(r.name) })));
+        if (!L.geom) L.geom = quadGeom(geoOf(items[0]).q);
+        setSeriesDuration(L);
+      }
+    }
+    renderLayerEditor();
+    commitLayers();
+    if (zoomTo) zoomToLayer(zoomTo);
+    toast(items.some((r) => r.quad) ? 'Image placed from its georeference' : 'Image placed in the view — drag its corners to line it up with the map', 4200);
+  });
+  $('#layer-editor').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    const a = btn?.dataset.act;
+    const L = selLayer && layerById(selLayer);
+    if (!a || !L) return;
+    const q = quadOf(L);
+    const img = imageFor(L.style.media || L.style.frames?.[0]?.media);
+    const geo = (nq) => { pushUndo(); L.geom = quadGeom(nq); renderLayerEditor(); repaint(); save(); };
+    if (a === 'pickImg') { geoPick = { mode: 'field', id: L.id, field: btn.dataset.field }; $('#file-geoimg').click(); }
+    if (a === 'addFrames') { geoPick = { mode: 'frames', id: L.id }; $('#file-geoimg').click(); }
+    if (a === 'geoFit') geo(fitQuad(img?.ready ? img.h / img.w : 0.66));
+    if (a === 'geoAspect' && q && img?.ready) geo(fixAspect(q, img.h / img.w));
+    if (a === 'geoRot' && q) geo(rotateQuad(q, +btn.dataset.v));
+    if (a === 'geoScale' && q) geo(scaleQuad(q, +btn.dataset.v));
+    if (a === 'geoApply') {
+      const v = (k) => +$(`#layer-editor [data-b="geo:${k}"]`).value;
+      const n = v('n'), so = v('s'), w = v('w'), ea = v('e');
+      if (![n, so, w, ea].every(isFinite) || n <= so || ea <= w || Math.abs(n) > 85 || Math.abs(so) > 85) { toast('Check the bounds: north must be above south, east right of west'); return; }
+      geo(quadFromBounds(w, so, ea, n));
+      zoomToLayer(L);
+    }
+    const fr = L.style.frames || [];
+    const i = +btn.dataset.i;
+    if (a === 'frUp' && i > 0) { pushUndo(); [fr[i - 1], fr[i]] = [fr[i], fr[i - 1]]; renderLayerEditor(); commitLayers(); }
+    if (a === 'frDown' && i < fr.length - 1) { pushUndo(); [fr[i + 1], fr[i]] = [fr[i], fr[i + 1]]; renderLayerEditor(); commitLayers(); }
+    if (a === 'frDel') { pushUndo(); fr.splice(i, 1); setSeriesDuration(L); renderLayerEditor(); commitLayers(); }
+    if (a === 'frSort') { pushUndo(); fr.sort((x, y) => String(x.label).localeCompare(String(y.label), undefined, { numeric: true })); renderLayerEditor(); commitLayers(); }
+    if (a === 'wbLoad') {
+      const from = +$('#wb-from').value, to = +$('#wb-to').value, step = +$('#wb-step').value;
+      try {
+        const list = await waybackReleases();
+        const yearly = yearlyReleases(list, Math.min(from, to), Math.max(from, to)).filter((r, k, arr) => (r.year - arr[0].year) % step === 0 || k === arr.length - 1);
+        if (!yearly.length) { toast('No imagery dates in those years'); return; }
+        pushUndo();
+        L.style.frames = yearly.map((r) => ({ release: r.num, url: r.url, date: r.date, year: r.year, label: String(r.year) }));
+        setSeriesDuration(L);
+        renderLayerEditor();
+        commitLayers();
+      } catch { toast('Could not load the Wayback imagery list — check your connection', 4200); }
+    }
+  });
+
   $('#file-video').addEventListener('change', async (e) => {
     const f = e.target.files[0];
     e.target.value = '';
@@ -2224,6 +2504,8 @@ export function createEditor() {
     if (!map || !sc) return;
     floods?.update(sc, t);
     models?.update(sc, t, layerTiming);
+    wayback?.update(sc, t, layerTiming);
+    if (!exporting) { const f = mapFilterAt(sc, t); const el = $('#map'); if (el.style.filter !== f) el.style.filter = f === 'none' ? '' : f; }
     const f = t == null || !m ? 1 : m.buildingsAt(t);
     const q = Math.round(f * 200) / 200;
     if (q !== bldFactor && map.getLayer && map.getLayer('ma-buildings')) {
@@ -2235,20 +2517,24 @@ export function createEditor() {
     if (m === viewMode) return;
     viewMode = m;
     if (m === 'edit') { setPlaying(false); applyTimeEffects(null); }
-    if (m === 'play') { closePops(); stopPlacing(); cancelDrawing(); }
+    if (m === 'play') {
+      closePops(); stopPlacing(); cancelDrawing();
+      const cam = scene().camera;
+      if (cam.mode === 'fixed' && !cam.fixed && !model?.fit) { cam.fixed = currentView(); rebuild(); }
+    }
     repaint();
   }
   function setPlaying(p) {
     const was = playing;
     playing = p;
     document.body.classList.toggle('is-playing', p);
-    if (p) { playStartNow = performance.now(); playStartTime = time; playFrom(project, projTime(time), tl?.state.rate || 1, soundEvents(), projTime(model.trimOut)).catch(() => {}); }
+    if (p) { playStartNow = performance.now(); playStartTime = time; playStartOut = outOf(time); playFrom(project, sceneOffset() + playStartOut, tl?.state.rate || 1, soundEvents(), sceneOffset() + model.duration).catch(() => {}); }
     else if (was) stopPlayback();
   }
   /** Automatic sound effects for the whole project (cached until something changes). */
   let eventsCache = null;
   function soundEvents() {
-    const key = JSON.stringify([project.scenes.map((s) => [s.layers, s.camera, s.legs.length, s.trimIn, s.trimOut, s.transition]), project.sound, frame.w, frame.h]);
+    const key = JSON.stringify([project.scenes.map((s) => [s.layers, s.camera, s.legs.length, s.trimIn, s.trimOut, s.transition, s.edits]), project.sound, frame.w, frame.h]);
     if (eventsCache?.key === key) return eventsCache.ev;
     let ev = [];
     try { ev = buildEvents(project, project.scenes.map((sc) => buildScene(sc, frame.w, frame.h))); } catch (err) { console.warn('sound events', err); }
@@ -2264,7 +2550,16 @@ export function createEditor() {
     offsetCache = { key: sceneIdx, n: project.scenes.length, v };
     return v;
   }
-  const projTime = (t) => sceneOffset() + (t - (model?.trimIn || 0));
+  /** Output time (seconds into this scene's part of the video) for scene time t; skips deleted sections. */
+  let playStartOut = 0;
+  function outOf(t) {
+    if (!model?.outTime) return t - (model?.trimIn || 0);
+    const o = model.outTime(t);
+    if (o != null) return o;
+    const next = model.pieces.find((p) => p.type === 'play' && p.a >= t - 1e-6);
+    return next ? next.o0 : model.duration;
+  }
+  const projTime = (t) => sceneOffset() + outOf(t);
   function togglePlay() {
     if (!hasContent(scene(), model)) { toast('Add a route or a layer first'); return; }
     if (viewMode !== 'play') setViewMode('play');
@@ -2277,11 +2572,12 @@ export function createEditor() {
     rafId = requestAnimationFrame(tick);
     if (!project || exporting) return;
     if (playing) {
-      time = playStartTime + ((now - playStartNow) / 1000) * (tl.state.rate || 1);
-      if (time >= model.trimOut) {
-        if (tl.state.loop) { time = model.trimIn; playStartTime = time; playStartNow = now; playFrom(project, projTime(time), tl.state.rate, soundEvents(), projTime(model.trimOut)).catch(() => {}); }
-        else { time = model.trimOut; setPlaying(false); }
+      let o = playStartOut + ((now - playStartNow) / 1000) * (tl.state.rate || 1);
+      if (o >= model.duration) {
+        if (tl.state.loop) { o = 0; playStartOut = 0; playStartTime = model.trimIn; playStartNow = now; playFrom(project, sceneOffset(), tl.state.rate, soundEvents(), sceneOffset() + model.duration).catch(() => {}); }
+        else { o = model.duration; setPlaying(false); }
       }
+      time = model.srcTime ? model.srcTime(o) : model.trimIn + o;
       applyCamera(time);
       updatePlayhead();
       repaint();
@@ -2292,6 +2588,7 @@ export function createEditor() {
   let selKey = null;
   const tl = createTimeline({
     scene, model: () => (project ? model : null), project: () => project, fps: () => project?.fps || 30,
+    toast,
     getTime: () => time,
     seek(t) { time = clamp(t, 0, model.total); setViewMode('play'); setPlaying(false); applyCamera(time); tl.playhead(); repaint(); },
     isPlaying: () => playing,
@@ -2486,6 +2783,8 @@ export function createEditor() {
     floods.sync(scene()).then(() => applyTimeEffects(null));
     models?.clear();
     models?.sync(scene()).then(() => applyTimeEffects(null));
+    wayback?.sync(scene());
+    preloadImages(scene()).then(repaint);
     rebuild();
     showEditView();
     renderScenes();
@@ -2541,9 +2840,9 @@ export function createEditor() {
       const blob = await renderStill({
         map, width, height,
         beforeFrame: (s2, m, tt) => seekScene(s2, tt, layerTiming),
-        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
+        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 }); applyTimeEffects(tt, sc, m); },
-        mapFilter: (s2) => gradeFilter(s2.look.grade),
+        mapFilter: (s2, tt) => mapFilterAt(s2, tt),
         background: spaceBg,
         drawFrame: (ctx, s2, m, tt) => {
           const full = { x: 0, y: 0, w: width, h: height };
@@ -2612,7 +2911,7 @@ export function createEditor() {
         scenes: project.scenes, map, width, height, fps, join: project.join === 'fade' ? 'fadeBlack' : project.join,
         signal: exportAbort.signal,
         durationOf: (sc) => buildScene(sc, frame.w, frame.h).duration,
-        mapFilter: (sc) => gradeFilter(sc.look.grade),
+        mapFilter: (sc, tt) => mapFilterAt(sc, tt),
         background: spaceBg,
         mixAudio: (project.audio || []).some((t) => !t.muted) || hasSound(project) ? (d) => mixProject(project, d, soundEvents()) : null,
         beforeFrame: (sc, m, t) => seekScene(sc, t, layerTiming),
@@ -2622,6 +2921,8 @@ export function createEditor() {
           await floods.sync(sc);
           models.clear();
           await models.sync(sc);
+          wayback.sync(sc);
+          await preloadImages(sc);
           await preloadSignImages(sc.signs);
           await loadFonts(sc);
           bldFactor = null;
@@ -2732,6 +3033,8 @@ export function createEditor() {
       rafId = requestAnimationFrame(tick);
       floods.sync(scene()).then(() => applyTimeEffects(null));
       models.sync(scene()).then(() => applyTimeEffects(null));
+      stylePromise.then(() => { wayback.sync(scene()); applyTimeEffects(null); });
+      preloadImages(scene()).then(repaint);
       loadFonts(scene()).then(repaint);
       renderCamSelects();
       if (opts.importFile) await importRoute(opts.importFile);
@@ -2769,6 +3072,7 @@ function migrateScene(sc) {
   c.keys ||= [];
   c.orbitSpeed ??= 12;
   sc.markers ||= [];
+  sc.edits ||= { cuts: [], holds: [] };
   sc.trimIn ??= 0;
   if (sc.trimOut === undefined) sc.trimOut = null;
   sc.transition ||= 'cut';
@@ -2787,6 +3091,7 @@ export function lensFor(sc, model, t, toFrameY) {
 }
 
 export function drawAttribution(ctx, text, unit, W, H) {
+  if (!text) return;
   ctx.save();
   ctx.font = `500 ${10 * unit}px Inter, system-ui, sans-serif`;
   const tw = ctx.measureText(text).width;

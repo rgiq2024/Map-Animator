@@ -99,6 +99,15 @@ Object.assign(THEMES, {
   cartodark: R({ group: 'base', name: 'CARTO Dark Matter', desc: 'Dark, minimal', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png', 'https://b.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}@2x.png'], maxzoom: 19, labels: true, attribution: '© CARTO © OpenStreetMap contributors', line: '#ff6a3d', dark: true, satellite: false, swatch: ['#262626', '#121212', '#ff6a3d'] }),
   cartovoyager: R({ group: 'base', name: 'CARTO Voyager', desc: 'Colourful and clear', tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png', 'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'], maxzoom: 19, labels: true, attribution: '© CARTO © OpenStreetMap contributors', line: '#e8553f', satellite: false, swatch: ['#f5f3ef', '#a8d1e7', '#e8553f'] }),
 });
+// ---- Blank base maps (plain colour, optionally with coastlines and borders) ----
+const B = (o) => ({ more: true, raster: true, group: 'base', satellite: false, attribution: '', ...o });
+Object.assign(THEMES, {
+  blank: B({ name: 'Blank (white)', desc: 'Plain white — nothing but your layers', blank: { bg: '#ffffff' }, line: '#ff4a2b', swatch: ['#ffffff', '#ffffff', '#ff4a2b'] }),
+  blankgray: B({ name: 'Blank (gray)', desc: 'Plain neutral gray', blank: { bg: '#d9dadc' }, line: '#ff4a2b', swatch: ['#d9dadc', '#d9dadc', '#ff4a2b'] }),
+  blankdark: B({ name: 'Blank (black)', desc: 'Plain black, great for HUD and glowing layers', blank: { bg: '#07080a' }, dark: true, line: '#ffb020', swatch: ['#07080a', '#07080a', '#ffb020'] }),
+  blankoutline: B({ name: 'Blank with outlines', desc: 'White land, pale sea and thin country borders', blank: { bg: '#ffffff', water: '#e6edf2', coast: '#9fb2c0', border: '#9aa3ad' }, line: '#ff4a2b', swatch: ['#ffffff', '#e6edf2', '#ff4a2b'] }),
+  blankdarkoutline: B({ name: 'Dark with outlines', desc: 'Dark land and sea with glowing borders', blank: { bg: '#121519', water: '#0a0c10', coast: '#2d6f8f', border: '#3d8fb3' }, dark: true, line: '#ffb020', swatch: ['#121519', '#0a0c10', '#3d8fb3'] }),
+});
 THEMES.satellite.tiles = SAT_TILES;
 THEMES.satellite.maxzoom = 19;
 THEMES.satellite.attribution = 'Imagery © Esri, Maxar, Earthstar Geographics';
@@ -177,7 +186,29 @@ export async function buildStyle(look) {
   const layers = [];
   const field = nameField(look.lang);
 
-  if (isRaster(theme)) {
+  if (theme.blank) {
+    const bl = theme.blank;
+    layers.push({ id: 'background', type: 'background', paint: { 'background-color': bl.bg } });
+    if (bl.water) {
+      for (const l of base.layers) {
+        if (l.id === 'water' && l.type === 'fill') { const c = clone(l); c.paint = { 'fill-color': bl.water, 'fill-outline-color': bl.coast || bl.water }; layers.push(c); }
+      }
+      for (const l of base.layers) {
+        if (l.type === 'line' && (l.id.startsWith('boundary_2') || (l.id === 'boundary_3' && look.states))) {
+          const c = clone(l);
+          c.paint = { ...(c.paint || {}), 'line-color': bl.border };
+          delete c.paint['line-dasharray'];
+          layers.push(c);
+        }
+      }
+      if (look.placeNames) for (const l of base.layers) if (l.type === 'symbol' && PLACE_LAYERS.test(l.id)) {
+        const c = clone(l);
+        c.paint = { ...(c.paint || {}), 'text-color': theme.dark ? '#cfd8e0' : '#4a5560', 'text-halo-color': bl.bg, 'text-halo-width': 1.2 };
+        if (field) c.layout = { ...(c.layout || {}), 'text-field': field };
+        layers.push(c);
+      }
+    }
+  } else if (isRaster(theme)) {
     st.sources.sat = { type: 'raster', tiles: theme.tiles, tileSize: 256, maxzoom: theme.maxzoom || 19, attribution: theme.attribution };
     layers.push({ id: 'background', type: 'background', paint: { 'background-color': theme.dark || theme.satellite ? '#1b2124' : '#e9e7e1' } });
     layers.push({ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 0 } });
@@ -316,6 +347,7 @@ export async function buildStyle(look) {
 
 export function themeAttribution(look) {
   const t = THEMES[look.theme] || THEMES.classic;
+  if (t.blank && !t.blank.water) return look.terrain ? ATTRIBUTION.terrain : '';
   let a = t.tiles ? `${t.attribution}${look.rasterLabels !== false && !t.labels ? ' · © OpenStreetMap' : ''}` : ATTRIBUTION.base;
   if (t.shade || look.terrain) a += ` · ${ATTRIBUTION.terrain}`;
   return a;

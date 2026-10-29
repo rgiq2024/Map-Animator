@@ -3,6 +3,7 @@
 // (Terrain-based rising floods are rendered by flood.js inside the map itself.)
 import { simplify, toMerc } from './geo.js';
 import { signImage } from './signs.js';
+import { placeAt, setBoxSink } from './place.js';
 import { FX_KINDS, FX_ANIMS, FX_DEFAULTS, drawFX, fxPhases, issTrack } from './fx.js';
 import { drawSprite } from './sprites.js';
 
@@ -68,7 +69,7 @@ export const ANIMS = {
 export const EFFECTS = { none: 'None', pulse: 'Pulse rings', ripple: 'Water ripple', radar: 'Radar sweep', bounce: 'Bounce', float: 'Float', spin: 'Spin', shake: 'Shake', blink: 'Blink', heartbeat: 'Heartbeat', flicker: 'Flicker' };
 export const MARKERS = { dot: 'Dot', pin: 'Pin', emoji: 'Emoji', sprite: '3D vehicle', image: 'Your image / icon', target: 'Target', ring: 'Ring' };
 export const CAPTION_LAYOUTS = { lowerThird: 'Lower third', title: 'Big title', card: 'Card', band: 'Band', plain: 'Plain text' };
-export const POSITIONS = { 'top-left': 'Top left', top: 'Top', 'top-right': 'Top right', center: 'Centre', 'bottom-left': 'Bottom left', bottom: 'Bottom', 'bottom-right': 'Bottom right' };
+export const POSITIONS = { 'top-left': 'Top left', top: 'Top', 'top-right': 'Top right', center: 'Centre', 'bottom-left': 'Bottom left', bottom: 'Bottom', 'bottom-right': 'Bottom right', custom: 'Anywhere (drag it on the video)' };
 
 /** Animated symbol presets (all are point layers). */
 export const SYMBOL_PRESETS = {
@@ -689,6 +690,7 @@ function drawCaption(ctx, L, tm, frame, unit, tokens) {
     ctx.font = f2; const w2 = sub ? ctx.measureText(sub).width : 0;
     const w = Math.max(w1, w2) + 44 * unit, h = (sub ? 82 : 58) * k * unit;
     const x = frame.x + M, y = frame.y + frame.h - M - h;
+    placeAt(ctx, L, frame, x, y, w + 8 * unit, h);
     const slide = anim === 'slide' ? (1 - easeOut(u)) * (w + M) : 0;
     const wipe = anim === 'wipe' ? easeOut(u) : 1;
     ctx.beginPath(); ctx.rect(x - 2, y - 2, (w + 8 * unit + 4) * wipe, h + 4); ctx.clip();
@@ -704,6 +706,7 @@ function drawCaption(ctx, L, tm, frame, unit, tokens) {
   } else if (layout === 'band') {
     const h = (sub ? 92 : 66) * k * unit;
     const y = frame.y + frame.h - h - M * 0.7;
+    placeAt(ctx, L, frame, frame.x, y, frame.w, h, { lockX: true });
     const slide = anim === 'slide' ? (1 - easeOut(u)) * h * 1.5 : 0;
     ctx.translate(0, slide);
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -730,6 +733,7 @@ function drawCaption(ctx, L, tm, frame, unit, tokens) {
     if (pos === 'top' || pos === 'bottom' || pos === 'center') x = frame.x + (frame.w - bw) / 2;
     if (pos.includes('bottom')) y = frame.y + frame.h - M - bh;
     if (pos === 'center') y = frame.y + (frame.h - bh) / 2;
+    placeAt(ctx, L, frame, x, y, bw, bh);
     let sc = 1, ty = 0;
     if (anim === 'pop') sc = easeOutBack(u);
     if (anim === 'slide') ty = (1 - easeOut(u)) * 40 * unit;
@@ -769,6 +773,10 @@ function drawCaption(ctx, L, tm, frame, unit, tokens) {
  * 'above' (points, labels), 'captions' (screen text; frame required).
  */
 export function drawLayers(ctx, o, phase) {
+  setBoxSink(o.boxes || null);
+  try { drawLayersInner(ctx, o, phase); } finally { setBoxSink(null); }
+}
+function drawLayersInner(ctx, o, phase) {
   const layers = o.scene.layers || [];
   const { proj, unit, time, frame } = o;
   const tokens = o.tokens || {};
@@ -833,7 +841,7 @@ export function hitLayer(ctx, layers, proj, p, unit, frame) {
         ring.forEach((c, i) => { const q = proj(c); if (i) path.lineTo(q[0], q[1]); else path.moveTo(q[0], q[1]); });
         path.closePath();
       }
-      const filled = L.kind === 'flood' || (L.style.fillOpacity > 0.02);
+      const filled = L.kind === 'flood' || L.kind === 'image' || L.kind === 'compare' || L.kind === 'timeseries' || (L.style.fillOpacity > 0.02);
       if (filled && ctx.isPointInPath(path, p[0], p[1], 'evenodd')) return L.id;
     } else {
       for (const line of linesOf(g)) line.forEach((c, i) => { const q = proj(c); if (i) path.lineTo(q[0], q[1]); else path.moveTo(q[0], q[1]); });
