@@ -1158,6 +1158,9 @@ export function createEditor() {
       geom = { type: 'LineString', coordinates: d.coords };
     } else geom = { type: 'Point', coordinates: d.coords[0] };
     const L = newLayer(d.kind, geom, { start: newStart(), preset: d.preset });
+    if (pendingStyle) { Object.assign(L.style, pendingStyle); pendingStyle = null; }
+    if (L.kind === 'pressure') { L.name = L.style.type === 'H' ? 'High pressure' : 'Low pressure'; if (L.style.type === 'H') L.style.hpa = 1032; }
+    if (L.kind === 'front') L.name = FRONT_TYPES_NAMES[L.style.type] || 'Front';
     if (d.pathModel && L.kind === 'model3d') { L.style.motion = 'move'; L.name = '3D model on a path'; L.duration = 6; }
     if (d.pathModel && L.kind === 'trees') L.name = 'Tree row';
     if (L.kind === 'trees' && !d.pathModel && map.getPitch() < 20) toast('Tilt the map (Camera step) to see the trees standing up in 3D', 3600);
@@ -1264,6 +1267,43 @@ export function createEditor() {
   $('#upload-model-btn').onclick = () => $('#file-model').click();
   $('#add-img').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#add-nature').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  // weather
+  $('#add-weather').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    const kind = b.dataset.add;
+    if (kind === 'forecast') {
+      cancelDrawing();
+      const L = newLayer('forecast', null, { start: newStart() });
+      L.style.look = b.dataset.look;
+      const T = {
+        days: ['Weather forecast', L.style.data],
+        cities: ['Today', 'Dubai | sunny | 38\nAbu Dhabi | hot | 41\nSharjah | partly | 36\nAl Ain | dust | 39\nFujairah | showers | 31'],
+        now: ['Now', 'Dubai | partly | 34 | Feels like 39° · Humid\nWind: 22 km/h NW\nHumidity: 64 %\nUV index: 9 (very high)'],
+        warning: ['', 'Heavy rain and thunderstorms · Winds up to 70 km/h · Stay indoors'],
+      }[b.dataset.look];
+      if (T) [L.style.title, L.style.data] = T;
+      if (b.dataset.look === 'warning') { L.style.position = 'top'; L.hold = 5; }
+      L.name = { days: 'Forecast (days)', cities: 'Cities forecast', now: 'Current weather', warning: 'Weather warning' }[b.dataset.look];
+      addLayer(L);
+      return;
+    }
+    if (kind === 'wxfield') {
+      cancelDrawing();
+      const q = fitQuad(frame.h / frame.w, 1.1, 1.1);
+      const ring = [q[0], q[1], q[2], q[3], q[0]].map((c) => [+c[0].toFixed(5), +c[1].toFixed(5)]);
+      const L = newLayer('wxfield', { type: 'Polygon', coordinates: [ring] }, { start: newStart() });
+      L.style.field = b.dataset.field;
+      L.name = { temp: 'Temperature', rain: 'Rainfall radar', wind: 'Wind', humidity: 'Humidity' }[b.dataset.field];
+      if (b.dataset.field === 'rain') { L.style.opacity = 0.85; L.style.labels = false; }
+      if (b.dataset.field === 'wind') { L.style.max = 60; L.style.opacity = 0.55; }
+      addLayer(L);
+      toast('Covers the view — drag its corners to change the area, or set Data to “Live now”', 4200);
+      return;
+    }
+    pendingStyle = b.dataset.type ? { type: b.dataset.type } : null;
+    startAdd(kind);
+  });
   // titles, TV news, effects and videos (screen layers)
   for (const sel of ['#add-titles', '#add-effects']) $(sel).addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
@@ -1434,6 +1474,8 @@ export function createEditor() {
         if (L.style.sound !== false) h += fRow('Volume', fRange('style.soundVol', L.style.soundVol ?? 1, 0, 2, 0.05));
       }
       if (IMG_KINDS.has(L.kind) && L.geom) h += renderGeoref(L);
+      if (L.kind === 'wxfield') h += `<div class="btn-row"><button class="btn sm" data-act="wxLive">${L.style.grid ? 'Refresh live data' : 'Load live data for this area'}</button></div><p class="hint-line">${L.style.grid ? `Live data from Open-Meteo${L.style.grid.time ? ` · ${esc(L.style.grid.time.replace('T', ' '))} UTC` : ''}. Saved in the project, so the video stays the same.` : 'Real temperature, rain, wind, humidity and pressure right now (Open-Meteo, free). Drag the corners to change the area first.'}</p>`;
+      if (L.kind === 'cyclone') h += '<p class="hint-line">Draw the track point by point; give each point a category (TD, TS, 1–5). The storm spins anticlockwise in the north and clockwise in the south.</p>';
       if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
       if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
     }
@@ -1579,10 +1621,12 @@ export function createEditor() {
   function fmtLatLon(c) { return `${Math.abs(c.lat).toFixed(2)}°${c.lat >= 0 ? 'N' : 'S'} ${Math.abs(c.lng).toFixed(2)}°${c.lng >= 0 ? 'E' : 'W'}`; }
   // ---------------------------------------------------------------- georeferenced images, before/after, time series
   let geoPick = null;
+  let pendingStyle = null;
+  const FRONT_TYPES_NAMES = { cold: 'Cold front', warm: 'Warm front', occluded: 'Occluded front', stationary: 'Stationary front', trough: 'Trough' };
   /** A quad filling part of the current video frame, with the picture's proportions (h / w). */
-  function fitQuad(aspectHW = 0.66, frac = 0.6) {
+  function fitQuad(aspectHW = 0.66, frac = 0.6, cap = 0.8) {
     let w = frame.w * frac, h = w * aspectHW;
-    if (h > frame.h * 0.8) { h = frame.h * 0.8; w = h / aspectHW; }
+    if (h > frame.h * cap) { h = frame.h * cap; w = h / aspectHW; }
     const cx = frame.x + frame.w / 2, cy = frame.y + frame.h / 2;
     const ll = (x, y) => { const p = map.unproject([x, y]); return [p.lng, p.lat]; };
     return [ll(cx - w / 2, cy - h / 2), ll(cx + w / 2, cy - h / 2), ll(cx + w / 2, cy + h / 2), ll(cx - w / 2, cy + h / 2)];
@@ -1753,6 +1797,18 @@ export function createEditor() {
     if (a === 'frDown' && i < fr.length - 1) { pushUndo(); [fr[i + 1], fr[i]] = [fr[i], fr[i + 1]]; renderLayerEditor(); commitLayers(); }
     if (a === 'frDel') { pushUndo(); fr.splice(i, 1); setSeriesDuration(L); renderLayerEditor(); commitLayers(); }
     if (a === 'frSort') { pushUndo(); fr.sort((x, y) => String(x.label).localeCompare(String(y.label), undefined, { numeric: true })); renderLayerEditor(); commitLayers(); }
+    if (a === 'wxLive') {
+      try {
+        toast('Loading live weather…');
+        const { loadLiveGrid } = await import('./weather.js');
+        const grid = await loadLiveGrid(L);
+        pushUndo();
+        L.style.grid = grid; L.style.source = 'live';
+        if (L.style.field === 'temp') { const v = grid.temp; L.style.min = Math.floor(Math.min(...v) - 1); L.style.max = Math.ceil(Math.max(...v) + 1); }
+        renderLayerEditor(); commitLayers();
+        toast('Live weather loaded');
+      } catch { toast('Could not load live weather — check your connection', 4200); }
+    }
     if (a === 'wbList') {
       try { toast('Loading Wayback dates…'); wbList = await waybackReleases(); renderLayerEditor(); }
       catch { toast('Could not load the Wayback imagery list — check your connection', 4200); }

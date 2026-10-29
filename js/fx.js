@@ -6,6 +6,7 @@ import { drawVideoFx } from './videofx.js';
 import { placeAt, CUSTOM_POS } from './place.js';
 import { HUD_PLUS, drawHUDPlus, HUDTEXT_STYLES, drawHudText, TARGET_STYLES, drawTarget, FLICKER_PLUS } from './hudplus.js';
 import { drawTrees, TREE_TYPES } from './trees.js';
+import { drawCyclone, drawCycloneLegend, drawPressure, drawFront, FRONT_TYPES, drawWxPoint, WX_ICONS, drawField, drawFieldLegend, FIELD_TYPES, drawForecast, FORECAST_LOOKS } from './weather.js';
 import { drawTitle, TITLE_LOOKS } from './titles.js';
 import { drawNews, NEWS_LOOKS } from './news.js';
 import { EFFECT_LOOKS, drawVideoLayer } from './screenfx.js';
@@ -55,6 +56,12 @@ export const FX_KINDS = {
   news:      { name: 'TV news graphic', icon: '📺', geom: null, desc: 'Channel logo, LIVE badge, BREAKING NEWS banner or news lower third' },
   effect:    { name: 'Effect', icon: '✨', geom: null, desc: 'Film grain, old film, VHS, glitch, light leak, flash, rain, snow, shake…' },
   video:     { name: 'Video', icon: '▶', geom: null, desc: 'Your own video, full screen or picture-in-picture' },
+  cyclone:   { name: 'Cyclone track', icon: '🌀', geom: 'line', desc: 'Storm track by category, spinning cloud with an eye, forecast cone' },
+  pressure:  { name: 'Pressure centre', icon: 'L', geom: 'point', desc: 'High or low pressure with isobars and circulation' },
+  front:     { name: 'Weather front', icon: '▲', geom: 'line', desc: 'Cold, warm, occluded or stationary front' },
+  wxpoint:   { name: 'City weather', icon: '☀', geom: 'point', desc: 'Weather icon and temperature on the map' },
+  wxfield:   { name: 'Weather field', icon: '🌡', geom: 'polygon', desc: 'Temperature, rainfall, wind, pressure or humidity over an area' },
+  forecast:  { name: 'Weather forecast', icon: '📅', geom: null, desc: 'TV weather panels: days ahead, cities, current conditions, warnings' },
 };
 export const FX_ANIMS = {
   satellite: { pass: 'Fly over' }, iss: { pass: 'Orbit' }, launch: { launch: 'Lift off' },
@@ -76,6 +83,12 @@ export const FX_ANIMS = {
   news: { in: 'Animate in' },
   effect: { on: 'On' },
   video: { fade: 'Fade in', pop: 'Pop in', none: 'Cut in' },
+  cyclone: { move: 'Storm moves along the track' },
+  pressure: { grow: 'Isobars grow out' },
+  front: { draw: 'Draw along' },
+  wxpoint: { pop: 'Pop in' },
+  wxfield: { fade: 'Fade in', none: 'Already there' },
+  forecast: { in: 'Animate in' },
 };
 export const FX_DEFAULTS = {
   satellite: { anim: 'pass', duration: 6, style: { sprite: 'satellite', color: '#36d1ff', size: 1, alt: 80, imaging: true, swathKm: 60, beam: true, track: true, label: 'IMAGING SAT' } },
@@ -99,6 +112,12 @@ export const FX_DEFAULTS = {
   news: { anim: 'in', duration: 0.8, style: { look: 'bug', channel: 'NEWS', media: '', text: 'Major flooding hits the coastal district', sub: 'Rescue teams on the ground · more updates soon', tag: 'BREAKING NEWS', location: 'DUBAI', clock: '20:45', showClock: true, live: true, color: '#d71920', bg: '', textColor: '', size: 1, font: '', position: '', opacity: 0.92 } },
   effect: { anim: 'on', duration: 4, hold: 0, style: { look: 'grain', amount: 1, color: '#ff8a3d', speed: 1, label: 'PLAY ▶', stamp: 'AUG 14 1996' } },
   video: { anim: 'fade', duration: 6, style: { media: '', name: '', fit: 'pip', width: 0.36, position: 'top-right', radius: 10, border: 3, borderColor: '#ffffff', shadow: true, caption: '', opacity: 1, speed: 1, trim: 0, loop: false } },
+  cyclone: { anim: 'move', duration: 8, style: { name: 'Cyclone Mocha', category: '4', cats: 'TD, TS, 1, 2, 3, 4, 4, 3', labels: '', forecast: true, forecastFrom: 0.65, coneKm: 350, radiusKm: 380, clouds: true, symbol: true, windRings: false, legend: true, reveal: true, editAt: 0.6, spin: 1, width: 1, dotSize: 1, symbolSize: 1 } },
+  pressure: { anim: 'grow', duration: 1.5, style: { type: 'L', hpa: 984, step: 4, rings: 5, spacingKm: 120, isobars: true, values: true, arrows: true, showValue: true, size: 1, color: '', isobarColor: '#ffffff', animate: true } },
+  front: { anim: 'draw', duration: 2, style: { type: 'cold', size: 1, flip: false, color: '' } },
+  wxpoint: { anim: 'pop', duration: 0.6, style: { icon: 'sunny', temp: '38', name: 'Dubai', size: 1, box: true, bg: '' } },
+  wxfield: { anim: 'fade', duration: 1.5, style: { field: 'temp', source: 'pattern', opacity: 0.7, scale: 2.5, min: '', max: '', windDir: 270, speed: 1, amount: 1, particles: 500, labels: true, legend: true, title: '', animate: true, steps: 0, shade: true, windOverlay: false, seed: 0, gradient: true, blend: 'normal' } },
+  forecast: { anim: 'in', duration: 1.2, style: { look: 'days', title: 'Weather forecast', data: 'Mon | sunny | 38 | 29\nTue | partly | 36 | 28\nWed | showers | 31 | 26\nThu | storm | 29 | 25\nFri | sunny | 35 | 28', color: '#1e88e5', size: 1, position: '', fahrenheit: false, level: 'orange' } },
   trees: { anim: 'grow', duration: 2.5, style: { type: 'mixed', density: 40, height: 14, size: 1, exaggerate: 3, spacing: 12, bothSides: true, view: 'auto', seed: 0 } },
   timeseries: { anim: 'play', duration: 8, style: { source: 'files', frames: [], per: 2, fade: 0.8, label: 'show', labelSize: 1, labelColor: '#ffffff', accent: '#ffb020', bar: true, labelBox: true, position: 'bottom-left', editFrame: 0, opacity: 1, crs: '3857' } },
 };
@@ -137,6 +156,12 @@ export const FX_FORMS = {
   news: [['style.look', 'Style', 'select', NEWS_LOOKS], ['style.channel', 'Channel name', 'text'], ['style.media', 'Logo image (optional)', 'image'], ['style.text', 'Headline', 'text', null, (L) => ['breaking', 'headline'].includes(L.style.look)], ['style.sub', 'Second line', 'text', null, (L) => ['breaking', 'headline'].includes(L.style.look)], ['style.tag', 'Banner text', 'text', null, (L) => L.style.look === 'breaking'], ['style.location', 'Location', 'text', null, (L) => L.style.look === 'live'], ['style.live', 'LIVE under the logo', 'switch', null, (L) => L.style.look === 'bug'], ['style.showClock', 'Clock', 'switch', null, (L) => L.style.look !== 'bug'], ['style.clock', 'Clock starts at', 'text', null, (L) => L.style.look !== 'bug' && L.style.showClock], ['style.color', 'Channel colour', 'color'], ['style.bg', 'Bar colour', 'color', null, (L) => L.style.look !== 'bug'], ['style.textColor', 'Text colour', 'color', null, (L) => L.style.look !== 'bug'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]], ['style.opacity', 'Opacity', 'range', [0.2, 1, 0.01], (L) => L.style.look === 'bug'], ['style.font', 'Font', 'font'], ['style.position', 'Position', 'select', { '': 'Default', 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', ...CUSTOM_POS }]],
   effect: [['style.look', 'Effect', 'select', EFFECT_LOOKS], ['style.amount', 'Strength', 'range', [0.05, 2, 0.05]], ['style.color', 'Colour', 'color', null, (L) => ['flash', 'lightleak'].includes(L.style.look)], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05], (L) => ['rain', 'snow', 'shake'].includes(L.style.look)], ['style.label', 'Corner text', 'text', null, (L) => L.style.look === 'vhs'], ['style.stamp', 'Date stamp', 'text', null, (L) => L.style.look === 'vhs']],
   video: [['style.media', 'Video', 'video'], ['style.fit', 'Show as', 'select', { pip: 'Picture in picture', full: 'Full screen' }], ['style.width', 'Width', 'range', [0.1, 1, 0.01], (L) => L.style.fit !== 'full'], ['style.position', 'Position', 'select', { ...POS }, (L) => L.style.fit !== 'full'], ['style.radius', 'Rounded corners', 'range', [0, 40, 1], (L) => L.style.fit !== 'full'], ['style.border', 'Border', 'range', [0, 12, 0.5], (L) => L.style.fit !== 'full'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.fit !== 'full'], ['style.caption', 'Caption tag', 'text', null, (L) => L.style.fit !== 'full'], ['style.shadow', 'Shadow', 'switch', null, (L) => L.style.fit !== 'full'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.speed', 'Playback speed', 'range', [0.25, 3, 0.05]], ['style.trim', 'Start the clip at (s)', 'number', 0.1], ['style.loop', 'Loop', 'switch']],
+  cyclone: [['style.name', 'Storm name (empty = no label)', 'text'], ['style.cats', 'Category at each point (TD, TS, 1–5)', 'text'], ['style.labels', 'Label at each point (one per line, e.g. dates)', 'textarea'], ['style.forecast', 'Forecast part (dashed) with cone', 'switch'], ['style.forecastFrom', 'Forecast starts at', 'range', [0, 1, 0.01], (L) => L.style.forecast], ['style.coneKm', 'Cone width at the end (km)', 'range', [50, 1000, 10], (L) => L.style.forecast], ['style.clouds', 'Satellite-style storm cloud', 'switch'], ['style.radiusKm', 'Storm size (km)', 'range', [50, 1200, 10], (L) => L.style.clouds !== false], ['style.spin', 'Spin speed', 'range', [0, 4, 0.05]], ['style.symbol', 'Cyclone symbol', 'switch'], ['style.windRings', 'Wind radii rings', 'switch'], ['style.reveal', 'Draw the track as it moves', 'switch'], ['style.legend', 'Category legend', 'switch'], ['style.editAt', 'Preview position while editing', 'range', [0, 1, 0.01]], ['style.width', 'Track width', 'range', [0.4, 3, 0.05]]],
+  pressure: [['style.type', 'Type', 'select', { L: 'Low pressure (L)', H: 'High pressure (H)' }], ['style.hpa', 'Centre pressure (hPa)', 'number', 1], ['style.step', 'Isobar step (hPa)', 'number', 1], ['style.rings', 'Isobars', 'range', [0, 12, 1]], ['style.spacingKm', 'Spacing (km)', 'range', [20, 600, 5]], ['style.values', 'Values on isobars', 'switch'], ['style.arrows', 'Wind circulation arrows', 'switch'], ['style.showValue', 'Value under the letter', 'switch'], ['style.size', 'Letter size', 'range', [0.4, 3, 0.05]], ['style.color', 'Letter colour (empty = red L / blue H)', 'color'], ['style.isobarColor', 'Isobar colour', 'color'], ['style.animate', 'Isobars drift slowly', 'switch']],
+  front: [['style.type', 'Front', 'select', FRONT_TYPES], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.flip', 'Symbols on the other side', 'switch'], ['style.color', 'Colour (empty = standard)', 'color']],
+  wxpoint: [['style.icon', 'Weather', 'select', WX_ICONS], ['style.temp', 'Temperature', 'text'], ['style.name', 'Place name', 'text'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.box', 'Box behind', 'switch'], ['style.bg', 'Box colour', 'color', null, (L) => L.style.box !== false]],
+  wxfield: [['style.field', 'Show', 'select', FIELD_TYPES], ['style.source', 'Data', 'select', { pattern: 'Realistic pattern (made up)', live: 'Live now (Open-Meteo)' }], ['style.opacity', 'Opacity', 'range', [0.1, 1, 0.01]], ['style.min', 'Lowest value on the scale', 'number', 1, (L) => ['temp', 'pressure'].includes(L.style.field)], ['style.max', 'Highest value on the scale', 'number', 1], ['style.scale', 'Pattern detail', 'range', [0.5, 8, 0.1], (L) => L.style.source !== 'live'], ['style.amount', 'Rain amount', 'range', [0.3, 2, 0.05], (L) => L.style.field === 'rain' && L.style.source !== 'live'], ['style.windDir', 'Wind from (° — 0 = north)', 'range', [0, 359, 1], (L) => L.style.source !== 'live'], ['style.speed', 'Motion speed', 'range', [0, 4, 0.05]], ['style.animate', 'Rain moves', 'switch', null, (L) => L.style.field === 'rain'], ['style.particles', 'Wind streaks', 'range', [50, 2000, 10], (L) => L.style.field === 'wind' || L.style.windOverlay], ['style.windOverlay', 'Add wind streaks on top', 'switch', null, (L) => L.style.field !== 'wind'], ['style.shade', 'Colour shading', 'switch', null, (L) => L.style.field === 'wind'], ['style.steps', 'Colour bands (0 = smooth)', 'range', [0, 16, 1]], ['style.labels', 'Values on the map', 'switch', null, (L) => L.style.field !== 'rain'], ['style.legend', 'Legend', 'switch'], ['style.title', 'Legend title', 'text', null, (L) => L.style.legend !== false], ['style.blend', 'Blend', 'select', { normal: 'Normal', multiply: 'Multiply (keeps map detail)' }], ['style.seed', 'Shuffle pattern', 'number', 1, (L) => L.style.source !== 'live']],
+  forecast: [['style.look', 'Style', 'select', FORECAST_LOOKS], ['style.title', 'Title', 'text'], ['style.data', 'Data — one per line: Name | icon | temp | low | note', 'textarea'], ['style.level', 'Warning level', 'select', { yellow: 'Yellow', orange: 'Orange', red: 'Red' }, (L) => L.style.look === 'warning'], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.5, 2, 0.05]], ['style.fahrenheit', 'Show °F', 'switch', null, (L) => L.style.look !== 'warning'], ['style.position', 'Position', 'select', { '': 'Default', 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', ...CUSTOM_POS }]],
   trees: [['style.type', 'Trees', 'select', TREE_TYPES], ['style.density', 'Trees per hectare', 'range', [2, 200, 1], (L) => L.geom?.type === 'Polygon'], ['style.spacing', 'Spacing (m)', 'range', [4, 60, 1], (L) => L.geom?.type === 'LineString'], ['style.bothSides', 'Both sides of the line', 'switch', null, (L) => L.geom?.type === 'LineString'], ['style.height', 'Tree height (m)', 'range', [3, 40, 1]], ['style.exaggerate', 'Exaggerate size', 'range', [1, 8, 0.1]], ['style.view', 'Look', 'select', { auto: 'Side view when tilted, from above when flat', side: 'Always side view' }], ['style.seed', 'Shuffle', 'number', 1]],
   timeseries: [['style.frames', 'Dates', 'frames'], ['style.per', 'Seconds per date', 'number', 0.1], ['style.fade', 'Cross-fade (s)', 'number', 0.1], ['style.editFrame', 'Preview date while editing', 'range', [0, 30, 1]], ['style.label', 'Year label', 'select', { show: 'Show', none: 'Hide' }], ['style.position', 'Label position', 'select', POS, (L) => L.style.label !== 'none'], ['style.labelSize', 'Label size', 'range', [0.4, 2.5, 0.05], (L) => L.style.label !== 'none'], ['style.labelColor', 'Label colour', 'color', null, (L) => L.style.label !== 'none'], ['style.accent', 'Accent colour', 'color', null, (L) => L.style.label !== 'none'], ['style.bar', 'Timeline bar under the year', 'switch', null, (L) => L.style.label !== 'none'], ['style.labelBox', 'Dark box behind', 'switch', null, (L) => L.style.label !== 'none'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
 };
@@ -1123,6 +1148,12 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'image': if (phase === 'below') drawImageLayer(ctx, L, tm, proj, unit, true); break;
     case 'compare': if (phase === 'below') drawCompareLayer(ctx, L, tm, proj, unit, frame); break;
     case 'trees': if (phase === 'above') drawTrees(ctx, L, tm, o); break;
+    case 'cyclone': if (phase === 'above') drawCyclone(ctx, L, tm, o); else if (phase === 'captions' && frame) drawCycloneLegend(ctx, L, tm, o); break;
+    case 'pressure': if (phase === 'above') drawPressure(ctx, L, tm, o); break;
+    case 'front': if (phase === 'below') drawFront(ctx, L, tm, o); break;
+    case 'wxpoint': if (phase === 'above') drawWxPoint(ctx, L, tm, o); break;
+    case 'wxfield': if (phase === 'below') drawField(ctx, L, tm, o); else if (phase === 'captions' && frame) drawFieldLegend(ctx, L, tm, o); break;
+    case 'forecast': if (phase === 'captions' && frame) drawForecast(ctx, L, tm, o); break;
     case 'title': if (phase === 'captions' && frame) drawTitle(ctx, L, tm, o); break;
     case 'news': if (phase === 'captions' && frame) drawNews(ctx, L, tm, o); break;
     case 'video': if (phase === 'captions' && frame) drawVideoLayer(ctx, L, tm, o); break;
@@ -1155,6 +1186,10 @@ export function drawFX(ctx, L, tm, o, phase) {
 export function fxPhases(kind) {
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];
+  if (kind === 'forecast') return ['captions'];
+  if (kind === 'cyclone') return ['above', 'captions'];
+  if (kind === 'wxfield') return ['below', 'captions'];
+  if (kind === 'front') return ['below'];
   if (kind === 'image' || kind === 'compare') return ['below'];
   if (kind === 'timeseries') return ['below', 'captions'];
   if (kind === 'model3d') return [];

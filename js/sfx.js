@@ -3,7 +3,7 @@
 // typing). Everything is generated with Web Audio, so it works offline and exports into the MP4.
 
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -289,6 +289,20 @@ Object.assign(SYN, {
     const g = env(ctx, w, [[0.002, 1.1 * v], [0.35, 0.001, 1]]); n.connect(f).connect(g).connect(out); g.connect(reverb(ctx, out));
   },
   sonar(ctx, out, w, p) { SYN.ping(ctx, out, w, { freq: 880, vol: p.vol }); },
+  rain(ctx, out, w, p) {
+    const d = clamp(p.dur || 4, 0.5, 60), v = p.vol ?? 1;
+    const n = src(ctx, 'pink', w, d); const f = filt(ctx, 'highpass', 900); const f2 = filt(ctx, 'lowpass', 7000);
+    const g = env(ctx, w, [[0.8, 0.5 * v], [Math.max(0.9, d - 0.8), 0.5 * v], [d, 0.001, 1]]);
+    n.connect(f).connect(f2).connect(g).connect(out);
+    const drops = Math.min(200, Math.round(d * 30));
+    for (let i = 0; i < drops; i++) { const t = w + Math.random() * d; const c = src(ctx, 'white', t, 0.02); const cf = filt(ctx, 'bandpass', 2500 + Math.random() * 4000, 4); const cg = env(ctx, t, [[0.001, 0.12 * v * Math.random()], [0.02, 0.001, 1]]); c.connect(cf).connect(cg).connect(out); }
+  },
+  storm(ctx, out, w, p) {
+    const d = clamp(p.dur || 6, 1, 60), v = p.vol ?? 1;
+    SYN.wind(ctx, out, w, { dur: d, vol: v });
+    SYN.rain(ctx, out, w, { dur: d, vol: v * 0.7 });
+    for (let t = 1.2; t < d - 1; t += 3 + Math.random() * 3) SYN.thunder(ctx, out, w + t, { vol: v * 0.6 });
+  },
 });
 /** The sound library: sounds you can drop on the timeline. */
 export const SOUND_LIBRARY = {
@@ -296,7 +310,7 @@ export const SOUND_LIBRARY = {
   'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', rocket: 'Rocket launch' },
   'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
-  'Ambience': { wind: 'Wind', crowd: 'Crowd murmur' },
+  'Ambience': { wind: 'Wind', rain: 'Rain', storm: 'Storm (wind, rain, thunder)', crowd: 'Crowd murmur' },
 };
 export const SOUND_NAMES = Object.assign({}, ...Object.values(SOUND_LIBRARY));
 /** Play one library sound now (preview). */
@@ -437,6 +451,16 @@ export function buildEvents(project, models) {
         else if (s.look === 'flash') push(t0, 'hit', { vol: vol * 0.7 });
         else if (s.look === 'shake') push(t0, 'sub', { vol });
         else if (s.look === 'rain') push(t0, 'wind', { dur: Math.max(2, D), vol: vol * 0.5 });
+      } else if (L.kind === 'cyclone') {
+        push(t0, 'storm', { dur: D, vol: vol * 0.8 });
+      } else if (L.kind === 'wxfield') {
+        if (s.field === 'rain') push(t0, 'rain', { dur: Math.max(3, D + 3), vol: vol * 0.6 });
+        if (s.field === 'wind' || s.windOverlay) push(t0, 'wind', { dur: Math.max(3, D + 3), vol: vol * 0.6 });
+      } else if (L.kind === 'forecast') {
+        push(t0, 'swoosh', { vol: vol * 0.7 });
+        if (s.look === 'warning') for (let k = 0; k < 3; k++) push(t0 + 0.2 + k * 0.4, 'beep', { freq: 990, vol: vol * 0.5 });
+      } else if (L.kind === 'front') {
+        push(t0, 'whoosh', { dur: Math.min(2, D), vol: vol * 0.4 });
       } else if (L.kind === 'compare') {
         push(t0 + 0.1, 'whoosh', { dur: Math.min(2.5, D), vol: vol * 0.6 });
       } else if (L.kind === 'timeseries') {
