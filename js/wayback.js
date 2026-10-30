@@ -36,7 +36,7 @@ export class WaybackLayers {
     const m = this.map;
     if (!m.getStyle?.()) return;
     this.clear();
-    const layers = (scene?.layers || []).filter((L) => L.kind === 'timeseries' && L.style?.source === 'wayback' && !L.hidden);
+    const layers = (scene?.layers || []).filter((L) => L.kind === 'timeseries' && (L.style?.source === 'wayback' || L.style?.source === 'livesat') && !L.hidden);
     if (!layers.length) return;
     const style = m.getStyle();
     const before = style.layers.find((l) => l.type === 'symbol' || l.id === 'ma-buildings' || l.id.startsWith('ma-flood'))?.id;
@@ -45,7 +45,7 @@ export class WaybackLayers {
         if (!f.url) return;
         const source = `ma-wb-${L.id}-${i}`, layer = `${source}-l`;
         try {
-          m.addSource(source, { type: 'raster', tiles: [f.url], tileSize: 256, maxzoom: 19, attribution: 'Esri World Imagery Wayback' });
+          m.addSource(source, { type: 'raster', tiles: [f.url], tileSize: 256, maxzoom: f.maxzoom || (L.style.source === 'livesat' ? 9 : 19), attribution: L.style.source === 'livesat' ? (L.style.credit || '') : 'Esri World Imagery Wayback' });
           m.addLayer({ id: layer, type: 'raster', source, layout: { visibility: 'none' }, paint: { 'raster-opacity': 0, 'raster-fade-duration': 0 } }, before);
           this.ids.push({ layer, source, L, i });
         } catch (e) { console.warn('wayback layer', e); }

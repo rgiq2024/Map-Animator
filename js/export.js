@@ -30,9 +30,11 @@ const CODECS = [
   ['av01.0.12M.08', 'av1'], ['av01.0.08M.08', 'av1'],
 ];
 
-export async function pickCodec(width, height, fps) {
+export async function pickCodec(width, height, fps, seconds = 0) {
   if (!('VideoEncoder' in window)) return null;
-  const bitrate = Math.round(Math.min(80e6, width * height * fps * 0.15));
+  // long videos are kept in memory until saved: cap the total size (~1.2 GB) by lowering the bitrate
+  const cap = seconds > 0 ? 9.6e9 / seconds : Infinity;
+  const bitrate = Math.round(Math.max(2e6, Math.min(80e6, width * height * fps * 0.15, cap)));
   for (const [codec, mux] of CODECS) {
     for (const hardwareAcceleration of ['prefer-hardware', 'no-preference']) {
       const config = { codec, width, height, bitrate, framerate: fps, hardwareAcceleration };
@@ -66,7 +68,8 @@ export async function exportVideo(o) {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d', { alpha: false });
-  const picked = await pickCodec(width, height, fps);
+  const totalSec = o.scenes.reduce((a, sc) => a + (o.durationOf?.(sc) || 0), 0);
+  const picked = await pickCodec(width, height, fps, totalSec);
   if (!picked) return recordFallback(o, canvas, ctx);
 
   // soundtrack first (it is quick and tells us whether the MP4 needs an audio track)

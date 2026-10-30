@@ -25,6 +25,7 @@ import { putMedia } from './store.js';
 import { TEMPLATES as QS_TEMPLATES, openQuickStart } from './quickstart.js';
 import { IMG_KINDS, readGeoImages, storeImage, imageFor, preloadImages, mediaOf, quadOf, quadGeom, quadFromBounds, quadBounds, rotateQuad, scaleQuad, moveQuad, fixAspect, labelFromName } from './geoimage.js';
 import { WaybackLayers, waybackReleases, yearlyReleases } from './wayback.js';
+import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, liveWeather } from './livesat.js';
 import { thermalFilter } from './hudplus.js';
 import { drawLetterbox, TITLE_LOOKS } from './titles.js';
 import { NEWS_LOOKS } from './news.js';
@@ -1267,8 +1268,21 @@ export function createEditor() {
   $('#upload-model-btn').onclick = () => $('#file-model').click();
   $('#add-img').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#add-nature').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  $('#add-3d').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    const st = {};
+    if (b.dataset.a) { st.modelA = b.dataset.a; st.modelB = b.dataset.b; }
+    if (b.dataset.source) st.source = b.dataset.source;
+    if (/train|ship|tanker|truck|car/.test(b.dataset.source || '')) st.size = 1.6;
+    if (b.dataset.source === 'builtin:bomber' || b.dataset.source === 'builtin:nasa_globalhawk') st.altitude = 60;
+    pendingStyle = Object.keys(st).length ? st : null;
+    startAdd(b.dataset.add);
+    if (map.getPitch() < 25) toast('Tip: tilt the camera (Camera step) to see the 3D models from the side', 3600);
+  });
   // weather
-  $('#add-weather').addEventListener('click', (e) => {
+  const mapPx = () => 1;
+  $('#add-weather').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-add]');
     if (!b) return;
     const kind = b.dataset.add;
@@ -1299,6 +1313,56 @@ export function createEditor() {
       if (b.dataset.field === 'wind') { L.style.max = 60; L.style.opacity = 0.55; }
       addLayer(L);
       toast('Covers the view — drag its corners to change the area, or set Data to “Live now”', 4200);
+      return;
+    }
+    if (kind === 'livesat' || kind === 'radar') {
+      cancelDrawing();
+      const L = newLayer('timeseries', null, { start: newStart() });
+      const c = map.getCenter();
+      Object.assign(L.style, { source: 'livesat', sat: kind === 'radar' ? 'radar' : satForLongitude(c.lng), satMode: 'loop', hours: 3, step: kind === 'radar' ? 10 : 30, frames: [], opacity: kind === 'radar' ? 0.8 : 0.85, position: 'top-right', labelSize: 0.55, bar: true });
+      L.name = kind === 'radar' ? 'Weather radar (live)' : 'Live satellite';
+      addLayer(L);
+      try {
+        const fr = await satFrames(L.style.sat, { mode: 'loop', hours: 3, step: L.style.step });
+        L.style.frames = fr; L.style.credit = SAT_CREDITS[SAT_PRODUCTS[L.style.sat].src];
+        L.style.per = fr.length > 1 ? +(Math.min(0.6, 8 / fr.length)).toFixed(2) : 4; L.style.fade = +(L.style.per * 0.6).toFixed(2);
+        setSeriesDuration(L);
+        if (selLayer === L.id) renderLayerEditor();
+        commitLayers();
+        if (map.getZoom() > 7) toast('Zoom out to see the clouds — satellites show about 2–4 km detail', 4200);
+      } catch { toast('Could not load the satellite list', 4200); }
+      return;
+    }
+    if (kind === 'liveweather') {
+      cancelDrawing();
+      const k = mapPx();
+      const cities = visibleCities(map, { x: frame.x, y: frame.y, w: frame.w, h: frame.h }, 8);
+      if (!cities.length) { toast('No city names visible — turn on Place names (Look) or zoom in a little', 4200); return; }
+      toast(`Getting live weather for ${cities.length} cities…`);
+      try {
+        const wx = await liveWeather(cities);
+        pushUndo();
+        const start = newStart();
+        cities.forEach((c, i) => {
+          const L = newLayer('wxpoint', { type: 'Point', coordinates: [+c.ll[0].toFixed(5), +c.ll[1].toFixed(5)] }, { start: +(start + i * 0.15).toFixed(2) });
+          Object.assign(L.style, { icon: wx[i].icon, temp: String(wx[i].temp), name: c.name, size: 0.8 });
+          L.name = `${c.name} ${wx[i].temp}°`;
+          layersOf().push(L);
+        });
+        const P = newLayer('forecast', null, { start });
+        P.style.look = 'cities'; P.style.title = `Now · ${new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}`;
+        P.style.data = cities.map((c, i) => `${c.name} | ${wx[i].icon} | ${wx[i].temp}`).join('\n');
+        P.name = 'Live weather (cities)';
+        layersOf().push(P);
+        const D = newLayer('forecast', null, { start });
+        D.style.look = 'days'; D.style.title = `${cities[0].name} · next days`; D.hidden = true;
+        D.style.data = wx[0].days.map((d) => `${d.day} | ${d.icon} | ${d.hi} | ${d.lo}`).join('\n');
+        D.name = `${cities[0].name} forecast (hidden)`;
+        layersOf().push(D);
+        selLayer = P.id;
+        commitLayers(); renderLayerEditor();
+        toast('Live weather added from Open-Meteo — a 5-day forecast for the first city is in the list (hidden)', 4800);
+      } catch { toast('Could not load live weather — check your connection', 4200); }
       return;
     }
     pendingStyle = b.dataset.type ? { type: b.dataset.type } : null;
@@ -1517,7 +1581,7 @@ export function createEditor() {
     eventsCache = null;
     if (['style.per', 'style.fade'].includes(key) && L.kind === 'timeseries') { L.duration = +(Math.max(1, (L.style.frames || []).length) * (+L.style.per || 2)).toFixed(2); eventsCache = null; }
     if (key === 'anim' || key === 'style.marker' || key === 'style.layout' || key === 'style.sound' || key === 'style.variant' || key === 'style.look' || key === 'style.mode' || (key === 'style.label' && L.kind === 'timeseries') || key === 'style.labels' || key === 'style.border' || key === 'style.position') { renderLayerEditor(); commitLayers(); return; }
-    if (key === 'style.source' || key === 'style.color' && L.kind === 'model3d') { commitLayers(); return; }
+    if (key === 'style.source' || (key === 'style.color' && L.kind === 'model3d') || ['style.model3d', 'style.modelA', 'style.modelB', 'style.colorA', 'style.colorB', 'style.look', 'style.minH', 'style.maxH', 'style.block', 'style.seed', 'style.groundBlocks'].includes(key) && ['collision', 'city3d', 'bombing', 'trajectory', 'vehicle'].includes(L.kind)) { if (key === 'style.model3d') renderLayerEditor(); commitLayers(); return; }
     if (['start', 'duration', 'hold', 'style.levelFrom', 'style.levelTo'].includes(key) || key === 'name') {
       clearTimeout(layerEditTimer);
       layerEditTimer = setTimeout(() => { L.duration = Math.max(0.05, +L.duration || 0.05); L.start = Math.max(0, +L.start || 0); L.hold = Math.max(0, +L.hold || 0); commitLayers(); }, 250);
@@ -1647,6 +1711,17 @@ export function createEditor() {
   function renderFrames(L) {
     const s = L.style, fr = s.frames || [];
     let h = '';
+    if (s.source === 'livesat') {
+      h += '<h5>Live satellite / radar</h5>';
+      h += fRow('Imagery', `<select id="ls-prod">${Object.entries(SAT_PRODUCTS).map(([k, p]) => `<option value="${k}" ${s.sat === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`);
+      if (s.sat === 'custom') h += `<label class="field"><span>WMS address</span><input id="ls-wms" value="${esc(s.wmsUrl || '')}" placeholder="https://…/wms"></label><label class="field"><span>Layer name</span><input id="ls-layer" value="${esc(s.wmsLayer || '')}"></label>`;
+      h += fRow('Show', `<select id="ls-mode"><option value="loop" ${s.satMode !== 'latest' ? 'selected' : ''}>Animated loop</option><option value="latest" ${s.satMode === 'latest' ? 'selected' : ''}>Latest image only</option></select>`);
+      if (s.satMode !== 'latest' && s.sat !== 'radar') h += fRow('Hours back', `<select id="ls-hours">${[1, 2, 3, 6, 12, 24, 48, 72].map((x) => `<option ${+s.hours === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`) + fRow('Every', `<select id="ls-step">${[10, 15, 30, 60, 120].map((x) => `<option value="${x}" ${+s.step === x ? 'selected' : ''}>${x} min</option>`).join('')}</select>`);
+      h += fRow('Ending at (UTC, empty = now)', `<input type="datetime-local" id="ls-end" value="${esc(s.satEnd || '')}">`);
+      h += '<div class="btn-row"><button class="btn sm primary" data-act="lsLoad">Load imagery</button></div>';
+      h += `<p class="hint-line">${fr.length ? `${fr.length} image${fr.length === 1 ? '' : 's'} · ${esc(fr[0].label)}${fr.length > 1 ? ` → ${esc(fr.at(-1).label)}` : ''}. ` : ''}Geostationary satellites refresh every 10–15 minutes and appear about half an hour late. Zoom out to see a whole cyclone; lower the opacity to see the map under the clouds. Imagery: NASA GIBS / NOAA, © EUMETSAT, RainViewer.</p>`;
+      return h;
+    }
     if (s.source === 'wayback') {
       h += '<h5>Satellite dates (Esri World Imagery Wayback)</h5>';
       if (!wbList) {
@@ -1700,6 +1775,7 @@ export function createEditor() {
     } catch { toast('Could not load the Wayback imagery list — check your connection', 4200); }
   }
   $('#layer-editor').addEventListener('change', (e) => {
+    if (e.target.id === 'ls-prod' || e.target.id === 'ls-mode') { const L = selLayer && layerById(selLayer); if (L) { L.style[e.target.id === 'ls-prod' ? 'sat' : 'satMode'] = e.target.value; renderLayerEditor(); } return; }
     const id = e.target.id;
     if (!['wb-from', 'wb-to', 'wb-gran', 'wb-fmt'].includes(id)) return;
     wbFilter[{ 'wb-from': 'from', 'wb-to': 'to', 'wb-gran': 'gran', 'wb-fmt': 'fmt' }[id]] = e.target.value;
@@ -1797,6 +1873,25 @@ export function createEditor() {
     if (a === 'frDown' && i < fr.length - 1) { pushUndo(); [fr[i + 1], fr[i]] = [fr[i], fr[i + 1]]; renderLayerEditor(); commitLayers(); }
     if (a === 'frDel') { pushUndo(); fr.splice(i, 1); setSeriesDuration(L); renderLayerEditor(); commitLayers(); }
     if (a === 'frSort') { pushUndo(); fr.sort((x, y) => String(x.label).localeCompare(String(y.label), undefined, { numeric: true })); renderLayerEditor(); commitLayers(); }
+    if (a === 'lsLoad') {
+      const st = L.style;
+      st.sat = $('#ls-prod').value; st.satMode = $('#ls-mode').value;
+      if ($('#ls-hours')) st.hours = +$('#ls-hours').value;
+      if ($('#ls-step')) st.step = +$('#ls-step').value;
+      st.satEnd = $('#ls-end').value || '';
+      if ($('#ls-wms')) { st.wmsUrl = $('#ls-wms').value; st.wmsLayer = $('#ls-layer').value; }
+      try {
+        const frames = await satFrames(st.sat, { mode: st.satMode, hours: st.hours, step: st.step, end: st.satEnd ? new Date(`${st.satEnd}:00Z`) : null, wmsUrl: st.wmsUrl, wmsLayer: st.wmsLayer });
+        pushUndo();
+        st.frames = frames;
+        st.credit = SAT_CREDITS[SAT_PRODUCTS[st.sat]?.src] || '';
+        st.per = frames.length > 1 ? Math.max(0.15, +(Math.min(0.6, 8 / frames.length)).toFixed(2)) : 4;
+        st.fade = frames.length > 1 ? +(st.per * 0.6).toFixed(2) : 0;
+        setSeriesDuration(L);
+        renderLayerEditor(); commitLayers();
+        toast(`${frames.length} satellite image${frames.length === 1 ? '' : 's'} loaded`);
+      } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
+    }
     if (a === 'wxLive') {
       try {
         toast('Loading live weather…');
@@ -2494,6 +2589,8 @@ export function createEditor() {
     const sc = scene();
     $('#still-start').value = String(+sc.stillStart || 0);
     $('#still-end').value = String(+sc.stillEnd || 0);
+    $('#scene-len').value = [15, 30, 60, 120, 180, 300, 600].includes(+sc.sceneLength) ? String(sc.sceneLength) : '';
+    $('#show-credits').checked = !!project.credits;
     $('#resolution').value = String(project.resolution);
     $('#fps').value = String(project.fps);
     $('#join').innerHTML = Object.entries(TRANSITIONS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -2652,6 +2749,32 @@ export function createEditor() {
   $('#save-png').onclick = () => saveStill();
   $('#still-start').addEventListener('change', (e) => { scene().stillStart = +e.target.value; rebuild(); save(); });
   $('#still-end').addEventListener('change', (e) => { scene().stillEnd = +e.target.value; rebuild(); save(); });
+  /** Make the scene a set length: slower route or a longer hold at the end. */
+  function setSceneLength(target) {
+    const sc = scene();
+    if (!(target > 0)) return;
+    pushUndo();
+    sc.trimOut = null;
+    const fill = $('#scene-len-fill').value;
+    if (fill === 'route' && model.drawable.length) {
+      const pauses = model.runs.reduce((a, r, i) => a + (i < model.runs.length - 1 ? r.pauseAfter : 0), 0);
+      const other = model.total - (model.drawEnd - model.drawStart) + pauses;
+      sc.lineSeconds = +Math.max(0.5, target - other).toFixed(2);
+      rebuild();
+    }
+    const extra = target - buildScene(sc, frame.w, frame.h).total;
+    sc.stillEnd = +Math.max(0, (+sc.stillEnd || 0) + extra).toFixed(2);
+    sc.sceneLength = target;
+    rebuild(); renderExportSettings(); save();
+    toast(`Scene set to ${target >= 60 ? `${(target / 60).toFixed(target % 60 ? 1 : 0)} min` : `${target} s`}`);
+  }
+  $('#scene-len').addEventListener('change', (e) => {
+    let v = e.target.value;
+    if (!v) { scene().sceneLength = null; save(); return; }
+    if (v === 'custom') { const r = prompt('Scene length in seconds (up to 3600)', String(Math.round(model.total))); if (!r) { e.target.value = ''; return; } v = clamp(+r || 0, 1, 3600); }
+    setSceneLength(+v);
+  });
+  $('#show-credits').addEventListener('change', (e) => { project.credits = e.target.checked; save(); });
   const setResolution = (v) => { project.resolution = +v; $('#resolution').value = String(v); $('#resolution-top').value = String(v); layout(true); updateEstimate(); save(); };
   $('#resolution').addEventListener('change', (e) => setResolution(e.target.value));
   $('#resolution-top').addEventListener('change', (e) => setResolution(e.target.value));
@@ -2898,9 +3021,9 @@ export function createEditor() {
   }
   function renderScenes() {
     $('#scene-tabs').innerHTML = project.scenes.map((sc, i) => `
-      <div class="scene-tab ${i === sceneIdx ? 'active' : ''}" data-i="${i}">
+      <div class="scene-tab ${i === sceneIdx ? 'active' : ''}" data-i="${i}" draggable="true" title="Drag to change the order">
         <span class="n">${i + 1}</span>${miniSVG(sc)}<b>${esc(sc.name)}</b><small data-dur="${i}"></small>
-        <button class="menu-btn" data-menu="${i}" title="Scene options">⋯</button>
+        <button class="menu-btn" data-menu="${i}" title="Scene options">⋯</button>${project.scenes.length > 1 ? `<button class="del-scene" data-delscene="${i}" title="Delete scene">✕</button>` : ''}
       </div>`).join('');
     updateSceneDurations();
   }
@@ -2914,7 +3037,40 @@ export function createEditor() {
     const tab = $(`#scene-tabs [data-i="${sceneIdx}"] svg.mini`);
     if (tab) tab.outerHTML = miniSVG(scene());
   }
+  // drag scene tabs to reorder
+  let dragScene = null;
+  $('#scene-tabs').addEventListener('dragstart', (e) => { const tab = e.target.closest('.scene-tab'); if (!tab) return; dragScene = +tab.dataset.i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(dragScene)); });
+  $('#scene-tabs').addEventListener('dragover', (e) => { const tab = e.target.closest('.scene-tab'); if (dragScene == null || !tab) return; e.preventDefault(); $$('#scene-tabs .scene-tab').forEach((t) => t.classList.toggle('drag-over', t === tab)); });
+  $('#scene-tabs').addEventListener('dragleave', (e) => { if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) $$('#scene-tabs .scene-tab').forEach((t) => t.classList.remove('drag-over')); });
+  $('#scene-tabs').addEventListener('drop', (e) => {
+    const tab = e.target.closest('.scene-tab');
+    $$('#scene-tabs .scene-tab').forEach((t) => t.classList.remove('drag-over'));
+    if (dragScene == null || !tab) return;
+    e.preventDefault();
+    const from = dragScene, to = +tab.dataset.i;
+    dragScene = null;
+    if (from === to) return;
+    moveScene(from, to);
+  });
+  $('#scene-tabs').addEventListener('dragend', () => { dragScene = null; $$('#scene-tabs .scene-tab').forEach((t) => t.classList.remove('drag-over')); });
+  function moveScene(from, to) {
+    const scs = project.scenes;
+    const cur = scs[sceneIdx];
+    const [sc] = scs.splice(from, 1);
+    scs.splice(to, 0, sc);
+    sceneIdx = scs.indexOf(cur);
+    offsetCache = null; eventsCache = null;
+    renderScenes(); renderTimeline(); save();
+    toast(`Moved “${sc.name}” to position ${to + 1}`);
+  }
   $('#scene-tabs').addEventListener('click', (e) => {
+    const ds = e.target.closest('[data-delscene]');
+    if (ds) {
+      e.stopPropagation();
+      const i = +ds.dataset.delscene, scs = project.scenes;
+      if (scs.length > 1 && confirm(`Delete “${scs[i].name}”?`)) { scs.splice(i, 1); offsetCache = null; eventsCache = null; selectScene(Math.min(i <= sceneIdx ? Math.max(0, sceneIdx - (i < sceneIdx ? 1 : 0)) : sceneIdx, scs.length - 1), true); save(); }
+      return;
+    }
     const mb = e.target.closest('[data-menu]');
     if (mb) { e.stopPropagation(); openSceneMenu(+mb.dataset.menu, mb); return; }
     const tab = e.target.closest('.scene-tab');
@@ -2935,7 +3091,7 @@ export function createEditor() {
       const scs = project.scenes;
       if (a === 'rename') { const n = prompt('Scene name', scs[i].name); if (n) { scs[i].name = n.slice(0, 40); renderScenes(); save(); } }
       if (a === 'dup') { const c = JSON.parse(JSON.stringify(scs[i])); c.id = `sc_${Math.random().toString(36).slice(2, 10)}`; c.name = `${scs[i].name} copy`; scs.splice(i + 1, 0, c); selectScene(i + 1); }
-      if (a === 'left' || a === 'right') { const j = a === 'left' ? i - 1 : i + 1; [scs[i], scs[j]] = [scs[j], scs[i]]; selectScene(j); }
+      if (a === 'left' || a === 'right') { const j = a === 'left' ? i - 1 : i + 1; [scs[i], scs[j]] = [scs[j], scs[i]]; offsetCache = null; eventsCache = null; selectScene(j, true); }
       if (a === 'del' && confirm(`Delete “${scs[i].name}”?`)) { scs.splice(i, 1); selectScene(Math.min(sceneIdx, scs.length - 1), true); }
       save();
     });
@@ -3078,7 +3234,7 @@ export function createEditor() {
           drawLetterbox(ctx, full, s2.look, tt, unit);
           renderCaptions(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full, exact: true });
           drawScreenEffects(ctx, s2, { frame: full, unit, time: tt, src: { canvas: mc, sx: 0, sy: 0, sw: mc.width, sh: mc.height } }, layerTiming);
-          drawAttribution(ctx, themeAttribution(s2.look), unit, width, height);
+          if (project.credits) drawAttribution(ctx, themeAttribution(s2.look), unit, width, height);
         },
       }, sc, t);
       downloadBlob(blob, `${slug(project.name)}-${t.toFixed(2)}s-${width}x${height}.png`);
@@ -3171,7 +3327,7 @@ export function createEditor() {
           drawLetterbox(ctx, full, sc.look, t, unit);
           renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full, exact: true });
           drawScreenEffects(ctx, sc, { frame: full, unit, time: t, src: { canvas: mc, sx: 0, sy: 0, sw: mc.width, sh: mc.height } }, layerTiming);
-          drawAttribution(ctx, themeAttribution(sc.look), unit, width, height);
+          if (project.credits) drawAttribution(ctx, themeAttribution(sc.look), unit, width, height);
         },
         onStatus: (s) => { $('#render-status').textContent = s; },
         onProgress: (f, canvas, info) => {

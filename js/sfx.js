@@ -3,7 +3,7 @@
 // typing). Everything is generated with Web Audio, so it works offline and exports into the MP4.
 
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -289,6 +289,10 @@ Object.assign(SYN, {
     const g = env(ctx, w, [[0.002, 1.1 * v], [0.35, 0.001, 1]]); n.connect(f).connect(g).connect(out); g.connect(reverb(ctx, out));
   },
   sonar(ctx, out, w, p) { SYN.ping(ctx, out, w, { freq: 880, vol: p.vol }); },
+  horn(ctx, out, w, p) {
+    const v = p.vol ?? 1, d = 1.4;
+    for (const f of [311, 370, 466]) { const o = osc(ctx, 'sawtooth', f, w, d); const fl = filt(ctx, 'lowpass', 1600); const g = env(ctx, w, [[0.05, 0.07 * v], [d - 0.15, 0.07 * v], [d, 0.001, 1]]); o.connect(fl).connect(g).connect(out); g.connect(reverb(ctx, out)); }
+  },
   rain(ctx, out, w, p) {
     const d = clamp(p.dur || 4, 0.5, 60), v = p.vol ?? 1;
     const n = src(ctx, 'pink', w, d); const f = filt(ctx, 'highpass', 900); const f2 = filt(ctx, 'lowpass', 7000);
@@ -451,6 +455,17 @@ export function buildEvents(project, models) {
         else if (s.look === 'flash') push(t0, 'hit', { vol: vol * 0.7 });
         else if (s.look === 'shake') push(t0, 'sub', { vol });
         else if (s.look === 'rain') push(t0, 'wind', { dur: Math.max(2, D), vol: vol * 0.5 });
+      } else if (L.kind === 'collision') {
+        const k = (m) => String(m || '').replace('builtin:', '');
+        const snd = (m) => (/train|tram|freight/.test(k(m)) ? 'engine' : AIR[k(m)] || 'engine');
+        push(t0, snd(s.modelA), { dur: D, vol: vol * 0.6 });
+        push(t0, snd(s.modelB), { dur: D, vol: vol * 0.5 });
+        if (/train|tram|freight/.test(k(s.modelA))) push(Math.max(t0, t0 + D - 1.6), 'horn', { vol });
+        push(t0 + D - 0.05, 'hit', { vol });
+        push(t0 + D, 'explosion', { size: +s.blast || 1.4, vol });
+      } else if (L.kind === 'city3d') {
+        if (L.anim === 'grow') push(t0, 'riser', { dur: Math.min(4, D), vol: vol * 0.5 });
+      } else if ((L.kind === 'bombing' || L.kind === 'trajectory' || L.kind === 'vehicle') && false) {
       } else if (L.kind === 'cyclone') {
         push(t0, 'storm', { dur: D, vol: vol * 0.8 });
       } else if (L.kind === 'wxfield') {

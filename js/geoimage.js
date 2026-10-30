@@ -348,7 +348,7 @@ export function seriesState(L, tm) {
 }
 export function drawSeriesLayer(ctx, L, tm, proj, unit) {
   const s = L.style;
-  if (s.source === 'wayback') return; // drawn by the map (wayback.js)
+  if (s.source === 'wayback' || s.source === 'livesat') return; // drawn by the map (wayback.js)
   const q = quadOf(L);
   if (!q) return;
   const st = seriesState(L, tm);
