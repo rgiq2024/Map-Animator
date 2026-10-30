@@ -38,6 +38,8 @@ import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
+import { initModernUI } from './ui.js';
+import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -1150,6 +1152,13 @@ export function createEditor() {
   function finishDrawing() {
     const d = drawing;
     if (!d) return;
+    if (d.kind === '_fencepath') {
+      const T = layerById(d.target);
+      if (d.coords.length < 2) { toast('Add at least 2 points'); return; }
+      cancelDrawing();
+      if (T) { pushUndo(); T.style.path = d.coords.slice(); selLayer = T.id; commitLayers(); renderLayerEditor(); }
+      return;
+    }
     let geom;
     if (d.polygon) {
       if (d.coords.length < 3) { toast('Add at least 3 points'); return; }
@@ -1164,6 +1173,10 @@ export function createEditor() {
     if (L.kind === 'front') L.name = FRONT_TYPES_NAMES[L.style.type] || 'Front';
     if (d.pathModel && L.kind === 'model3d') { L.style.motion = 'move'; L.name = '3D model on a path'; L.duration = 6; }
     if (d.pathModel && L.kind === 'trees') L.name = 'Tree row';
+    if (L.kind === 'geofence') { L.style.path = defaultFencePath(geom); toast('A sample vehicle path crosses the zone — use “Draw the vehicle’s path” to draw your own', 4600); }
+    if (L.kind === 'netroute') { const on = ['car', 'bike', 'foot', 'train', 'plane'].filter((k) => L.style[k]).map((k) => NET_MODES[k].name.toLowerCase()); L.name = `Route by ${on.join(', ')}`; }
+    if (L.kind === 'servicearea') L.name = `Service area · ${{ car: 'drive', bike: 'cycle', foot: 'walk', buffer: 'buffer' }[L.style.mode] || ''}`;
+    if (L.kind === 'odflow') L.name = `OD flows (${geom.coordinates.length - 1} destinations)`;
     if (L.kind === 'trees' && !d.pathModel && map.getPitch() < 20) toast('Tilt the map (Camera step) to see the trees standing up in 3D', 3600);
     cancelDrawing();
     addLayer(L);
@@ -1173,6 +1186,7 @@ export function createEditor() {
     pushUndo();
     layersOf().push(L);
     selLayer = L.id;
+    showLayerPane('list');
     commitLayers();
     renderLayerEditor();
     if (L.kind === 'label' || L.kind === 'caption') setTimeout(() => { const i = $('#layer-editor [data-b="style.text"]'); i?.focus(); i?.select(); }, 30);
@@ -1186,6 +1200,7 @@ export function createEditor() {
     wayback?.sync(scene()); applyTimeEffects(viewMode === 'play' ? time : null);
     preloadImages(scene()).then(repaint);
     eventsCache = null;
+    if (layersOf().some((L) => NET_SET.has(L.kind))) scheduleNet();
     save();
   }
   function onLayerClick(e, p) {
@@ -1223,6 +1238,7 @@ export function createEditor() {
   }
   function selectLayer(id) {
     selLayer = id || null;
+    if (selLayer) showLayerPane('list');
     renderLayerEditor();
     renderLayerList();
     renderTimeline();
@@ -1245,9 +1261,16 @@ export function createEditor() {
   }
 
   // list
+  function showLayerPane(p) {
+    $$('#lp-tabs [data-pane]').forEach((b) => b.classList.toggle('active', b.dataset.pane === p));
+    $$('.step-page[data-page="layers"] .lp-pane').forEach((el) => el.classList.toggle('active', el.dataset.pane === p));
+  }
+  $('#lp-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-pane]'); if (b) showLayerPane(b.dataset.pane); });
+  initModernUI({ goLayers: () => { if (step !== 'layers') setStep('layers'); showLayerPane('add'); } });
   function renderLayerList() {
     const ls = layersOf();
     $('#layer-count').textContent = ls.length;
+    $('#layer-count-tab').textContent = ls.length;
     $('#layer-list').innerHTML = ls.length ? ls.map((L) => `
       <li data-id="${L.id}" class="${L.id === selLayer ? 'active' : ''} ${L.hidden ? 'off' : ''}">
         <span class="ki">${L.kind === 'point' && L.style.marker === 'emoji' ? L.style.emoji : LAYER_KINDS[L.kind].icon}</span>
@@ -1280,6 +1303,72 @@ export function createEditor() {
     startAdd(b.dataset.add);
     if (map.getPitch() < 25) toast('Tip: tilt the camera (Camera step) to see the 3D models from the side', 3600);
   });
+  // network analysis
+  $('#add-net').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    let st = null;
+    try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
+    pendingStyle = st;
+    startAdd(b.dataset.add);
+    const tip = { servicearea: 'Click the place the zones are measured from', odflow: 'Click the origin first, then each destination · double-click to finish', netroute: 'Click the start (A), any stops, then the end (B) · double-click to finish', geofence: 'Outline the zone · click the first point to finish' }[b.dataset.add];
+    if (tip) showHint(`${tip} · Esc to cancel`);
+  });
+  // computing network analysis results (service areas, routes) in the background
+  let netTimer = null, netBusy = false;
+  function scheduleNet(delay = 700) { clearTimeout(netTimer); netTimer = setTimeout(runNet, delay); }
+  async function runNet() {
+    if (netBusy) { scheduleNet(500); return; }
+    const todo = project.scenes.flatMap((sc) => sc.layers || []).filter((L) => netNeedsCompute(L) && L.style.resultTry !== netSig(L));
+    if (!todo.length) return;
+    netBusy = true;
+    for (const L of todo) {
+      const sig = netSig(L);
+      L.style.resultTry = sig;
+      L.style.resultBusy = true; if (selLayer === L.id) renderNetStatus(L);
+      try {
+        const r = await computeNet(L);
+        if (netSig(L) === sig) { L.style.result = r; L.style.resultSig = sig; L.style.resultErr = ''; }
+      } catch (err) {
+        console.warn('network analysis failed', err);
+        if (netSig(L) === sig) L.style.resultErr = 'Could not reach the routing service — check your connection and press Try again.';
+      }
+      L.style.resultBusy = false;
+      if (selLayer === L.id) renderNetStatus(L);
+      eventsCache = null;
+      repaint(); save();
+    }
+    netBusy = false;
+    if (project.scenes.some((sc) => (sc.layers || []).some((L) => netNeedsCompute(L) && L.style.resultTry !== netSig(L)))) scheduleNet(100);
+  }
+  function netStatusHTML(L) {
+    const s = L.style;
+    if (L.kind === 'geofence') {
+      const ev = fenceEvents({ ...L, style: { ...s, path: s.path || defaultFencePath(L.geom) } }).events;
+      return `${ev.length ? `The vehicle crosses the zone border ${ev.length} time${ev.length === 1 ? '' : 's'} (${ev.map((e) => (e.enter ? 'enter' : 'exit')).join(', ')}).` : 'The vehicle path does not cross the zone yet — draw a new path.'}`;
+    }
+    if (s.resultBusy) return '<span class="spin"></span> Computing…';
+    if (s.resultErr && s.resultSig !== netSig(L)) return `<span class="warn">${esc(s.resultErr)}</span>`;
+    const r = s.result;
+    if (!r) return L.kind === 'odflow' && s.path !== 'road' && s.labels !== 'time' ? 'Arcs need no routing. Pick “Real roads” to follow the roads.' : 'Waiting…';
+    if (L.kind === 'servicearea') return `${r.zones.length} zone${r.zones.length === 1 ? '' : 's'}${r.source ? ` · road network from ${esc(r.source)}` : ' · straight-line rings'}. Saved in the project.`;
+    if (L.kind === 'netroute') return Object.entries(r.modes).map(([k, m]) => (m.error ? `${NET_MODES[k].icon} no route` : `${NET_MODES[k].icon} ${fmtLen(m.dist, s.units)} · ${fmtDur(m.dur)}${m.est ? ' (estimate)' : ''}`)).join('<br>');
+    if (L.kind === 'odflow') return `${r.routes.filter(Boolean).length} of ${r.routes.length} road routes found.`;
+    return '';
+  }
+  function renderNetStatus(L) { const el = $('#net-status'); if (el) el.innerHTML = netStatusHTML(L); }
+  function renderNetTools(L) {
+    const s = L.style;
+    let h = '<h5>Analysis</h5><div class="net-status" id="net-status">' + netStatusHTML(L) + '</div>';
+    const find = (which, ph, label) => `<div class="net-find"><span>${label}</span><input type="search" id="net-q-${which}" placeholder="${ph}" /><button class="btn sm" data-act="netFind" data-which="${which}">Find</button></div>`;
+    if (L.kind === 'servicearea') h += find('place', 'Search a place…', 'Move to');
+    if (L.kind === 'netroute') h += find('from', 'Start — e.g. Dubai Mall', 'A') + find('to', 'End — e.g. Abu Dhabi', 'B');
+    if (L.kind === 'odflow') h += find('origin', 'Origin…', 'Origin') + find('dest', 'Add a destination…', '+ Dest.');
+    if (L.kind === 'geofence') h += `<div class="btn-row"><button class="btn sm" data-act="fencePath">Draw the vehicle’s path</button><button class="btn sm" data-act="fenceReset">Reset path</button></div>` + fRow('Preview position while editing', fRange('style.editAt', s.editAt ?? 0.5, 0, 1, 0.01));
+    if (L.kind !== 'geofence') h += `<div class="btn-row"><button class="btn sm" data-act="netRun">${s.result ? 'Compute again' : 'Try again'}</button></div>`;
+    h += '<p class="hint-line">' + ({ servicearea: 'Drag the place on the map to move it — the zones are computed again. Routing: FOSSGIS Valhalla / OSRM (OpenStreetMap).', odflow: 'The first point is the origin; every other point is a destination. Drag points to move them.', netroute: 'Car, bicycle and walking follow real roads and paths (OpenStreetMap). Train and plane times are estimates from average speeds.', geofence: 'Drag the zone corners to reshape it. Alerts fire when the vehicle crosses the border.' }[L.kind] || '') + '</p>';
+    return h;
+  }
   // weather
   const mapPx = () => 1;
   $('#add-weather').addEventListener('click', async (e) => {
@@ -1539,6 +1628,7 @@ export function createEditor() {
       }
       if (IMG_KINDS.has(L.kind) && L.geom) h += renderGeoref(L);
       if (L.kind === 'wxfield') h += `<div class="btn-row"><button class="btn sm" data-act="wxLive">${L.style.grid ? 'Refresh live data' : 'Load live data for this area'}</button></div><p class="hint-line">${L.style.grid ? `Live data from Open-Meteo${L.style.grid.time ? ` · ${esc(L.style.grid.time.replace('T', ' '))} UTC` : ''}. Saved in the project, so the video stays the same.` : 'Real temperature, rain, wind, humidity and pressure right now (Open-Meteo, free). Drag the corners to change the area first.'}</p>`;
+      if (NET_SET.has(L.kind)) h += renderNetTools(L);
       if (L.kind === 'cyclone') h += '<p class="hint-line">Draw the track point by point; give each point a category (TD, TS, 1–5). The storm spins anticlockwise in the north and clockwise in the south.</p>';
       if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
       if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
@@ -1586,6 +1676,11 @@ export function createEditor() {
       clearTimeout(layerEditTimer);
       layerEditTimer = setTimeout(() => { L.duration = Math.max(0.05, +L.duration || 0.05); L.start = Math.max(0, +L.start || 0); L.hold = Math.max(0, +L.hold || 0); commitLayers(); }, 250);
       return;
+    }
+    if (NET_SET.has(L.kind)) {
+      scheduleNet(final ? 200 : 900);
+      if (final && (el.type === 'checkbox' || el.tagName === 'SELECT')) { renderLayerEditor(); }
+      eventsCache = null;
     }
     if (key === 'style.font') loadFonts(scene()).then(repaint);
     floods?.update(scene(), viewMode === 'play' ? time : null);
@@ -1891,6 +1986,40 @@ export function createEditor() {
         renderLayerEditor(); commitLayers();
         toast(`${frames.length} satellite image${frames.length === 1 ? '' : 's'} loaded`);
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
+    }
+    if (a === 'netRun') { L.style.resultTry = ''; L.style.resultSig = ''; L.style.resultErr = ''; scheduleNet(0); }
+    if (a === 'fenceReset') { pushUndo(); L.style.path = defaultFencePath(L.geom); commitLayers(); renderLayerEditor(); }
+    if (a === 'fencePath') {
+      cancelDrawing();
+      setViewMode('edit');
+      drawing = { kind: '_fencepath', target: L.id, coords: [], polygon: false, single: false };
+      stage.classList.add('placing');
+      showHint('Click the vehicle’s path across the zone · double-click or Enter to finish · Esc to cancel');
+    }
+    if (a === 'netFind') {
+      const which = btn.dataset.which;
+      const q = $(`#net-q-${which}`)?.value.trim();
+      if (!q) { toast('Type a place name first'); return; }
+      try {
+        const r = (await geocode(q))[0];
+        if (!r) { toast('Place not found'); return; }
+        const ll = [+r.lng.toFixed(6), +r.lat.toFixed(6)];
+        pushUndo();
+        const c = L.geom.coordinates;
+        const short = r.name.split(',')[0];
+        if (which === 'place') { L.geom.coordinates = ll; if (!L.style.name) L.style.name = short; }
+        if (which === 'from') { c[0] = ll; L.style.fromName = short; }
+        if (which === 'to') { c[c.length - 1] = ll; L.style.toName = short; }
+        if (which === 'origin') { c[0] = ll; L.style.originName = short; }
+        if (which === 'dest') {
+          c.push(ll);
+          const lines = String(L.style.values || '').split('\n').filter((x) => x.trim());
+          while (lines.length < c.length - 2) lines.push(`Destination ${lines.length + 1}`);
+          lines.push(short);
+          L.style.values = lines.join('\n');
+        }
+        commitLayers(); renderLayerEditor(); zoomToLayer(L);
+      } catch { toast('Search failed — check your connection', 4200); }
     }
     if (a === 'wxLive') {
       try {

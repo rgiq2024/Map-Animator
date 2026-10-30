@@ -11,6 +11,7 @@ import { drawCyclone, drawCycloneLegend, drawPressure, drawFront, FRONT_TYPES, d
 import { drawTitle, TITLE_LOOKS } from './titles.js';
 import { drawNews, NEWS_LOOKS } from './news.js';
 import { EFFECT_LOOKS, drawVideoLayer } from './screenfx.js';
+import { NET_KINDS, NET_ANIMS, NET_DEFAULTS, NET_FORMS, NET_SET, netPhases, drawNet } from './network.js';
 import { drawImageLayer, drawCompareLayer, drawSeriesLayer, drawSeriesLabel } from './geoimage.js';
 
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
@@ -34,6 +35,7 @@ function hexA(hex, a) {
 
 // ---------------------------------------------------------------- catalogue (merged into LAYER_KINDS)
 export const FX_KINDS = {
+  ...NET_KINDS,
   satellite: { name: 'Satellite pass', icon: '🛰️', geom: 'line', desc: 'A satellite flies over and images the ground' },
   iss:       { name: 'ISS orbit', icon: '🛰', geom: 'point', desc: 'The space station on its orbit through a point' },
   launch:    { name: 'Launch site', icon: '🚀', geom: 'point', desc: 'A rocket lifts off from a launch pad' },
@@ -67,6 +69,7 @@ export const FX_KINDS = {
   forecast:  { name: 'Weather forecast', icon: '📅', geom: null, desc: 'TV weather panels: days ahead, cities, current conditions, warnings' },
 };
 export const FX_ANIMS = {
+  ...NET_ANIMS,
   satellite: { pass: 'Fly over' }, iss: { pass: 'Orbit' }, launch: { launch: 'Lift off' },
   trajectory: { fly: 'Fly to the target' }, strike: { blast: 'Explode' }, bombing: { run: 'Bombing run' },
   capture: { advance: 'Advancing front', fade: 'Fade in', none: 'Already captured' },
@@ -96,6 +99,7 @@ export const FX_ANIMS = {
   forecast: { in: 'Animate in' },
 };
 export const FX_DEFAULTS = {
+  ...NET_DEFAULTS,
   satellite: { anim: 'pass', duration: 6, style: { sprite: 'satellite', color: '#36d1ff', size: 1, alt: 80, imaging: true, swathKm: 60, beam: true, track: true, label: 'IMAGING SAT' } },
   iss: { anim: 'pass', duration: 10, style: { sprite: 'iss', color: '#ffd23f', size: 1.3, alt: 110, imaging: false, swathKm: 40, beam: false, track: true, label: 'ISS', inclination: 51.6 } },
   launch: { anim: 'launch', duration: 6, style: { color: '#ff7a1a', size: 1, label: 'LAUNCH SITE', smoke: true, tilt: 1 } },
@@ -132,6 +136,7 @@ const VEHICLES = { missile: 'Missile (arc)', rocket: 'Rocket (high arc)', drone:
 const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', center: 'Centre', ...CUSTOM_POS };
 /** Form fields for the layer editor: [path, label, type, options]. */
 export const FX_FORMS = {
+  ...NET_FORMS,
   satellite: [['style.sprite', 'Satellite', 'select', { satellite: 'Imaging satellite', iss: 'Space station' }], ['style.label', 'Label', 'text'], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.alt', 'Height above map', 'range', [0, 220, 2]], ['style.imaging', 'Images the ground', 'switch'], ['style.swathKm', 'Swath width (km)', 'number', 1], ['style.beam', 'Show sensor beam', 'switch'], ['style.track', 'Show ground track', 'switch']],
   iss: [['style.label', 'Label', 'text'], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.alt', 'Height above map', 'range', [0, 220, 2]], ['style.inclination', 'Orbit inclination (°)', 'number', 0.1], ['style.imaging', 'Images the ground', 'switch'], ['style.track', 'Show orbit track', 'switch']],
   launch: [['style.label', 'Label', 'text'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.tilt', 'Turn east after lift-off', 'range', [-1, 1, 0.05]], ['style.smoke', 'Smoke clouds', 'switch']],
@@ -1198,6 +1203,7 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'trees': if (phase === 'above') drawTrees(ctx, L, tm, o); break;
     case 'collision': drawCollision(ctx, L, tm, o, phase); break;
     case 'city3d': break; // 3D only
+    case 'servicearea': case 'odflow': case 'netroute': case 'geofence': drawNet(ctx, L, tm, o, phase); break;
     case 'cyclone': if (phase === 'above') drawCyclone(ctx, L, tm, o); else if (phase === 'captions' && frame) drawCycloneLegend(ctx, L, tm, o); break;
     case 'pressure': if (phase === 'above') drawPressure(ctx, L, tm, o); break;
     case 'front': if (phase === 'below') drawFront(ctx, L, tm, o); break;
@@ -1234,6 +1240,7 @@ export function drawFX(ctx, L, tm, o, phase) {
 }
 /** Which phases an FX kind draws in. */
 export function fxPhases(kind) {
+  if (NET_SET.has(kind)) return netPhases(kind);
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];
   if (kind === 'forecast') return ['captions'];

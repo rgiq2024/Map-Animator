@@ -76,7 +76,7 @@
 
   <footer class="site-footer">
     <p class="credit">GIS One Map Animator · Map creator by – <b>Rahul Gawai</b></p>
-    Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · Tiles <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · Imagery Esri · Terrain AWS Terrain Tiles · Search <a href="https://nominatim.org" target="_blank" rel="noopener">Nominatim</a> · Routing <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">FOSSGIS OSRM</a>
+    Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · Tiles <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · Imagery Esri · Terrain AWS Terrain Tiles · Search <a href="https://nominatim.org" target="_blank" rel="noopener">Nominatim</a> · Routing <a href="https://routing.openstreetmap.de/about.html" target="_blank" rel="noopener">FOSSGIS OSRM</a> &amp; Valhalla
   </footer>
   <div class="drop-veil" id="drop-veil"><div>Drop your project or route file</div></div>
 </div>
@@ -172,7 +172,15 @@
       <section class="step-page" data-page="layers">
         <h2>Add map layers</h2>
         <p class="sub">Boundaries, areas, floods, lines, points and text — each animates on its own time.</p>
-        <span class="label-caps">Draw or place</span>
+        <div class="seg" id="lp-tabs" role="tablist">
+          <button data-pane="add" class="active" role="tab"><span>＋</span> Add</button>
+          <button data-pane="list" role="tab">Layers <b id="layer-count-tab">0</b></button>
+        </div>
+        <div class="lp-pane active" data-pane="add">
+        <div class="lp-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" id="add-search" placeholder="Search layers — route, cyclone, train…" autocomplete="off" /><kbd title="Quick add">/</kbd></div>
+        <p class="add-empty muted small" id="add-empty" hidden>Nothing matches — try another word.</p>
+        <details class="add-sec" data-sec="draw-or-place" open>
+          <summary><span class="sec-ico">✏️</span><span class="sec-t">Draw or place</span><em>10</em></summary>
         <div class="add-grid" id="add-layer">
           <button data-add="boundary"><i>⬡</i>Boundary</button>
           <button data-add="area"><i>▰</i>Area</button>
@@ -185,7 +193,26 @@
           <button data-add="freehand"><i>✎</i>Freehand</button>
           <button data-add="freearea"><i>✐</i>Freehand area</button>
         </div>
-        <span class="label-caps">Imagery</span>
+        </details>
+        <details class="add-sec" data-sec="network-analysis" open>
+          <summary><span class="sec-ico">🧭</span><span class="sec-t">Network analysis</span><em>11</em></summary>
+        <div class="add-grid fx" id="add-net">
+          <button data-add="servicearea" data-preset='{"mode":"car","breaks":"5, 10, 15"}'><i>🚗</i>Drive-time area</button>
+          <button data-add="servicearea" data-preset='{"mode":"foot","breaks":"5, 10, 15","ramp":"ocean"}'><i>🚶</i>Walk-time area</button>
+          <button data-add="servicearea" data-preset='{"mode":"bike","breaks":"10, 20, 30","ramp":"purple"}'><i>🚲</i>Cycle-time area</button>
+          <button data-add="servicearea" data-preset='{"mode":"buffer","breaks":"1, 3, 5","ramp":"neon","icon":"📍"}'><i>◎</i>Buffer rings</button>
+          <button data-add="netroute"><i>⤳</i>Route A → B (car, bike, walk)</button>
+          <button data-add="netroute" data-preset='{"car":true,"bike":false,"foot":false,"train":true,"plane":true,"title":"Car vs train vs plane"}'><i>✈</i>Car vs train vs plane</button>
+          <button data-add="netroute" data-preset='{"car":false,"bike":false,"foot":true,"title":"Walking route"}'><i>👣</i>Walking route</button>
+          <button data-add="odflow"><i>⇶</i>OD flows (arcs)</button>
+          <button data-add="odflow" data-preset='{"path":"road","labels":"time","color":"#ffd23f","colorTo":"#ff6b35"}'><i>🛣</i>OD on real roads</button>
+          <button data-add="geofence"><i>⛔</i>Geofence alert</button>
+          <button data-add="geofence" data-preset='{"rule":"allowed","name":"Delivery area","fenceColor":"#2979ff","icon":"🛵","asset":"Rider 12"}'><i>🛵</i>Leaves allowed zone</button>
+        </div>
+        <p class="muted small add-note">Real roads and paths from OpenStreetMap (FOSSGIS routing). Results are saved in the project.</p>
+        </details>
+        <details class="add-sec" data-sec="imagery">
+          <summary><span class="sec-ico">🛰</span><span class="sec-t">Imagery</span><em>4</em></summary>
         <div class="add-grid fx" id="add-img">
           <button data-add="image"><i>🖼</i>Georeferenced image</button>
           <button data-add="compare"><i>◐</i>Before / after</button>
@@ -193,7 +220,9 @@
           <button data-add="wayback"><i>🛰</i>Satellite through time</button>
         </div>
         <p class="muted small add-note">Images: PNG/JPG (with a .pgw/.jgw/.wld world file), GeoTIFF, or KML/KMZ ground overlays — or any picture you line up by hand.</p>
-        <span class="label-caps">3D models &amp; city</span>
+        </details>
+        <details class="add-sec" data-sec="d-models-and-city">
+          <summary><span class="sec-ico">🧊</span><span class="sec-t">3D models &amp; city</span><em>12</em></summary>
         <div class="add-grid fx" id="add-3d">
           <button data-add="collision" data-a="builtin:train" data-b="builtin:train"><i>💥</i>Train collision</button>
           <button data-add="collision" data-a="builtin:car" data-b="builtin:truck"><i>🚗</i>Car crash</button>
@@ -208,12 +237,16 @@
           <button data-add="model3d" data-source="builtin:windturbine"><i>🌬</i>Wind turbine</button>
           <button data-add="model3d" data-source="builtin:oilrig"><i>🛢</i>Oil rig</button>
         </div>
-        <span class="label-caps">Nature</span>
+        </details>
+        <details class="add-sec" data-sec="nature">
+          <summary><span class="sec-ico">🌳</span><span class="sec-t">Nature</span><em>2</em></summary>
         <div class="add-grid fx" id="add-nature">
           <button data-add="trees"><i>🌳</i>Trees (forest area)</button>
           <button data-add="treerow"><i>🌴</i>Tree row (along a line)</button>
         </div>
-        <span class="label-caps">Weather</span>
+        </details>
+        <details class="add-sec" data-sec="weather">
+          <summary><span class="sec-ico">🌀</span><span class="sec-t">Weather</span><em>18</em></summary>
         <div class="add-grid fx" id="add-weather">
           <button data-add="cyclone"><i>🌀</i>Cyclone track</button>
           <button data-add="pressure" data-type="L"><i style="color:#e0322f;font-weight:900">L</i>Low pressure</button>
@@ -234,7 +267,9 @@
           <button data-add="forecast" data-look="now"><i>☀</i>Current weather</button>
           <button data-add="forecast" data-look="warning"><i>⚠</i>Weather warning</button>
         </div>
-        <span class="label-caps">Titles &amp; TV news</span>
+        </details>
+        <details class="add-sec" data-sec="titles-and-tv-news">
+          <summary><span class="sec-ico">🎬</span><span class="sec-t">Titles &amp; TV news</span><em>13</em></summary>
         <div class="add-grid fx" id="add-titles">
           <button data-add="title" data-look="opener"><i>🎬</i>Opening title</button>
           <button data-add="title" data-look="cinematic"><i>✦</i>Cinematic title</button>
@@ -250,7 +285,9 @@
           <button data-add="news" data-look="headline"><i>▭</i>News lower third</button>
           <button data-add="hudtext" data-look="ticker"><i>⇆</i>News ticker</button>
         </div>
-        <span class="label-caps">Effects &amp; video</span>
+        </details>
+        <details class="add-sec" data-sec="effects-and-video">
+          <summary><span class="sec-ico">🎞</span><span class="sec-t">Effects &amp; video</span><em>13</em></summary>
         <div class="add-grid fx" id="add-effects">
           <button data-add="video"><i>▶</i>Video</button>
           <button data-add="effect" data-look="grain"><i>░</i>Film grain</button>
@@ -266,7 +303,9 @@
           <button data-add="effect" data-look="snow"><i>❄</i>Snow</button>
           <button data-add="effect" data-look="fog"><i>🌫</i>Fog</button>
         </div>
-        <span class="label-caps">Space &amp; defence</span>
+        </details>
+        <details class="add-sec" data-sec="space-and-defence">
+          <summary><span class="sec-ico">🚀</span><span class="sec-t">Space &amp; defence</span><em>13</em></summary>
         <div class="add-grid fx" id="add-fx">
           <button data-add="satellite"><i>🛰️</i>Satellite pass</button>
           <button data-add="iss"><i>🛰</i>ISS orbit</button>
@@ -282,7 +321,9 @@
           <button data-add="videofx"><i>🎞</i>Effect clip (video)</button>
           <button id="upload-model-btn" type="button"><i>⇪</i>Upload GLB / glTF</button>
         </div>
-        <span class="label-caps">Infographics &amp; HUD</span>
+        </details>
+        <details class="add-sec" data-sec="infographics-and-hud">
+          <summary><span class="sec-ico">📊</span><span class="sec-t">Infographics &amp; HUD</span><em>25</em></summary>
         <div class="add-grid fx" id="add-info">
           <button data-add="chart" data-type="bar"><i>📊</i>Bar chart</button>
           <button data-add="chart" data-type="line"><i>📈</i>Line chart</button>
@@ -310,15 +351,19 @@
           <button data-add="hudtext" data-look="stamp"><i>▭</i>Stamp</button>
           <button data-add="hudtext" data-look="ticker"><i>⇆</i>News ticker</button>
         </div>
+        </details>
         <span class="label-caps">Bring in</span>
         <div class="btn-row bring">
           <button class="btn sm" id="find-boundary">Find a boundary…</button>
           <button class="btn sm" id="import-layers">Import GeoJSON / KML…</button>
           <button class="btn sm" id="import-csv">Points from CSV…</button>
         </div>
+        </div>
+        <div class="lp-pane" data-pane="list">
         <div class="layer-editor" id="layer-editor" hidden></div>
         <div class="list-head"><span class="label-caps">Layers</span><b id="layer-count">0</b></div>
         <ul class="layer-list" id="layer-list"></ul>
+        </div>
       </section>
 
       <!-- LOOK -->
@@ -773,6 +818,8 @@
       <li><b>Legs.</b> Each leg has a way of travelling — walk, car, train, ferry, plane and more — with its own symbol and line style. Use <i>+ New leg</i> to switch.</li>
       <li><b>Layers.</b> Draw or import boundaries, areas, floods, lines, points, animated symbols, text and captions. Each has its own animation and timing — trace a boundary, spread a flood from a point, raise water over real terrain, pulse a symbol, type out a caption.</li>
       <li><b>Space &amp; defence.</b> In the Layers step add satellite passes, the ISS orbit, launch sites, 3D ships/jets/drones, missile and drone paths, blasts, bombing runs and capture areas — plus charts, counters, HUD overlays and flicker text. Add <i>3D model</i> (built-in or <i>Upload GLB / glTF</i>) or an <i>Effect clip</i> video. Select an item and drag its square handle to resize it, the round handle to rotate it.</li>
+      <li><b>Network analysis.</b> In Layers → <i>Network analysis</i>: click a place for a <i>drive / walk / cycle-time area</i>; click A, then B for a <i>route</i> that races car, bike, walking, train and plane; click an origin and then destinations for <i>OD flows</i>; outline a zone for a <i>geofence</i> with a vehicle that triggers alerts. Type a place name in the layer settings to move a point there.</li>
+      <li><b>Quick add.</b> Press <kbd>/</kbd> anywhere, type what you want (“isochrone”, “cyclone”, “3D train”) and press Enter. The Layers step also has a search box and folding categories.</li>
       <li><b>3D models.</b> In Layers → <i>3D models</i>: a train, car or ship <i>collision</i>, a <i>3D city</i> that grows up in an area, trains on a track, bombers, ships, the Global Hawk drone, NASA satellites, skyscrapers, wind turbines and oil rigs. Bombing runs and missile paths can use a 3D aircraft too — pick it under <i>3D model</i> in their settings.</li>
       <li><b>Imagery.</b> Add a georeferenced image (PNG/JPG with its world file, a GeoTIFF or a KML/KMZ overlay) or any picture and line it up by dragging its corners. Use <i>Before / after</i> to swipe between two images, <i>Images through time</i> for a year-by-year sequence, or <i>Satellite through time</i> for archived Esri imagery.</li>
       <li><b>Weather.</b> In Layers → Weather: draw a cyclone track point by point (set each point's category), place L / H pressure centres and fronts, drop city weather markers, add temperature, rainfall or wind over the view (made-up pattern or live data), and forecast panels or a warning banner. <i>Live satellite</i> shows the latest GOES / Meteosat / Himawari picture (or a loop of the last hours) to follow a cyclone; <i>Live radar</i> shows rain; <i>Live weather now</i> puts current weather and a forecast on the cities in view.</li>

@@ -2,8 +2,9 @@
 // fly-bys, drones, helicopters, missile launches, rocket rumble, wind, whooshes, HUD beeps & glitches,
 // typing). Everything is generated with Web Audio, so it works offline and exports into the MP4.
 
+import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -463,6 +464,21 @@ export function buildEvents(project, models) {
         if (/train|tram|freight/.test(k(s.modelA))) push(Math.max(t0, t0 + D - 1.6), 'horn', { vol });
         push(t0 + D - 0.05, 'hit', { vol });
         push(t0 + D, 'explosion', { size: +s.blast || 1.4, vol });
+      } else if (L.kind === 'servicearea') {
+        push(t0, 'ping', { vol: vol * 0.6 });
+        if (L.anim === 'grow') push(t0 + 0.05, 'whoosh', { dur: Math.min(3, D), vol: vol * 0.45 });
+      } else if (L.kind === 'odflow') {
+        push(t0, 'whoosh', { dur: Math.min(2.5, D), vol: vol * 0.5 });
+        push(t0 + D * 0.95, 'ping', { vol: vol * 0.45 });
+      } else if (L.kind === 'netroute') {
+        if (s.car) push(t0, 'engine', { dur: D, vol: vol * 0.35 });
+        if (s.plane) push(t0, 'airliner', { dur: Math.min(D, 6), vol: vol * 0.5 });
+        if (s.train) push(t0, 'engine', { dur: D, vol: vol * 0.25 });
+      } else if (L.kind === 'geofence') {
+        for (const e of fenceAlertTimes(L)) {
+          if (e.alert) { push(t0 + e.t, 'alarm', { dur: 1.4, vol: vol * 0.6 }); push(t0 + e.t, 'hit', { vol: vol * 0.4 }); }
+          else for (let k = 0; k < 2; k++) push(t0 + e.t + k * 0.16, 'beep', { freq: 1320, vol: vol * 0.4 });
+        }
       } else if (L.kind === 'city3d') {
         if (L.anim === 'grow') push(t0, 'riser', { dur: Math.min(4, D), vol: vol * 0.5 });
       } else if ((L.kind === 'bombing' || L.kind === 'trajectory' || L.kind === 'vehicle') && false) {
