@@ -1,4 +1,6 @@
-// Modern editor UX: searchable, collapsible layer catalogue and a quick-add command palette ("/").
+// Modern editor UX: themes, searchable / collapsible layer catalogue, popular shortcuts, quick-add palette ("/"),
+// a hideable side panel and folding sections in the layer settings.
+import { LAYER_KINDS } from './layers.js';
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const store = {
@@ -23,9 +25,61 @@ function btnText(b) {
   return norm(`${b.textContent} ${d.add || ''} ${d.look || ''} ${d.type || ''} ${d.variant || ''} ${d.field || ''} ${KEYWORDS[d.add] || ''} ${sec}`);
 }
 
+// ---- light / dark theme (also used on the home page)
+export function initTheme() {
+  const apply = (t) => {
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem('ma.theme', t); } catch { /* ignore */ }
+  };
+  $$('.theme-toggle').forEach((b) => b.addEventListener('click', () => apply(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light')));
+}
+initTheme();
+
+/** Turn the flat layer settings into folding sections (keeps what you opened or closed). */
+const secOpen = new Map();
+export function sectionizeEditor(box, kind) {
+  const kids = [...box.children];
+  if (!kids.length || box.querySelector('.le-sec')) return;
+  const head = kids.shift();
+  let foot = null;
+  if (kids.length && kids[kids.length - 1].querySelector?.('[data-act="del"]')) { foot = kids.pop(); foot.classList.add('le-foot'); }
+  const secs = [];
+  const mk = (title, key) => {
+    const d = document.createElement('details');
+    d.className = 'le-sec';
+    d.dataset.k = key;
+    const remembered = secOpen.get(key);
+    d.open = remembered ?? (key !== 'timing' || !['servicearea', 'odflow', 'netroute', 'geofence'].includes(kind));
+    d.innerHTML = `<summary>${title}</summary><div class="le-body"></div>`;
+    d.addEventListener('toggle', () => secOpen.set(key, d.open));
+    secs.push(d);
+    return d.querySelector('.le-body');
+  };
+  let body = mk('Timing &amp; animation', 'timing');
+  for (const el of kids) {
+    if (el.tagName === 'H5') { const t = el.textContent.trim(); body = mk(el.innerHTML, t.toLowerCase()); continue; }
+    body.appendChild(el);
+  }
+  const ana = secs.find((d) => d.dataset.k === 'analysis');
+  if (ana) { secs.splice(secs.indexOf(ana), 1); secs.unshift(ana); ana.open = secOpen.get('analysis') ?? true; }
+  box.replaceChildren(head, ...secs.filter((d) => d.querySelector('.le-body').childNodes.length), ...(foot ? [foot] : []));
+}
+
 export function initModernUI({ goLayers } = {}) {
   const side = $('.step-page[data-page="layers"]');
   if (!side) return;
+  // ---- side panel can be hidden for a bigger map
+  const main = $('.ed-main');
+  try { if (localStorage.getItem('ma.side') === 'hidden') main?.classList.add('side-hidden'); } catch { /* ignore */ }
+  $('#side-toggle')?.addEventListener('click', () => {
+    main.classList.toggle('side-hidden');
+    try { localStorage.setItem('ma.side', main.classList.contains('side-hidden') ? 'hidden' : 'shown'); } catch { /* ignore */ }
+  });
+  $$('#stepper [data-step]').forEach((b) => b.addEventListener('click', () => main?.classList.remove('side-hidden')));
+  // ---- popular shortcuts
+  $('#popular')?.addEventListener('click', (e) => { const b = e.target.closest('[data-proxy]'); if (b) $(b.dataset.proxy)?.click(); });
+  // ---- descriptions on hover
+  $$('.add-grid button[data-add]', side).forEach((b) => { const d = LAYER_KINDS[b.dataset.add]?.desc; if (d && !b.title) b.title = d; });
   // ---- collapsible categories (remember which are open)
   const openState = store.get('ma.addOpen', null);
   $$('.add-sec', side).forEach((d) => {

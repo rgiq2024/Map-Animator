@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GIS One Map Animator — animated map videos</title>
   <meta name="description" content="GIS One Map Animator — make an animated map video in your browser. Draw your route or use a GPX file, add signs, legs and camera moves, and download an MP4 up to 4K. Free, no account." />
+  <script>try{var t=localStorage.getItem('ma.theme');if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme='dark';}</script>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&family=Caveat:wght@600;700&family=Montserrat:wght@400;500;700;900&family=Poppins:wght@400;600;800&family=Oswald:wght@400;600&family=Bebas+Neue&family=Anton&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Merriweather:wght@400;700&family=Lora:ital,wght@0,500;0,700;1,500&family=Roboto+Slab:wght@400;700&family=Raleway:wght@400;700;900&family=Space+Grotesk:wght@500;700&family=Cinzel:wght@500;800&family=Lobster&family=Pacifico&family=Dancing+Script:wght@600;700&family=Permanent+Marker&family=Special+Elite&family=Cairo:wght@400;700;900&family=Tajawal:wght@400;700;900&family=Noto+Sans+Devanagari:wght@400;700&family=Noto+Sans:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
-  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/app.css?v=248a495388" />
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
-  <script type="importmap">{ "imports": { "three": "./js/vendor/three/three.module.js" } }</script>
+  <script type="importmap">{"imports":{"three":"./js/vendor/three/three.module.js","./js/app.js":"./js/app.js?v=ff1aadc5a7","./js/audio.js":"./js/audio.js?v=fb6c1d54de","./js/editor.js":"./js/editor.js?v=0980fa988d","./js/effects.js":"./js/effects.js?v=a13d225e98","./js/explosion.js":"./js/explosion.js?v=d6884a89a1","./js/export.js":"./js/export.js?v=fea8702a61","./js/flood.js":"./js/flood.js?v=8268d2c5bc","./js/fx.js":"./js/fx.js?v=9d253c0d2b","./js/geo.js":"./js/geo.js?v=dbd6ce2d46","./js/geoimage.js":"./js/geoimage.js?v=1931ff41c1","./js/gizmo.js":"./js/gizmo.js?v=1785d72544","./js/home.js":"./js/home.js?v=942b65de51","./js/hud.js":"./js/hud.js?v=e93f65e4bd","./js/hudplus.js":"./js/hudplus.js?v=95fcd813c7","./js/importers.js":"./js/importers.js?v=e75c4d5891","./js/layers.js":"./js/layers.js?v=529decf43f","./js/livesat.js":"./js/livesat.js?v=d11f4a4672","./js/modelnames.js":"./js/modelnames.js?v=23b05c012c","./js/models3d.js":"./js/models3d.js?v=608024013e","./js/modes.js":"./js/modes.js?v=0a90e5ca0e","./js/network.js":"./js/network.js?v=f62b1e84d6","./js/news.js":"./js/news.js?v=8e45dfbb6c","./js/place.js":"./js/place.js?v=10f3195843","./js/quickstart.js":"./js/quickstart.js?v=27555b72a3","./js/renderer.js":"./js/renderer.js?v=e211552061","./js/scene.js":"./js/scene.js?v=0eea64a4ad","./js/screenfx.js":"./js/screenfx.js?v=79b55c02b1","./js/services.js":"./js/services.js?v=401daf217e","./js/sfx.js":"./js/sfx.js?v=3762c2ccc2","./js/signs.js":"./js/signs.js?v=d5bbbc970b","./js/sprites.js":"./js/sprites.js?v=2708d6c048","./js/store.js":"./js/store.js?v=030be2be69","./js/themes.js":"./js/themes.js?v=5e24e62e30","./js/timeline-ui.js":"./js/timeline-ui.js?v=e622282d7b","./js/titles.js":"./js/titles.js?v=1e4ec106a2","./js/trees.js":"./js/trees.js?v=406bec26de","./js/ui.js":"./js/ui.js?v=d3e6944913","./js/videofx.js":"./js/videofx.js?v=d35246f575","./js/wayback.js":"./js/wayback.js?v=c4e0d8b709","./js/weather.js":"./js/weather.js?v=dad4251ca9"}}</script>
 </head>
 <body>
 
@@ -27,6 +28,7 @@
       <button class="link" data-modal="help-modal">How to</button>
       <button class="link" data-modal="faq-modal">FAQ</button>
       <button class="link" data-modal="about-modal">About</button>
+      <button class="theme-toggle" type="button" title="Light / dark theme" aria-label="Switch light or dark theme"><svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg><svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
     </nav>
   </header>
 
@@ -94,12 +96,14 @@
       <button class="btn dashed sm" id="new-scene">+ New scene</button>
     </div>
     <div class="ed-top-right">
+      <button class="theme-toggle" type="button" title="Light / dark theme" aria-label="Switch light or dark theme"><svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg><svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
       <button class="link" data-modal="help-modal">Help</button>
       <button class="btn ghost sm" id="save-file" title="Download the project file">Save file</button>
     </div>
   </header>
 
   <div class="ed-bar">
+    <button class="side-toggle" id="side-toggle" type="button" title="Hide / show the side panel" aria-label="Hide or show the side panel"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg></button>
     <nav class="stepper" id="stepper">
       <button data-step="route"><i>1</i>Route</button>
       <button data-step="layers"><i>2</i>Layers</button>
@@ -178,6 +182,16 @@
         </div>
         <div class="lp-pane active" data-pane="add">
         <div class="lp-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" id="add-search" placeholder="Search layers — route, cyclone, train…" autocomplete="off" /><kbd title="Quick add">/</kbd></div>
+        <div class="popular" id="popular">
+          <span class="pop-l">Popular</span>
+          <button type="button" data-proxy='#add-layer [data-add="point"]'>📍 Point</button>
+          <button type="button" data-proxy='#add-layer [data-add="area"]'>▰ Area</button>
+          <button type="button" data-proxy='#add-layer [data-add="label"]'>T Text</button>
+          <button type="button" data-proxy='#add-net [data-add="netroute"]:not([data-preset])'>⤳ Route A → B</button>
+          <button type="button" data-proxy='#add-net [data-add="servicearea"]'>🚗 Drive-time area</button>
+          <button type="button" data-proxy='#add-titles [data-look="opener"]'>🎬 Title</button>
+          <button type="button" data-proxy="#find-boundary">⬡ Find a boundary</button>
+        </div>
         <p class="add-empty muted small" id="add-empty" hidden>Nothing matches — try another word.</p>
         <details class="add-sec" data-sec="draw-or-place" open>
           <summary><span class="sec-ico">✏️</span><span class="sec-t">Draw or place</span><em>10</em></summary>
@@ -818,7 +832,7 @@
       <li><b>Legs.</b> Each leg has a way of travelling — walk, car, train, ferry, plane and more — with its own symbol and line style. Use <i>+ New leg</i> to switch.</li>
       <li><b>Layers.</b> Draw or import boundaries, areas, floods, lines, points, animated symbols, text and captions. Each has its own animation and timing — trace a boundary, spread a flood from a point, raise water over real terrain, pulse a symbol, type out a caption.</li>
       <li><b>Space &amp; defence.</b> In the Layers step add satellite passes, the ISS orbit, launch sites, 3D ships/jets/drones, missile and drone paths, blasts, bombing runs and capture areas — plus charts, counters, HUD overlays and flicker text. Add <i>3D model</i> (built-in or <i>Upload GLB / glTF</i>) or an <i>Effect clip</i> video. Select an item and drag its square handle to resize it, the round handle to rotate it.</li>
-      <li><b>Network analysis.</b> In Layers → <i>Network analysis</i>: click a place for a <i>drive / walk / cycle-time area</i>; click A, then B for a <i>route</i> that races car, bike, walking, train and plane; click an origin and then destinations for <i>OD flows</i>; outline a zone for a <i>geofence</i> with a vehicle that triggers alerts. Type a place name in the layer settings to move a point there.</li>
+      <li><b>Network analysis.</b> In Layers → <i>Network analysis</i>: click a place for a <i>drive / walk / cycle-time area</i>; click A, then B for a <i>route</i> that races car, bike, walking, train and plane; click an origin and then destinations for <i>OD flows</i>; outline a zone for a <i>geofence</i> with a vehicle that triggers alerts. While drawing, use the bar at the bottom of the map: <i>Undo point</i>, <i>Finish</i> or <i>Cancel</i>. A route finishes by itself after you click B. Type a place name in the layer settings to move a point there.</li>
       <li><b>Quick add.</b> Press <kbd>/</kbd> anywhere, type what you want (“isochrone”, “cyclone”, “3D train”) and press Enter. The Layers step also has a search box and folding categories.</li>
       <li><b>3D models.</b> In Layers → <i>3D models</i>: a train, car or ship <i>collision</i>, a <i>3D city</i> that grows up in an area, trains on a track, bombers, ships, the Global Hawk drone, NASA satellites, skyscrapers, wind turbines and oil rigs. Bombing runs and missile paths can use a 3D aircraft too — pick it under <i>3D model</i> in their settings.</li>
       <li><b>Imagery.</b> Add a georeferenced image (PNG/JPG with its world file, a GeoTIFF or a KML/KMZ overlay) or any picture and line it up by dragging its corners. Use <i>Before / after</i> to swipe between two images, <i>Images through time</i> for a year-by-year sequence, or <i>Satellite through time</i> for archived Esri imagery.</li>
@@ -869,6 +883,6 @@
 <input type="file" id="file-geoimg" multiple accept="image/*,.png,.jpg,.jpeg,.webp,.tif,.tiff,.pgw,.pngw,.jgw,.jpgw,.tfw,.wld,.j2w,.kml,.kmz" hidden />
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=ff1aadc5a7"></script>
 </body>
 </html>

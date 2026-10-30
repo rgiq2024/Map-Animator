@@ -209,6 +209,30 @@ function smoothRing(ring, it = 2) {
   return [...r, r[0]];
 }
 
+// ---- estimates, used when the routing service can't be reached (offline, blocked, rate-limited)
+const EST_KMH = { car: 55, bike: 16, foot: 4.8 };
+function hash01(a, b) { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); }
+function estimateZones(c, mode, metric, breaks) {
+  return breaks.map((B, bi) => {
+    const R = metric === 'distance' ? B * 1000 * 0.82 : (B / 60) * EST_KMH[mode] * 1000 * 0.72;
+    const ring = [];
+    const n = 72;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 360;
+      const w = 1 + 0.16 * Math.sin((a / 180) * Math.PI * 3 + c[0] * 7) + 0.1 * Math.cos((a / 180) * Math.PI * 5 + c[1] * 5) + 0.05 * (hash01(i, bi) - 0.5);
+      ring.push(dest(c, a, R * w));
+    }
+    ring.push(ring[0]);
+    return { value: B, polys: [[ring]] };
+  });
+}
+function estimateRoute(mode, pts) {
+  const c = [];
+  for (let i = 1; i < pts.length; i++) c.push(...curvedLine(pts[i - 1], pts[i], 0.08 * (mode === 'bike' ? -1 : 1), 48).slice(i > 1 ? 1 : 0));
+  const dist = pathLen(c) * (mode === 'foot' ? 1.2 : 1.25);
+  return { coords: c, dist, dur: dist / (EST_KMH[mode] / 3.6), est: true };
+}
+
 /** Inputs that decide the result — when they change the result must be computed again. */
 export function netSig(L) {
   const s = L.style || {};
@@ -228,10 +252,12 @@ export async function computeNet(L) {
     let breaks = parseBreaks(s.breaks);
     if (!breaks.length) breaks = [5, 10, 15];
     if (s.mode === 'buffer') return { zones: breaks.map((b) => ({ value: b, polys: [[circle(c, b * 1000)]] })), metric: 'distance', mode: 'buffer' };
-    let zones, source = 'Valhalla (FOSSGIS)';
-    try { zones = await isoValhalla(c, s.mode, s.metric, breaks); } catch { zones = await isoOSRM(c, s.mode, s.metric, breaks); source = 'OSRM (FOSSGIS)'; }
+    let zones, source = 'Valhalla (FOSSGIS)', approx = false;
+    try { zones = await isoValhalla(c, s.mode, s.metric, breaks); } catch {
+      try { zones = await isoOSRM(c, s.mode, s.metric, breaks); source = 'OSRM (FOSSGIS)'; } catch { zones = estimateZones(c, s.mode, s.metric, breaks); source = ''; approx = true; }
+    }
     if (s.smooth !== false) zones.forEach((z) => { z.polys = z.polys.map((p) => p.map((r) => smoothRing(r, 1))); });
-    return { zones, metric: s.metric, mode: s.mode, source };
+    return { zones, metric: s.metric, mode: s.mode, source, approx };
   }
   if (L.kind === 'netroute') {
     const pts = L.geom.coordinates;
@@ -239,7 +265,7 @@ export async function computeNet(L) {
     const errors = [];
     for (const k of ['car', 'bike', 'foot']) {
       if (!s[k]) continue;
-      try { out[k] = await routeVia(k, pts); } catch (e) { errors.push(NET_MODES[k].name); out[k] = { error: true }; }
+      try { out[k] = await routeVia(k, pts); } catch (e) { errors.push(NET_MODES[k].name); out[k] = estimateRoute(k, pts); }
     }
     if (s.train) {
       // No public rail router: follow the stops with gentle curves; time from the average speed + 4 min per stop.
@@ -260,7 +286,7 @@ export async function computeNet(L) {
     const c = L.geom.coordinates;
     const routes = [];
     for (let i = 1; i < c.length && i <= 30; i++) {
-      try { routes.push(await routeVia('car', [c[0], c[i]])); } catch { routes.push(null); }
+      try { routes.push(await routeVia('car', [c[0], c[i]])); } catch { const e = estimateRoute('car', [c[0], c[i]]); routes.push({ dist: e.dist, dur: e.dur, est: true }); }
     }
     return { routes };
   }
@@ -493,7 +519,7 @@ function drawServiceArea(ctx, L, tm, o, phase) {
     const how = { car: 'Drive time', bike: 'Cycling time', foot: 'Walking time', buffer: 'Distance' }[s.mode] || 'Reach';
     const title = s.title || `${res.metric === 'distance' && s.mode !== 'buffer' ? `${{ car: 'Driving', bike: 'Cycling', foot: 'Walking' }[s.mode]} distance` : how}${s.name ? ` from ${s.name}` : ''}`;
     ctx.fillStyle = '#fff'; ctx.font = `800 ${12.5 * unit}px ${UI}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    ctx.fillText(title.toUpperCase(), x + 14 * unit, y + 20 * unit, W - 28 * unit);
+    ctx.fillText(`${title.toUpperCase()}${res.approx ? ' (APPROX.)' : ''}`, x + 14 * unit, y + 20 * unit, W - 28 * unit);
     zones.forEach((z, i) => {
       const k = zoneProgress(L, tm, i, n);
       const yy = y + 42 * unit + i * rowH;
@@ -741,7 +767,7 @@ function drawRoute(ctx, L, tm, o, phase) {
       const el = tm.edit ? maxD : L.anim === 'race' ? clamp(tm.u, 0, 1) * maxD : null;
       ctx.textAlign = 'left'; ctx.font = `700 ${10.5 * unit}px ${MONO}`; ctx.fillStyle = 'rgba(232,236,244,0.75)';
       if (el != null) ctx.fillText(`⏱  ${fmtDur(el)}`, x + 14 * unit, y + H - 16 * unit);
-      if (res.errors?.length) { ctx.textAlign = 'right'; ctx.fillStyle = '#ffb300'; ctx.fillText(`No route: ${res.errors.join(', ')}`, x + Wd - 14 * unit, y + H - 16 * unit); }
+      
     }
     ctx.restore();
   }

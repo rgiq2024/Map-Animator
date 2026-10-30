@@ -38,7 +38,7 @@ import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
-import { initModernUI } from './ui.js';
+import { initModernUI, sectionizeEditor } from './ui.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
 
@@ -1092,7 +1092,33 @@ export function createEditor() {
     line: 'Click to draw the line · double-click or Enter to finish · Esc to cancel',
     point: 'Click the map where it goes · Esc to cancel',
   };
-  function showHint(text) { const h = $('#stage-hint'); h.textContent = text; h.hidden = false; }
+  function showHint(text) {
+    const h = $('#stage-hint');
+    h.innerHTML = `<span class="sh-dot"></span><span class="sh-t">${esc(text)}</span><span class="sh-n"></span><span class="sh-btns"><button type="button" class="sh-b" data-sh="undo">↶ Undo point</button><button type="button" class="sh-b primary" data-sh="finish">✓ Finish</button><button type="button" class="sh-b" data-sh="cancel">Cancel</button></span>`;
+    h.hidden = false;
+    updateDrawBar();
+  }
+  function updateDrawBar() {
+    const h = $('#stage-hint');
+    if (h.hidden || !h.querySelector('.sh-btns')) return;
+    const multi = !!drawing && !drawing.single && !drawing.freehand;
+    const n = drawing?.coords?.length || 0;
+    const min = drawing?.polygon ? 3 : 2;
+    h.querySelector('[data-sh="undo"]').hidden = !multi || !n;
+    const fin = h.querySelector('[data-sh="finish"]');
+    fin.hidden = !multi; fin.disabled = n < min;
+    h.querySelector('.sh-n').textContent = multi ? `${n} point${n === 1 ? '' : 's'}${n < min ? ` · ${min - n} more needed` : ' · ready'}` : '';
+    h.querySelector('[data-sh="cancel"]').hidden = !(drawing || placing);
+  }
+  $('#stage-hint').addEventListener('mousedown', (e) => e.stopPropagation());
+  $('#stage-hint').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sh]');
+    if (!b) return;
+    e.stopPropagation();
+    if (b.dataset.sh === 'finish') finishDrawing();
+    else if (b.dataset.sh === 'undo') { drawing?.coords.pop(); repaint(); updateDrawBar(); }
+    else { stopPlacing(); cancelDrawing(); }
+  });
 
   function startAdd(kind, preset = null) {
     cancelDrawing();
@@ -1220,7 +1246,9 @@ export function createEditor() {
         if (Math.hypot(f.x - e.point.x, f.y - e.point.y) < 11) { finishDrawing(); return; }
       }
       drawing.coords.push(ll);
+      if (drawing.kind === 'netroute' && drawing.coords.length >= 2) { finishDrawing(); return; }
       repaint();
+      updateDrawBar();
       return;
     }
     selectLayer(hitLayer(octx, layersOf(), hits.proj, p, unitNow()));
@@ -1265,6 +1293,7 @@ export function createEditor() {
     $$('#lp-tabs [data-pane]').forEach((b) => b.classList.toggle('active', b.dataset.pane === p));
     $$('.step-page[data-page="layers"] .lp-pane').forEach((el) => el.classList.toggle('active', el.dataset.pane === p));
   }
+  $('#layer-list').addEventListener('click', (e) => { if (e.target.closest('[data-go-add]')) showLayerPane('add'); });
   $('#lp-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-pane]'); if (b) showLayerPane(b.dataset.pane); });
   initModernUI({ goLayers: () => { if (step !== 'layers') setStep('layers'); showLayerPane('add'); } });
   function renderLayerList() {
@@ -1277,7 +1306,7 @@ export function createEditor() {
         <span class="nm">${esc(L.kind === 'caption' || L.kind === 'label' ? (L.style.text || L.name) : L.name)}</span>
         <small>${(+L.start).toFixed(1)}s</small>
         <button class="mini" data-eye title="${L.hidden ? 'Show' : 'Hide'}">${L.hidden ? '◌' : '◉'}</button>
-      </li>`).join('') : '<li class="empty">No layers yet. Draw one, find a boundary, or import a file.</li>';
+      </li>`).join('') : '<li class="empty"><div class="empty-card"><span class="ec-ico">🗺️</span><b>No layers yet</b><span>Add points, areas, routes, drive-time zones, titles, weather and more.</span><button type="button" class="btn primary sm" data-go-add>＋ Add a layer</button></div></li>';
   }
   $('#layer-list').addEventListener('click', (e) => {
     const li = e.target.closest('li[data-id]');
@@ -1311,8 +1340,8 @@ export function createEditor() {
     try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
     pendingStyle = st;
     startAdd(b.dataset.add);
-    const tip = { servicearea: 'Click the place the zones are measured from', odflow: 'Click the origin first, then each destination · double-click to finish', netroute: 'Click the start (A), any stops, then the end (B) · double-click to finish', geofence: 'Outline the zone · click the first point to finish' }[b.dataset.add];
-    if (tip) showHint(`${tip} · Esc to cancel`);
+    const tip = { servicearea: 'Click the map where the zones start (e.g. a hospital or shop)', odflow: 'Click the origin first, then each destination — then press Finish', netroute: 'Click the start (A), then the end (B)', geofence: 'Click around the zone — then press Finish' }[b.dataset.add];
+    if (tip) showHint(tip);
   });
   // computing network analysis results (service areas, routes) in the background
   let netTimer = null, netBusy = false;
@@ -1329,6 +1358,7 @@ export function createEditor() {
       try {
         const r = await computeNet(L);
         if (netSig(L) === sig) { L.style.result = r; L.style.resultSig = sig; L.style.resultErr = ''; }
+        if (r?.approx || r?.errors?.length || r?.routes?.some((x) => x?.est)) toast('Routing service not reachable — showing estimates. Open the layer and press “Compute again” to retry.', 5200);
       } catch (err) {
         console.warn('network analysis failed', err);
         if (netSig(L) === sig) L.style.resultErr = 'Could not reach the routing service — check your connection and press Try again.';
@@ -1351,9 +1381,9 @@ export function createEditor() {
     if (s.resultErr && s.resultSig !== netSig(L)) return `<span class="warn">${esc(s.resultErr)}</span>`;
     const r = s.result;
     if (!r) return L.kind === 'odflow' && s.path !== 'road' && s.labels !== 'time' ? 'Arcs need no routing. Pick “Real roads” to follow the roads.' : 'Waiting…';
-    if (L.kind === 'servicearea') return `${r.zones.length} zone${r.zones.length === 1 ? '' : 's'}${r.source ? ` · road network from ${esc(r.source)}` : ' · straight-line rings'}. Saved in the project.`;
-    if (L.kind === 'netroute') return Object.entries(r.modes).map(([k, m]) => (m.error ? `${NET_MODES[k].icon} no route` : `${NET_MODES[k].icon} ${fmtLen(m.dist, s.units)} · ${fmtDur(m.dur)}${m.est ? ' (estimate)' : ''}`)).join('<br>');
-    if (L.kind === 'odflow') return `${r.routes.filter(Boolean).length} of ${r.routes.length} road routes found.`;
+    if (L.kind === 'servicearea') return r.approx ? '<span class="warn">The routing service could not be reached, so these zones are an estimate from typical speeds.</span> Press “Compute again” to retry.' : `✓ ${r.zones.length} zone${r.zones.length === 1 ? '' : 's'}${r.source ? ` · real road network (${esc(r.source)})` : ' · straight-line rings'}. Saved in the project.`;
+    if (L.kind === 'netroute') return Object.entries(r.modes).map(([k, m]) => `${NET_MODES[k].icon} ${fmtLen(m.dist, s.units)} · ${fmtDur(m.dur)}${m.est ? ' <span class="warn">(estimate)</span>' : ' ✓'}`).join('<br>') + (r.errors?.length ? `<br><span class="warn">Routing service not reachable for ${esc(r.errors.join(', '))} — estimates shown. Press “Compute again” to retry.</span>` : '');
+    if (L.kind === 'odflow') { const ok = r.routes.filter((x) => x?.coords).length; return ok === r.routes.length ? `✓ ${ok} road routes found.` : `<span class="warn">${ok} of ${r.routes.length} road routes found — the rest are shown as arcs with estimated times.</span>`; }
     return '';
   }
   function renderNetStatus(L) { const el = $('#net-status'); if (el) el.innerHTML = netStatusHTML(L); }
@@ -1635,6 +1665,7 @@ export function createEditor() {
     }
     h += `<div class="btn-row">${L.geom ? '<button class="btn sm" data-act="zoom">Zoom to</button>' : ''}<button class="btn sm" data-act="up">Up</button><button class="btn sm" data-act="down">Down</button><button class="btn sm" data-act="dup">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>`;
     box.innerHTML = h;
+    sectionizeEditor(box, L.kind);
     box.hidden = false;
     renderFloodInfo();
   }
@@ -2484,8 +2515,7 @@ export function createEditor() {
     setViewMode('edit');
     stage.classList.add('placing');
     const hint = $('#stage-hint');
-    hint.textContent = `Click the map where the ${SIGN_TYPES[type].name.toLowerCase()} goes · Esc to cancel`;
-    hint.hidden = false;
+    showHint(`Click the map where the ${SIGN_TYPES[type].name.toLowerCase()} goes`);
   }
   function stopPlacing() { placing = null; stage.classList.remove('placing'); $('#stage-hint').hidden = true; }
   function addSign(ll) {
