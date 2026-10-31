@@ -7,6 +7,7 @@ import { DRACOLoader } from './vendor/three/loaders/DRACOLoader.js';
 import { RoomEnvironment } from './vendor/three/environments/RoomEnvironment.js';
 import { getMedia } from './store.js';
 import { BUILTIN_MODELS } from './modelnames.js';
+import { buildTrainRig, buildMovingTrain } from './trains3d.js';
 
 export { BUILTIN_MODELS };
 let draco = null;
@@ -424,13 +425,16 @@ function pathMetres(coords) {
 const easeIn = (u) => clamp(u, 0, 1) ** 2.2;
 const linesOf = (g) => (g?.type === 'LineString' ? g.coordinates : g?.type === 'MultiLineString' ? g.coordinates[0] : null);
 
+export const isHST = (s) => /hst/.test(`${s.modelA}|${s.modelB}`);
 /** Which 3D objects a scene needs: { id, L, role, source, color }. */
 function jobsOf(scene) {
   const out = [];
   for (const L of scene.layers || []) {
     if (L.hidden || !L.geom) continue;
     const s = L.style || {};
-    if (L.kind === 'model3d') out.push({ id: L.id, L, role: 'model', source: s.source, color: s.color });
+    if (L.kind === 'model3d' && !(L.geom.type === 'LineString' && s.source === 'builtin:hst')) out.push({ id: L.id, L, role: 'model', source: s.source === 'builtin:hst' ? 'builtin:train' : s.source, color: s.color });
+    else if (L.kind === 'collision' && linesOf(L.geom) && isHST(s)) out.push({ id: `${L.id}#rig`, L, role: 'rig', source: 'rig', color: '' });
+    else if (L.kind === 'model3d' && L.geom.type === 'LineString' && s.source === 'builtin:hst') out.push({ id: `${L.id}#tm`, L, role: 'trainmove', source: 'rig', color: '' });
     else if (L.kind === 'collision' && linesOf(L.geom)) {
       out.push({ id: `${L.id}#a`, L, role: 'colA', source: s.modelA || 'builtin:train', color: s.colorA || '#d71920' });
       out.push({ id: `${L.id}#b`, L, role: 'colB', source: s.modelB || 'builtin:train', color: s.colorB || '#2471a3' });
@@ -483,7 +487,7 @@ export class ModelLayer {
     const fill = new THREE.DirectionalLight(0xbfd4ff, 0.6);
     fill.position.set(-0.5, 0.4, -0.6);
     this.scene.add(fill);
-    this.items.forEach((it) => { if (!it.root.parent) this.scene.add(it.root); });
+    this.items.forEach((it) => { if (it.root.parent !== this.scene) this.scene.add(it.root); }); // after a style change: move the models into the new scene
   }
   attach() {
     try { if (this.map.getStyle() && !this.map.getLayer(this.id)) this.map.addLayer(this); } catch { /* style not ready */ }
@@ -499,6 +503,18 @@ export class ModelLayer {
       const s = L.style || {};
       const rail = (L.kind === 'collision' && s.track !== false && /train|tram|freight/.test(`${s.modelA}${s.modelB}`)) || (L.kind === 'model3d' && L.geom.type === 'LineString' && /train|tram|freight/.test(String(s.source)) && s.track !== false);
       const road = (L.kind === 'collision' && s.track !== false && !rail && /car|truck|bus/.test(`${s.modelA}${s.modelB}`)) || (L.kind === 'model3d' && L.geom.type === 'LineString' && /car|truck|bus/.test(String(s.source)) && s.track !== false);
+      const hst = (L.kind === 'collision' && isHST(s)) || (L.kind === 'model3d' && L.geom.type === 'LineString' && s.source === 'builtin:hst');
+      if (hst && s.track !== false) {
+        const sw = s.scenario === 'sideswipe';
+        const tracks = s.doubleTrack === false ? [0] : sw ? [2.35, -2.35] : [0, -4.7];
+        const c = 1 / Math.cos((linesOf(L.geom)[0][1] || 0) * D2R);
+        const mid = (Math.max(...tracks) + Math.min(...tracks)) / 2;
+        const add = (kind, off, w) => feats.push({ type: 'Feature', properties: { kind, off: -off * c, w: w * c }, geometry: L.geom });
+        add('fill', mid, Math.max(...tracks) - Math.min(...tracks) + 9);
+        add('bed', mid, Math.max(...tracks) - Math.min(...tracks) + 5.2);
+        for (const t of tracks) { add('sl', t, 2.6); add('rl', t + 0.72, 0.16); add('rl', t - 0.72, 0.16); }
+        continue;
+      }
       if (rail || road) feats.push({ type: 'Feature', properties: { kind: rail ? 'rail' : 'road' }, geometry: L.geom });
     }
     const key = JSON.stringify(feats);
@@ -507,14 +523,24 @@ export class ModelLayer {
     try {
       if (!m.getStyle()) return;
       const data = { type: 'FeatureCollection', features: feats };
-      if (m.getSource('ma-tracks')) { m.getSource('ma-tracks').setData(data); return; }
-      if (!feats.length) return;
-      m.addSource('ma-tracks', { type: 'geojson', data });
+      if (m.getSource('ma-tracks')) m.getSource('ma-tracks').setData(data);
+      else { if (!feats.length) return; m.addSource('ma-tracks', { type: 'geojson', data }); }
       const W = (k) => ['interpolate', ['exponential', 2], ['zoom'], 8, 0.6 * k, 22, 1600 * k];
+      // real metres → pixels (512 px tiles): px per metre at the equator = 512·2^z / 40075016.686
+      const PXM = (z) => (512 * 2 ** z) / 40075016.686;
+      const MW = (prop) => ['interpolate', ['exponential', 2], ['zoom'], 10, ['*', ['get', prop], PXM(10)], 24, ['*', ['get', prop], PXM(24)]];
       const before = m.getLayer(this.id) ? this.id : undefined;
-      m.addLayer({ id: 'ma-track-bed', type: 'line', source: 'ma-tracks', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['match', ['get', 'kind'], 'rail', '#7d756b', '#2f3237'], 'line-width': W(1) } }, before);
-      m.addLayer({ id: 'ma-track-ties', type: 'line', source: 'ma-tracks', filter: ['==', ['get', 'kind'], 'rail'], paint: { 'line-color': '#4e3b2a', 'line-width': W(0.75), 'line-dasharray': [0.25, 0.3] } }, before);
-      m.addLayer({ id: 'ma-track-mark', type: 'line', source: 'ma-tracks', paint: { 'line-color': ['match', ['get', 'kind'], 'rail', '#dfe3e8', '#ffd23f'], 'line-width': W(0.08), 'line-dasharray': ['literal', [1, 0]] } }, before);
+      const ensure = (def) => { if (!m.getLayer(def.id)) m.addLayer(def, before); };
+      const old = ['in', ['get', 'kind'], ['literal', ['rail', 'road']]];
+      const is = (k) => ['==', ['get', 'kind'], k];
+      ensure({ id: 'ma-track-bed', type: 'line', source: 'ma-tracks', filter: old, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['match', ['get', 'kind'], 'rail', '#7d756b', '#2f3237'], 'line-width': W(1) } });
+      ensure({ id: 'ma-track-ties', type: 'line', source: 'ma-tracks', filter: is('rail'), paint: { 'line-color': '#4e3b2a', 'line-width': W(0.75), 'line-dasharray': [0.25, 0.3] } });
+      ensure({ id: 'ma-track-mark', type: 'line', source: 'ma-tracks', filter: old, paint: { 'line-color': ['match', ['get', 'kind'], 'rail', '#dfe3e8', '#ffd23f'], 'line-width': W(0.08), 'line-dasharray': ['literal', [1, 0]] } });
+      // realistic double track: embankment, ballast, concrete sleepers, steel rails
+      ensure({ id: 'ma-rail-fill', type: 'line', source: 'ma-tracks', filter: is('fill'), layout: { 'line-join': 'round' }, paint: { 'line-color': '#b7ad9c', 'line-width': MW('w'), 'line-offset': MW('off'), 'line-blur': ['interpolate', ['exponential', 2], ['zoom'], 10, 0.5, 24, 400] } });
+      ensure({ id: 'ma-rail-bed', type: 'line', source: 'ma-tracks', filter: is('bed'), layout: { 'line-join': 'round' }, paint: { 'line-color': '#8f8b84', 'line-width': MW('w'), 'line-offset': MW('off') } });
+      ensure({ id: 'ma-rail-sl', type: 'line', source: 'ma-tracks', filter: is('sl'), paint: { 'line-color': '#cfccc5', 'line-width': MW('w'), 'line-offset': MW('off'), 'line-dasharray': [0.11, 0.12] } });
+      ensure({ id: 'ma-rail-rl', type: 'line', source: 'ma-tracks', filter: is('rl'), layout: { 'line-join': 'round' }, paint: { 'line-color': '#e2e5e9', 'line-width': MW('w'), 'line-offset': MW('off') } });
     } catch (e) { console.warn('tracks', e); }
   }
   /** Load / refresh the 3D objects a scene needs. */
@@ -527,14 +553,18 @@ export class ModelLayer {
     for (const [id, it] of this.items) if (!ids.has(id)) { it.root.removeFromParent(); this.items.delete(id); }
     for (const job of jobs) {
       const s = job.L.style;
-      const key = job.role === 'city' ? JSON.stringify([job.L.geom, s.block, s.minH, s.maxH, s.look, s.seed, s.groundBlocks]) : `${job.source}|${job.color}`;
+      const key = job.role === 'city' ? JSON.stringify([job.L.geom, s.block, s.minH, s.maxH, s.look, s.seed, s.groundBlocks])
+        : job.role === 'rig' ? JSON.stringify([job.L.geom, s.scenario, s.cars, s.liveryA, s.liveryB, s.colorA, s.colorB, s.poles, s.doubleTrack, s.size])
+        : job.role === 'trainmove' ? JSON.stringify([job.L.geom, s.cars, s.livery, s.size])
+        : `${job.source}|${job.color}`;
       const it0 = this.items.get(job.id);
       if (it0 && it0.key === key) continue;
       if (it0) { it0.root.removeFromParent(); this.items.delete(job.id); }
-      let obj, mixer = null, clips = [], city = null;
+      let obj, mixer = null, clips = [], city = null, rig = null;
       try {
         const src = String(job.source || 'builtin:jet');
         if (job.role === 'city') { city = buildCity(job.L); obj = city.obj; }
+        else if (job.role === 'rig' || job.role === 'trainmove') { rig = (job.role === 'rig' ? buildTrainRig : buildMovingTrain)(job.L, shadowTex()); obj = rig.obj; }
         else if (src.startsWith('media:')) {
           const gltf = await loadUserModel(src.slice(6));
           obj = gltf.scene.clone(true);
@@ -549,7 +579,7 @@ export class ModelLayer {
       const holder = new THREE.Group();
       const yaw = new THREE.Group();
       let radius = 1;
-      if (!city) {
+      if (!city && !rig) {
         const box = new THREE.Box3().setFromObject(obj);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
@@ -566,9 +596,9 @@ export class ModelLayer {
       yaw.add(obj);
       holder.add(yaw);
       holder.visible = false;
-      this.items.set(job.id, { key, root: holder, yaw, obj, mixer, clips, radius, city, shadow: holder.userData.shadow, job });
+      this.items.set(job.id, { key, root: holder, yaw, obj, mixer, clips, radius, city, rig, shadow: holder.userData.shadow, job });
     }
-    this.scene && this.items.forEach((it) => { if (!it.root.parent) this.scene.add(it.root); });
+    this.scene && this.items.forEach((it) => { if (it.root.parent !== this.scene) this.scene.add(it.root); });
     this.map.triggerRepaint();
   }
   clear() { for (const it of this.items.values()) it.root.removeFromParent(); this.items.clear(); this.state = []; }
@@ -647,6 +677,9 @@ export class ModelLayer {
         ll = q.ll; heading = q.heading;
         const air = ['jet', 'airliner', 'drone', 'quad', 'helicopter', 'missile', 'rocket', 'satellite', 'iss'].includes(s.sprite);
         altitude = air ? 30 : 0;
+      } else if (role === 'rig' || role === 'trainmove') {
+        ll = it.rig.anchor; heading = 90; real = true; scale = 1;
+        it.rig.update(tm, L);
       } else if (role === 'city') {
         ll = it.city.centre;
         real = true; scale = 1; heading = 90;

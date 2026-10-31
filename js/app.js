@@ -1,7 +1,8 @@
 // Router between the home page (#/) and the editor (#/p/<project id>).
 import { createEditor, toast } from './editor.js';
 import { createHome } from './home.js';
-import { getProject } from './store.js';
+import { getProject, newProject, saveProject } from './store.js';
+import { openAutoVideo } from './autostory.js';
 
 const $ = (s) => document.querySelector(s);
 let pendingOpts = {};
@@ -42,4 +43,20 @@ document.addEventListener('click', (e) => {
   if (e.target.tagName === 'DIALOG' && e.target.id !== 'render-modal') e.target.close();
 });
 
-window.mapAnimator = { editor };
+// Auto video: build a whole project from one sentence
+function autoVideo() {
+  openAutoVideo({
+    aspect: 16 / 9,
+    onCreate: async (story) => {
+      const p = newProject(story.name);
+      p.scenes = story.scenes;
+      await saveProject(p);
+      pendingOpts = { step: 'export' };
+      location.hash = `#/p/${p.id}`;
+      setTimeout(() => toast('Your video is ready — press ▶ to preview, then Render video. Every scene and layer can be edited.', 6000), 1200);
+    },
+  });
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-autovideo]')) autoVideo(); });
+
+window.mapAnimator = { editor, autoVideo };

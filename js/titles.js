@@ -16,7 +16,7 @@ function rng(seed) {
 const hashStr = (s) => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 export const TITLE_LOOKS = {
   opener: 'Opening title (letters close in)', cinematic: 'Cinematic (blur-in with light sweep)', glitch: 'Glitch title', chapter: 'Chapter card',
-  location: 'Location stamp (typed)', credits: 'Rolling credits', quote: 'Quote', ending: 'End title',
+  explainer: 'News explainer (side panel)', location: 'Location stamp (typed)', credits: 'Rolling credits', quote: 'Quote', ending: 'End title',
 };
 
 /** Draw text with extra letter spacing; returns width. */
@@ -48,6 +48,7 @@ export function drawTitle(ctx, L, tm, o) {
   const title = s.text || '', sub = s.sub || '';
   ctx.save();
   ctx.globalAlpha *= tm.alpha;
+  if (look === 'explainer') { drawExplainer(ctx, s, frame, unit, tm, k); ctx.restore(); return; }
   // optional dim behind the text
   if (+s.dim > 0) { ctx.fillStyle = `rgba(0,0,0,${clamp(+s.dim, 0, 1) * (tm.edit ? 1 : ease(u * 2))})`; ctx.fillRect(frame.x, frame.y, frame.w, frame.h); }
   ctx.textBaseline = 'alphabetic';
@@ -199,4 +200,79 @@ export function drawLetterbox(ctx, frame, look, t, unit) {
   ctx.fillRect(frame.x, frame.y, frame.w, bar);
   ctx.fillRect(frame.x, frame.y + frame.h - bar, frame.w, bar);
   ctx.restore();
+}
+
+/** News explainer: a dark side panel with date, big title, subtitle, a red rule and location lines. */
+function wrapLines(ctx, text, maxW) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const out = [];
+  let cur = '';
+  for (const w of words) { const t = cur ? `${cur} ${w}` : w; if (ctx.measureText(t).width > maxW && cur) { out.push(cur); cur = w; } else cur = t; }
+  if (cur) out.push(cur);
+  return out;
+}
+function drawExplainer(ctx, s, frame, unit, tm, k) {
+  const right = s.side === 'right';
+  const pw = frame.w * clamp(+s.panelW || 0.3, 0.18, 0.6);
+  const tau = tm.edit ? 99 : tm.tau;
+  const inK = easeOut(tau / 0.7);
+  const x0 = right ? frame.x + frame.w - pw * inK : frame.x - pw * (1 - inK);
+  const F = fam(s.font, SANS);
+  ctx.fillStyle = s.bg || '#0a0f15';
+  ctx.globalAlpha *= 0.97;
+  ctx.fillRect(x0, frame.y, pw, frame.h);
+  ctx.globalAlpha /= 0.97;
+  // soft edge into the map
+  const ex = right ? x0 : x0 + pw;
+  const g = ctx.createLinearGradient(ex, 0, ex + (right ? -1 : 1) * frame.w * 0.06, 0);
+  g.addColorStop(0, 'rgba(10,15,21,0.55)'); g.addColorStop(1, 'rgba(10,15,21,0)');
+  ctx.fillStyle = g; ctx.fillRect(right ? ex - frame.w * 0.06 : ex, frame.y, frame.w * 0.06, frame.h);
+  const pad = pw * 0.13;
+  const tx = x0 + pad, maxW = pw - pad * 1.6;
+  const H = frame.h;
+  const el = (i) => { const a = clamp((tau - 0.35 - i * 0.18) / 0.45, 0, 1); return { a: easeOut(a), dy: (1 - easeOut(a)) * 14 * unit }; };
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  let y = frame.y + H * 0.115;
+  // date
+  if (s.date) {
+    const e = el(0);
+    ctx.save(); ctx.globalAlpha *= e.a;
+    ctx.font = `600 ${H * 0.026 * k}px ${F}`; ctx.fillStyle = s.dateColor || '#4fc3f7';
+    spaced(ctx, String(s.date).toUpperCase(), tx, y + e.dy, H * 0.0028, 'left');
+    ctx.restore();
+    y += H * 0.05 * k;
+  }
+  // big title, shrunk to fit
+  const e1 = el(1);
+  let fs = H * 0.15 * k;
+  ctx.font = `700 ${fs}px ${F}`;
+  const title = String(s.text || '').toUpperCase();
+  while (fs > H * 0.05 && ctx.measureText(title).width > maxW) { fs *= 0.92; ctx.font = `700 ${fs}px ${F}`; }
+  y += fs * 0.95;
+  ctx.save(); ctx.globalAlpha *= e1.a; ctx.fillStyle = s.color || '#ffffff'; ctx.fillText(title, tx, y + e1.dy); ctx.restore();
+  // subtitle
+  if (s.sub) {
+    const e = el(2);
+    const sfs = H * 0.044 * k;
+    ctx.font = `600 ${sfs}px ${F}`;
+    y += H * 0.1;
+    ctx.save(); ctx.globalAlpha *= e.a; ctx.fillStyle = s.color || '#ffffff';
+    for (const line of wrapLines(ctx, s.sub, maxW)) { ctx.fillText(line, tx, y + e.dy); y += sfs * 1.25; }
+    ctx.restore();
+  }
+  // red rule
+  const e3 = el(3);
+  y += H * 0.06;
+  ctx.fillStyle = s.accent || '#e53935';
+  ctx.fillRect(tx, y, pw * 0.42 * e3.a, Math.max(2, H * 0.005));
+  // location lines
+  const lines = String(s.lines || '').split('\n').map((t) => t.trim()).filter(Boolean);
+  if (lines.length) {
+    const e = el(4);
+    const lfs = H * 0.027 * k;
+    y += H * 0.1;
+    ctx.save(); ctx.globalAlpha *= e.a; ctx.font = `500 ${lfs}px ${F}`; ctx.fillStyle = s.lineColor || '#b8c4cc';
+    for (const line of lines) { spaced(ctx, line.toUpperCase(), tx, y + e.dy, lfs * 0.06, 'left'); y += lfs * 1.45; }
+    ctx.restore();
+  }
 }

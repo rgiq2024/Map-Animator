@@ -4,7 +4,7 @@ export const BUILTIN_MODELS = {
   jet: 'Fighter jet', bomber: 'Stealth bomber', cargoplane: 'Cargo plane (4 propellers)', airliner: 'Airliner', helicopter: 'Helicopter', drone: 'Drone (UAV)',
   nasa_globalhawk: 'Global Hawk drone · realistic (NASA)',
   // land
-  train: 'Train (locomotive + coaches)', freight: 'Freight train', tram: 'Tram / metro', car: 'Car', bus: 'Bus', truck: 'Truck', tank: 'Tank',
+  hst: 'High-speed train · articulated (realistic)', train: 'Train (locomotive + coaches)', freight: 'Freight train', tram: 'Tram / metro', car: 'Car', bus: 'Bus', truck: 'Truck', tank: 'Tank',
   // sea
   warship: 'Warship', containership: 'Container ship', tanker: 'Oil tanker', boat: 'Speed boat',
   // space

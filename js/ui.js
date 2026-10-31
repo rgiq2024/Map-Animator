@@ -142,6 +142,7 @@ export function initModernUI({ goLayers } = {}) {
       out.push({ icon, label, group: sec, hay: btnText(b), run: () => { goLayers?.(); b.click(); } });
     }
     for (const [k, n, i] of STEPS) out.push({ icon: i, label: `Go to ${n}`, group: 'Steps', hay: norm(`go step ${n} ${k}`), run: () => $(`#stepper [data-step="${k}"]`)?.click(), step: true });
+    out.push({ icon: '✨', label: 'Auto video — build a video from a sentence', group: 'Project', hay: 'auto video automatic generate story sentence ai build create', run: () => document.querySelector('[data-autovideo]')?.click() });
     out.push({ icon: '⤓', label: 'Save the project file', group: 'Project', hay: 'save download project file', run: () => $('#save-file')?.click() });
     return out;
   }

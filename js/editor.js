@@ -1326,7 +1326,10 @@ export function createEditor() {
     const st = {};
     if (b.dataset.a) { st.modelA = b.dataset.a; st.modelB = b.dataset.b; }
     if (b.dataset.source) st.source = b.dataset.source;
-    if (/train|ship|tanker|truck|car/.test(b.dataset.source || '')) st.size = 1.6;
+    if (b.dataset.scenario) st.scenario = b.dataset.scenario;
+    if (b.dataset.source === 'builtin:hst') { st.livery = 'ave'; st.cars = 6; st.sizeMode = 'real'; st.size = 1; }
+    if (/train|ship|tanker|truck|car/.test(b.dataset.source || '') && b.dataset.source !== 'builtin:hst') st.size = 1.6;
+    if (/hst/.test(`${st.modelA}${st.source}`) && map.getZoom() < 14.5) toast('Real-size trains: zoom in close (street level) and tilt the camera to see them', 4600);
     if (b.dataset.source === 'builtin:bomber' || b.dataset.source === 'builtin:nasa_globalhawk') st.altitude = 60;
     pendingStyle = Object.keys(st).length ? st : null;
     startAdd(b.dataset.add);
@@ -1505,6 +1508,7 @@ export function createEditor() {
       }[lk];
       if (T) [L.style.text, L.style.sub, L.style.font] = T;
       if (lk === 'credits') { L.duration = 10; L.hold = 0.5; }
+      if (lk === 'explainer') { Object.assign(L.style, { text: 'URDA', sub: 'The collision on the Madrid–Seville line', date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }), lines: 'Toledo\nCastilla-La Mancha', font: 'Inter', color: '#ffffff', accent: '#e53935', bg: '#0a0f15', side: 'left' }); L.duration = 1.2; L.hold = 0; }
       if (lk === 'location') { L.duration = 2; L.hold = 2.5; }
       if (lk === 'ending') { L.duration = 3; L.hold = 0; L.style.dim = 0.5; }
       if (lk === 'opener' || lk === 'cinematic') L.style.dim = 0.25;
@@ -1702,7 +1706,8 @@ export function createEditor() {
     eventsCache = null;
     if (['style.per', 'style.fade'].includes(key) && L.kind === 'timeseries') { L.duration = +(Math.max(1, (L.style.frames || []).length) * (+L.style.per || 2)).toFixed(2); eventsCache = null; }
     if (key === 'anim' || key === 'style.marker' || key === 'style.layout' || key === 'style.sound' || key === 'style.variant' || key === 'style.look' || key === 'style.mode' || (key === 'style.label' && L.kind === 'timeseries') || key === 'style.labels' || key === 'style.border' || key === 'style.position') { renderLayerEditor(); commitLayers(); return; }
-    if (key === 'style.source' || (key === 'style.color' && L.kind === 'model3d') || ['style.model3d', 'style.modelA', 'style.modelB', 'style.colorA', 'style.colorB', 'style.look', 'style.minH', 'style.maxH', 'style.block', 'style.seed', 'style.groundBlocks'].includes(key) && ['collision', 'city3d', 'bombing', 'trajectory', 'vehicle'].includes(L.kind)) { if (key === 'style.model3d') renderLayerEditor(); commitLayers(); return; }
+    if ((L.kind === 'model3d' && ['style.livery', 'style.cars'].includes(key)) || (L.kind === 'collision' && ['style.modelA', 'style.modelB', 'style.liveryA', 'style.liveryB'].includes(key))) { if (final) renderLayerEditor(); commitLayers(); return; }
+    if (key === 'style.source' || (key === 'style.color' && L.kind === 'model3d') || ['style.model3d', 'style.modelA', 'style.modelB', 'style.colorA', 'style.colorB', 'style.scenario', 'style.cars', 'style.liveryA', 'style.liveryB', 'style.livery', 'style.poles', 'style.doubleTrack', 'style.track', 'style.size', 'style.look', 'style.minH', 'style.maxH', 'style.block', 'style.seed', 'style.groundBlocks'].includes(key) && ['collision', 'city3d', 'bombing', 'trajectory', 'vehicle'].includes(L.kind)) { if (key === 'style.model3d' || (final && key === 'style.scenario')) renderLayerEditor(); commitLayers(); return; }
     if (['start', 'duration', 'hold', 'style.levelFrom', 'style.levelTo'].includes(key) || key === 'name') {
       clearTimeout(layerEditTimer);
       layerEditTimer = setTimeout(() => { L.duration = Math.max(0.05, +L.duration || 0.05); L.start = Math.max(0, +L.start || 0); L.hold = Math.max(0, +L.hold || 0); commitLayers(); }, 250);
