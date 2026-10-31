@@ -4,7 +4,7 @@
 
 import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -456,6 +456,10 @@ export function buildEvents(project, models) {
         else if (s.look === 'flash') push(t0, 'hit', { vol: vol * 0.7 });
         else if (s.look === 'shake') push(t0, 'sub', { vol });
         else if (s.look === 'rain') push(t0, 'wind', { dur: Math.max(2, D), vol: vol * 0.5 });
+        else if (s.look === 'storm') { push(t0, 'storm', { dur: Math.max(3, D + (+L.hold || 4)), vol: vol * 0.8 }); for (let k = 0; k < 4; k++) push(t0 + 1.2 + k * 2.6, 'thunder', { vol: vol * 0.7 }); }
+        else if (s.look === 'lightning') for (let k = 0; k < 4; k++) push(t0 + 0.4 + k * (3 / (+s.speed || 1)), 'thunder', { vol: vol * 0.7 });
+        else if (s.look === 'hail') push(t0, 'rain', { dur: Math.max(3, D + 3), vol: vol * 0.8 });
+        else if (s.look === 'blizzard' || s.look === 'sandstorm') push(t0, 'wind', { dur: Math.max(3, D + 4), vol: vol * 0.8 });
       } else if (L.kind === 'collision') {
         const k = (m) => String(m || '').replace('builtin:', '');
         const snd = (m) => (/train|tram|freight/.test(k(m)) ? 'engine' : AIR[k(m)] || 'engine');
@@ -479,6 +483,14 @@ export function buildEvents(project, models) {
           if (e.alert) { push(t0 + e.t, 'alarm', { dur: 1.4, vol: vol * 0.6 }); push(t0 + e.t, 'hit', { vol: vol * 0.4 }); }
           else for (let k = 0; k < 2; k++) push(t0 + e.t + k * 0.16, 'beep', { freq: 1320, vol: vol * 0.4 });
         }
+      } else if (L.kind === 'crowd') {
+        push(t0, 'crowd', { dur: Math.max(4, D + (+L.hold || 6)), vol: vol * (s.behaviour === 'flee' ? 0.9 : 0.6) });
+      } else if (L.kind === 'blastzone') {
+        if (s.mode === 'nuclear') { push(t0, 'sub', { vol }); push(t0 + 0.05, 'explosion', { size: 2.5, vol }); push(t0 + 0.9, 'thunder', { vol: vol * 0.8 }); }
+        else if (s.fireball !== false) push(t0 + 0.05, 'explosion', { size: 1.4, vol });
+        push(t0 + 0.1, 'whoosh', { dur: Math.min(3, D), vol: vol * 0.5 });
+      } else if (L.kind === 'wildfire') {
+        push(t0, 'wind', { dur: Math.max(4, D + 2), vol: vol * 0.6 });
       } else if (L.kind === 'city3d') {
         if (L.anim === 'grow') push(t0, 'riser', { dur: Math.min(4, D), vol: vol * 0.5 });
       } else if ((L.kind === 'bombing' || L.kind === 'trajectory' || L.kind === 'vehicle') && false) {

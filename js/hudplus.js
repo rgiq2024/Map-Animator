@@ -284,6 +284,7 @@ export function drawHudText(ctx, L, tm, o) {
   const tw = Math.max(80 * unit, ...rows.map((l) => ctx.measureText(l).width));
   let W = tw + pad * 2 + (st === 'alert' ? 40 * unit * k : 0), H = rows.length * lh + pad * 2;
   if (st === 'ticker') { W = frame.w; H = lh + pad; }
+  const tickH = st === 'ticker' && s.tickerStyle === 'twoline' && s.headline ? H * 2.35 : H;
   const m = 30 * unit;
   const pos = s.position || 'top-left';
   let x = frame.x + m, y = frame.y + m;
@@ -291,8 +292,8 @@ export function drawHudText(ctx, L, tm, o) {
   if (pos === 'top' || pos === 'bottom' || pos === 'center') x = frame.x + (frame.w - W) / 2;
   if (pos.includes('bottom')) y = frame.y + frame.h - m - H;
   if (pos === 'center') y = frame.y + (frame.h - H) / 2;
-  if (st === 'ticker') { x = frame.x; if (!pos.includes('top')) y = frame.y + frame.h - H - 10 * unit; }
-  placeAt(ctx, L, frame, x, y, W, H, { lockX: st === 'ticker' });
+  if (st === 'ticker') { x = frame.x; if (!pos.includes('top')) y = frame.y + frame.h - tickH - 10 * unit; }
+  placeAt(ctx, L, frame, x, y, W, st === 'ticker' ? tickH : H, { lockX: st === 'ticker' });
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   if (st === 'telemetry' || st === 'coords' || st === 'terminal') {
@@ -348,33 +349,86 @@ export function drawHudText(ctx, L, tm, o) {
     ctx.fillStyle = col; ctx.textAlign = 'center';
     rows.forEach((l, i) => ctx.fillText(l, 0, -H / 2 + pad + lh * (i + 0.5)));
   } else if (st === 'ticker') {
-    const bg = s.bg || 'rgba(6,8,12,0.88)', tagBg = s.tagBg || col, txtCol = s.textColor || '#ffffff';
-    ctx.fillStyle = bg; ctx.fillRect(x, y, W, H);
-    ctx.fillStyle = tagBg; ctx.fillRect(x, y, W, 3 * unit);
+    const TS = {
+      classic: { bg: 'rgba(6,8,12,0.88)', tag: col, tagText: '#fff', text: '#fff', line: col },
+      red: { bg: '#c8102e', tag: '#ffffff', tagText: '#c8102e', text: '#ffffff', line: '#7a0a1c' },
+      navy: { bg: '#0b1f3a', tag: '#f2b705', tagText: '#0b1f3a', text: '#ffffff', line: '#f2b705' },
+      white: { bg: '#f7f7f7', tag: '#d71920', tagText: '#ffffff', text: '#111418', line: '#d71920' },
+      twoline: { bg: '#101318', tag: col, tagText: '#fff', text: '#ffffff', line: col },
+      flip: { bg: 'rgba(6,8,12,0.9)', tag: col, tagText: '#fff', text: '#fff', line: col },
+      finance: { bg: '#05070a', tag: '#1e88e5', tagText: '#fff', text: '#e8edf2', line: '#1e88e5' },
+      sports: { bg: '#0d3b1e', tag: '#f2f2f2', tagText: '#0d3b1e', text: '#ffffff', line: '#36c46b' },
+      flash: { bg: '#111', tag: '#e10600', tagText: '#fff', text: '#ffffff', line: '#e10600' },
+    };
+    const sty = TS[s.tickerStyle] ? s.tickerStyle : 'classic';
+    const P = TS[sty];
+    const bg = s.bg || P.bg, tagBg = s.tagBg || P.tag, txtCol = s.textColor || P.text;
+    const two = sty === 'twoline' && s.headline;
+    const hH = two ? H * 1.35 : 0;
+    const yb = y + hH; // crawl band top
+    if (two) {
+      // headline bar above the crawl
+      ctx.fillStyle = s.headBg || '#ffffff'; ctx.fillRect(x, y, W, hH);
+      ctx.fillStyle = tagBg; ctx.fillRect(x, y, 8 * unit, hH);
+      ctx.font = `800 ${fs * 1.35}px ${UI}`; ctx.fillStyle = s.headColor || '#111418';
+      ctx.fillText(s.upper ? s.headline.toUpperCase() : s.headline, x + 22 * unit, y + hH / 2 + 1, W - 44 * unit);
+    }
+    ctx.fillStyle = bg; ctx.fillRect(x, yb, W, H);
+    ctx.fillStyle = s.lineColor || P.line; ctx.fillRect(x, yb, W, 3 * unit);
     const label = s.label ?? 'BREAKING';
     ctx.font = `900 ${fs}px ${UI}`;
     const lw = label ? ctx.measureText(label).width + 26 * unit : 0;
     const clk = s.clock ? (() => { const m = String(s.clock).match(/(\d{1,2}):(\d{2})/); let sec = (m ? +m[1] * 3600 + +m[2] * 60 : 0) + Math.floor(t); sec %= 86400; return `${String(Math.floor(sec / 3600)).padStart(2, '0')}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}`; })() : '';
     const cw = clk ? ctx.measureText('00:00').width + 22 * unit : 0;
-    const sep = `   ${s.sep || '•'}   `;
     const items = rows.map((r) => (s.upper ? r.toUpperCase() : r));
-    const txt = items.join(sep) + sep;
-    ctx.font = `${s.bold ? 800 : 600} ${fs}px ${F}`;
-    const twd = Math.max(1, ctx.measureText(txt).width);
-    let off = (t * 90 * unit * (+s.speed || 1)) % twd;
-    if (s.dir === 'right') off = twd - off;
-    ctx.save(); ctx.beginPath(); ctx.rect(x + lw, y, W - lw - cw, H); ctx.clip();
+    ctx.save(); ctx.beginPath(); ctx.rect(x + lw, yb, W - lw - cw, H); ctx.clip();
     ctx.fillStyle = txtCol;
-    for (let xx = x + lw - off; xx < x + W; xx += twd) ctx.fillText(txt, xx + 10 * unit, y + H / 2 + 1);
+    if (sty === 'flip') {
+      // one headline at a time, rolling up
+      const per = Math.max(1.5, 4 / (+s.speed || 1));
+      const n = Math.max(1, items.length);
+      const k0 = Math.floor(t / per) % n, ph = (t % per) / per;
+      const roll = ph > 0.88 ? (ph - 0.88) / 0.12 : 0;
+      ctx.font = `${s.bold ? 800 : 600} ${fs}px ${F}`;
+      ctx.fillText(items[k0] || '', x + lw + 16 * unit, yb + H / 2 + 1 - roll * H);
+      ctx.fillText(items[(k0 + 1) % n] || '', x + lw + 16 * unit, yb + H / 2 + 1 + (1 - roll) * H);
+    } else {
+      const sep = `   ${s.sep || '•'}   `;
+      ctx.font = `${s.bold ? 800 : 600} ${fs}px ${F}`;
+      // finance / sports items get coloured parts
+      const pieces = (txt) => {
+        if (sty === 'finance') {
+          const m = txt.match(/^(\S+)\s+([\d.,]+)\s*([+-][\d.,]+%?)?/);
+          if (m) { const up = !String(m[3] || '').startsWith('-'); return [[`${m[1]} `, '#ffffff', 800], [`${m[2]} `, txtCol, 600], ...(m[3] ? [[`${up ? '▲' : '▼'} ${m[3].replace(/^[+-]/, '')}`, up ? '#2ecc71' : '#ff4d4f', 700]] : [])]; }
+        }
+        if (sty === 'sports') {
+          const m = txt.match(/^(.+?)\s+(\d+\s*[-:]\s*\d+)\s+(.+)$/);
+          if (m) return [[`${m[1]} `, txtCol, 700], [` ${m[2].replace(/\s/g, '')} `, '#f2c200', 900], [` ${m[3]}`, txtCol, 700]];
+        }
+        return [[txt, txtCol, s.bold ? 800 : 600]];
+      };
+      const seq = [];
+      items.forEach((it) => { seq.push(...pieces(it)); seq.push([sep, sty === 'finance' ? '#4b5563' : txtCol, 600]); });
+      const widthOf = (p) => { ctx.font = `${p[2]} ${fs}px ${F}`; return ctx.measureText(p[0]).width; };
+      const ws = seq.map(widthOf);
+      const twd = Math.max(1, ws.reduce((a2, b2) => a2 + b2, 0));
+      let off = (t * 90 * unit * (+s.speed || 1)) % twd;
+      if (s.dir === 'right') off = twd - off;
+      for (let xx = x + lw - off; xx < x + W; xx += twd) {
+        let cx = xx + 10 * unit;
+        seq.forEach((p, i) => { if (cx + ws[i] > x + lw - 5 && cx < x + W) { ctx.font = `${p[2]} ${fs}px ${F}`; ctx.fillStyle = p[1]; ctx.fillText(p[0], cx, yb + H / 2 + 1); } cx += ws[i]; });
+      }
+    }
     ctx.restore();
     if (label) {
-      ctx.fillStyle = tagBg; ctx.fillRect(x, y, lw, H);
-      ctx.beginPath(); ctx.moveTo(x + lw, y); ctx.lineTo(x + lw + 10 * unit, y + H / 2); ctx.lineTo(x + lw, y + H); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = s.tagText || '#fff'; ctx.font = `900 ${fs}px ${UI}`; ctx.fillText(label, x + 13 * unit, y + H / 2 + 1);
+      const blink = sty === 'flash' && Math.floor(t * 2.5) % 2 === 1;
+      ctx.fillStyle = blink ? '#ffffff' : tagBg; ctx.fillRect(x, yb, lw, H);
+      ctx.beginPath(); ctx.moveTo(x + lw, yb); ctx.lineTo(x + lw + 10 * unit, yb + H / 2); ctx.lineTo(x + lw, yb + H); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = blink ? tagBg : s.tagText || P.tagText; ctx.font = `900 ${fs}px ${UI}`; ctx.fillText(label, x + 13 * unit, yb + H / 2 + 1);
     }
     if (clk) {
-      ctx.fillStyle = s.clockBg || '#111318'; ctx.fillRect(x + W - cw, y, cw, H);
-      ctx.fillStyle = '#fff'; ctx.font = `800 ${fs}px ${F}`; ctx.fillText(clk, x + W - cw + 11 * unit, y + H / 2 + 1);
+      ctx.fillStyle = s.clockBg || '#111318'; ctx.fillRect(x + W - cw, yb, cw, H);
+      ctx.fillStyle = '#fff'; ctx.font = `800 ${fs}px ${F}`; ctx.fillText(clk, x + W - cw + 11 * unit, yb + H / 2 + 1);
     }
   }
   ctx.restore();

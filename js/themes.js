@@ -106,6 +106,8 @@ Object.assign(THEMES, {
   blankgray: B({ name: 'Blank (gray)', desc: 'Plain neutral gray', blank: { bg: '#d9dadc' }, line: '#ff4a2b', swatch: ['#d9dadc', '#d9dadc', '#ff4a2b'] }),
   blankdark: B({ name: 'Blank (black)', desc: 'Plain black, great for HUD and glowing layers', blank: { bg: '#07080a' }, dark: true, line: '#ffb020', swatch: ['#07080a', '#07080a', '#ffb020'] }),
   blankoutline: B({ name: 'Blank with outlines', desc: 'White land, pale sea and thin country borders', blank: { bg: '#ffffff', water: '#e6edf2', coast: '#9fb2c0', border: '#9aa3ad' }, line: '#ff4a2b', swatch: ['#ffffff', '#e6edf2', '#ff4a2b'] }),
+  greenscreen: B({ name: 'Green screen', desc: 'Pure chroma green (#00B140) — key it out in your video editor to put the animation over other footage', blank: { bg: '#00b140' }, line: '#ff4a2b', swatch: ['#00b140', '#00b140', '#ff4a2b'] }),
+  bluescreen: B({ name: 'Blue screen', desc: 'Pure chroma blue (#0047BB) — for green objects or green maps', blank: { bg: '#0047bb' }, dark: true, line: '#ffb020', swatch: ['#0047bb', '#0047bb', '#ffb020'] }),
   blankdarkoutline: B({ name: 'Dark with outlines', desc: 'Dark land and sea with glowing borders', blank: { bg: '#121519', water: '#0a0c10', coast: '#2d6f8f', border: '#3d8fb3' }, dark: true, line: '#ffb020', swatch: ['#121519', '#0a0c10', '#3d8fb3'] }),
 });
 THEMES.satellite.tiles = SAT_TILES;

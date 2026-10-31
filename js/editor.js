@@ -39,6 +39,7 @@ import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
+import { AffectedBuildings } from './hazards.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
 
@@ -108,7 +109,7 @@ export function createEditor() {
   let rafId = 0;
   let dpr = window.devicePixelRatio || 1;
   let selLayer = null, drawing = null, pickOrigin = null;
-  let floods = null, bldFactor = null, models = null, wayback = null;
+  let floods = null, bldFactor = null, models = null, wayback = null, affected = null;
 
   const scene = () => project.scenes[sceneIdx];
 
@@ -126,6 +127,8 @@ export function createEditor() {
     floods = new TerrainFloods(map, (L) => { if (selLayer === L.id) renderLayerEditor(); rebuild(); save(); });
     models = new ModelLayer(map);
     wayback = new WaybackLayers(map);
+    affected = new AffectedBuildings(map);
+    affected.onCount = () => repaint();
     map.on('error', (e) => console.warn('map:', e?.error?.message || e));
     map.on('movestart', (e) => {
       if (e.originalEvent && viewMode === 'play' && !exporting) setViewMode('edit');
@@ -165,6 +168,7 @@ export function createEditor() {
       floods?.attach();
       models?.attach();
       wayback?.attach();
+      affected?.attach();
       $('#map').style.filter = gradeFilter(scene().look.grade);
       setSpaceBackground(scene().look.globe);
       applyTimeEffects(viewMode === 'play' ? time : null);
@@ -1137,9 +1141,13 @@ export function createEditor() {
     let pathModel = false;
     if (kind === 'model3dpath') { kind = 'model3d'; pathModel = true; }
     if (kind === 'treerow') { kind = 'trees'; pathModel = true; }
+    let geomOverride = null;
+    if (kind === 'crowdline') { kind = 'crowd'; geomOverride = 'line'; }
+    if (kind === 'crowdarea') { kind = 'crowd'; geomOverride = 'polygon'; }
+    if (kind === 'affectedarea') { kind = 'affected'; geomOverride = 'polygon'; }
     if (!pathModel && !LAYER_KINDS[kind].geom) { addLayer(newLayer(kind, null, { start: newStart() })); return; }
     setViewMode('edit');
-    const g = pathModel ? 'line' : LAYER_KINDS[kind].geom;
+    const g = geomOverride || (pathModel ? 'line' : LAYER_KINDS[kind].geom);
     drawing = { kind, coords: [], polygon: g === 'polygon', single: g === 'point', preset, pathModel };
     stage.classList.add('placing');
     showHint(HINTS[g]);
@@ -1223,7 +1231,7 @@ export function createEditor() {
     renderCamSelects();
     floods?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); renderFloodInfo(); });
     models?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); });
-    wayback?.sync(scene()); applyTimeEffects(viewMode === 'play' ? time : null);
+    wayback?.sync(scene()); affected?.sync(scene()); applyTimeEffects(viewMode === 'play' ? time : null);
     preloadImages(scene()).then(repaint);
     eventsCache = null;
     if (layersOf().some((L) => NET_SET.has(L.kind))) scheduleNet();
@@ -1345,6 +1353,20 @@ export function createEditor() {
     startAdd(b.dataset.add);
     const tip = { servicearea: 'Click the map where the zones start (e.g. a hospital or shop)', odflow: 'Click the origin first, then each destination — then press Finish', netroute: 'Click the start (A), then the end (B)', geofence: 'Click around the zone — then press Finish' }[b.dataset.add];
     if (tip) showHint(tip);
+  });
+  // people, crowds and hazard zones
+  for (const sel of ['#add-people', '#add-hazard']) $(sel).addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    let st = null;
+    try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
+    pendingStyle = st;
+    const k = b.dataset.add;
+    startAdd(k);
+    const tip = { crowdline: 'Click the route of the march — then press Finish', crowdarea: 'Click around the area — then press Finish', wildfire: 'Click around the area that burns — then press Finish', deforest: 'Click around the forest — then press Finish', affectedarea: 'Click around the affected area — then press Finish', blastzone: 'Click ground zero', affected: 'Click the centre of the affected area', crowd: 'Click where the people are' }[k];
+    if (tip) showHint(tip);
+    if (/affected|blastzone/.test(k) && map.getZoom() < 13.5) toast('Buildings show from street level — zoom in to a city (zoom 14+) and tilt the camera', 4600);
+    if (/crowd/.test(k) && map.getPitch() < 20) toast('Tilt the camera to see the people standing up', 3600);
   });
   // computing network analysis results (service areas, routes) in the background
   let netTimer = null, netBusy = false;
@@ -1515,9 +1537,17 @@ export function createEditor() {
     }
     if (kind === 'news') { L.name = NEWS_LOOKS[lk] || 'News'; if (lk === 'breaking' || lk === 'headline') { L.duration = 1; L.hold = 5; } }
     if (kind === 'hudtext') {
-      L.name = 'News ticker';
-      Object.assign(L.style, { look: 'ticker', text: 'Satellite imagery confirms new construction\nRescue teams reach the flooded district\nMarkets close higher\nMore updates to follow', position: 'bottom', color: '#d71920', bg: '#0b0d12', tagBg: '#d71920', textColor: '#ffffff', label: 'BREAKING', clock: '20:45', upper: true, bold: true });
+      const ts = b.dataset.ts || 'classic';
+      L.name = { classic: 'News ticker', red: 'News ticker (red)', navy: 'News ticker (navy)', white: 'News ticker (white)', twoline: 'Headline + ticker', flip: 'Rolling headlines', finance: 'Stock ticker', sports: 'Sports scores', flash: 'Breaking crawl' }[ts] || 'News ticker';
+      Object.assign(L.style, { look: 'ticker', tickerStyle: ts, text: 'Satellite imagery confirms new construction\nRescue teams reach the flooded district\nMarkets close higher\nMore updates to follow', position: 'bottom', color: '#d71920', label: 'BREAKING', clock: '20:45', upper: true, bold: true });
+      if (ts === 'classic') Object.assign(L.style, { bg: '#0b0d12', tagBg: '#d71920', textColor: '#ffffff' });
+      if (ts === 'twoline') Object.assign(L.style, { headline: 'Heavy rain causes flooding across the region', label: 'LIVE', upper: false });
+      if (ts === 'flip') Object.assign(L.style, { label: 'LATEST', clock: '', text: 'Rescue teams reach the flooded district\nRoads closed in the city centre\nSchools to stay shut tomorrow\nMore rain expected tonight', upper: false });
+      if (ts === 'finance') Object.assign(L.style, { label: 'MARKETS', upper: true, sep: '|', text: 'AAPL 189.40 +1.2%\nMSFT 412.10 -0.4%\nTSLA 251.30 +3.1%\nBRENT 84.20 +0.8%\nGOLD 2345.10 -0.2%\nEUR/USD 1.0842 +0.1%' });
+      if (ts === 'sports') Object.assign(L.style, { label: 'SCORES', upper: true, sep: '|', text: 'MAD 2 - 1 BAR\nLIV 0 - 0 ARS\nPSG 3 - 2 BAY\nJUV 1 - 1 INT' });
+      if (ts === 'flash') Object.assign(L.style, { position: 'top', label: 'BREAKING' });
     }
+    if (kind === 'video' && b.dataset.key) Object.assign(L.style, { key: b.dataset.key, fit: 'pip', width: 0.42, position: 'bottom-right', border: 0, radius: 0, shadow: false });
     if (kind === 'effect') { L.name = EFFECT_LOOKS[lk] || 'Effect'; if (lk === 'flash') { L.duration = 0.8; L.hold = 0.01; } if (lk === 'shake') { L.duration = 1.5; L.hold = 0.01; } if (lk === 'focus') { L.duration = 2; L.hold = 0.01; } if (lk === 'glitch') { L.duration = 1; L.hold = 0.5; } }
     if (kind === 'video') L.name = 'Video';
     addLayer(L);
@@ -1705,7 +1735,7 @@ export function createEditor() {
     setPath(L, key, v);
     eventsCache = null;
     if (['style.per', 'style.fade'].includes(key) && L.kind === 'timeseries') { L.duration = +(Math.max(1, (L.style.frames || []).length) * (+L.style.per || 2)).toFixed(2); eventsCache = null; }
-    if (key === 'anim' || key === 'style.marker' || key === 'style.layout' || key === 'style.sound' || key === 'style.variant' || key === 'style.look' || key === 'style.mode' || (key === 'style.label' && L.kind === 'timeseries') || key === 'style.labels' || key === 'style.border' || key === 'style.position') { renderLayerEditor(); commitLayers(); return; }
+    if (key === 'anim' || key === 'style.marker' || key === 'style.tickerStyle' || key === 'style.key' || key === 'style.layout' || key === 'style.sound' || key === 'style.variant' || key === 'style.look' || key === 'style.mode' || (key === 'style.label' && L.kind === 'timeseries') || key === 'style.labels' || key === 'style.border' || key === 'style.position') { renderLayerEditor(); commitLayers(); return; }
     if ((L.kind === 'model3d' && ['style.livery', 'style.cars'].includes(key)) || (L.kind === 'collision' && ['style.modelA', 'style.modelB', 'style.liveryA', 'style.liveryB'].includes(key))) { if (final) renderLayerEditor(); commitLayers(); return; }
     if (key === 'style.source' || (key === 'style.color' && L.kind === 'model3d') || ['style.model3d', 'style.modelA', 'style.modelB', 'style.colorA', 'style.colorB', 'style.scenario', 'style.cars', 'style.liveryA', 'style.liveryB', 'style.livery', 'style.poles', 'style.doubleTrack', 'style.track', 'style.size', 'style.look', 'style.minH', 'style.maxH', 'style.block', 'style.seed', 'style.groundBlocks'].includes(key) && ['collision', 'city3d', 'bombing', 'trajectory', 'vehicle'].includes(L.kind)) { if (key === 'style.model3d' || (final && key === 'style.scenario')) renderLayerEditor(); commitLayers(); return; }
     if (['start', 'duration', 'hold', 'style.levelFrom', 'style.levelTo'].includes(key) || key === 'name') {
@@ -2763,6 +2793,9 @@ export function createEditor() {
     const last = sceneIdx === project.scenes.length - 1;
     $('#join-row').hidden = last;
     $('#join-secs-row').hidden = last || (sc.transition || 'cut') === 'cut';
+    $('#stinger-row').hidden = last || sc.transition !== 'stinger';
+    $('#stinger-blend').value = sc.transitionBlend || 'screen';
+    $('#stinger-name').textContent = sc.transitionMedia ? `Clip: ${sc.transitionMediaName || 'loaded'} · the cut happens halfway` : 'An ink splash, light sweep or logo sting that plays over the cut. The cut happens halfway.';
     $('#render-preset').value = '';
     renderAudioList();
     renderSoundSettings();
@@ -2785,6 +2818,22 @@ export function createEditor() {
     toast(`Set to ${e.target.selectedOptions[0].textContent}`);
   });
   $('#join-secs').addEventListener('change', (e) => { scene().transitionSeconds = +e.target.value; save(); });
+  $('#stinger-btn').addEventListener('click', () => $('#file-stinger').click());
+  $('#stinger-blend').addEventListener('change', (e) => { scene().transitionBlend = e.target.value; save(); });
+  $('#file-stinger').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 120e6) { toast('Use a transition clip under 120 MB'); return; }
+    const id = `vd_${Math.random().toString(36).slice(2, 10)}`;
+    await putMedia(id, f);
+    const sc = scene();
+    sc.transitionMedia = id; sc.transitionMediaName = f.name;
+    const v = videoFor(id);
+    v?.el.addEventListener('loadedmetadata', () => { if (v.el.duration) { sc.transitionSeconds = Math.min(4, Math.max(0.4, +v.el.duration.toFixed(2))); renderExportSettings(); save(); } }, { once: true });
+    renderExportSettings(); save();
+    toast('Transition clip added — it plays over the cut to the next scene', 3600);
+  });
 
   // ---- sound
   function renderSoundSettings() {
@@ -3012,6 +3061,7 @@ export function createEditor() {
     floods?.update(sc, t);
     models?.update(sc, t, layerTiming);
     wayback?.update(sc, t, layerTiming);
+    affected?.update(sc, t, layerTiming);
     if (!exporting) { const f = mapFilterAt(sc, t); const el = $('#map'); if (el.style.filter !== f) el.style.filter = f === 'none' ? '' : f; }
     const f = t == null || !m ? 1 : m.buildingsAt(t);
     const q = Math.round(f * 200) / 200;
@@ -3383,7 +3433,7 @@ export function createEditor() {
       const blob = await renderStill({
         map, width, height,
         beforeFrame: (s2, m, tt) => seekScene(s2, tt, layerTiming),
-        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
+        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); affected.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); jumpCam(c, sc, tt); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2, tt) => mapFilterAt(s2, tt),
         background: spaceBg,

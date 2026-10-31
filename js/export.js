@@ -1,6 +1,8 @@
 // Frame-by-frame video export of all scenes. Each frame is drawn only after the map has finished
 // loading for that camera, then encoded with WebCodecs into an MP4 (H.264, or VP9/AV1 as fallback),
 // with scene transitions and an optional mixed soundtrack.
+import { videoFor } from './videofx.js';
+import { chromaKey } from './screenfx.js';
 import { pickAudioCodec, encodeAudio } from './audio.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -48,7 +50,7 @@ export async function pickCodec(width, height, fps, seconds = 0) {
   return null;
 }
 
-export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through', slide: 'Slide in', push: 'Push', whip: 'Whip pan', iris: 'Circle reveal', flash: 'Flash', blur: 'Blur dissolve', glitch: 'Glitch', spin: 'Spin zoom', bars: 'Venetian blinds' };
+export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through', slide: 'Slide in', push: 'Push', whip: 'Whip pan', iris: 'Circle reveal', flash: 'Flash', blur: 'Blur dissolve', glitch: 'Glitch', spin: 'Spin zoom', bars: 'Venetian blinds', pixelate: 'Pixelate', filmburn: 'Film burn', lightleak: 'Light leak flash', ink: 'Ink bleed', luma: 'Noise dissolve', zoomblur: 'Zoom blur', slideup: 'Slide up', doors: 'Doors open', stinger: 'Your video (stinger)' };
 
 /**
  * @param o.scenes array of scenes
@@ -142,6 +144,9 @@ async function forEachFrame(o, ctx, emit, canvas) {
   const sctx = snap.getContext('2d');
   let haveSnap = false;
   let cur = null;
+  let tmpPix = null, mask = null, cur2 = null;
+  // load transition clips before rendering
+  for (const sc of o.scenes) if (sc.transition === 'stinger' && sc.transitionMedia) { const v = videoFor(sc.transitionMedia); if (v && !v.ready) await new Promise((res) => { const to = setTimeout(res, 5000); v.el.addEventListener('loadeddata', () => { clearTimeout(to); res(); }, { once: true }); }); }
   for (let si = 0; si < o.scenes.length; si++) {
     const scene = o.scenes[si];
     o.onStatus?.(`Loading the map for ${scene.name}…`);
@@ -165,7 +170,7 @@ async function forEachFrame(o, ctx, emit, canvas) {
       if (haveSnap && tau < prevD) {
         const u = tau / prevD;
         const e = 0.5 - 0.5 * Math.cos(Math.PI * u);
-        if (['slide', 'push', 'whip', 'iris', 'flash', 'blur', 'glitch', 'spin', 'bars'].includes(prevTr)) {
+        if (['slide', 'push', 'whip', 'iris', 'flash', 'blur', 'glitch', 'spin', 'bars', 'pixelate', 'filmburn', 'lightleak', 'ink', 'luma', 'zoomblur', 'slideup', 'doors', 'stinger'].includes(prevTr)) {
           cur ||= Object.assign(document.createElement('canvas'), { width, height });
           const cc = cur.getContext('2d');
           cc.clearRect(0, 0, width, height); cc.drawImage(canvas, 0, 0);
@@ -186,6 +191,71 @@ async function forEachFrame(o, ctx, emit, canvas) {
           if (prevTr === 'flash') { ctx.drawImage(e < 0.5 ? snap : cur, 0, 0); ctx.fillStyle = `rgba(255,255,255,${1 - Math.abs(e - 0.5) * 2})`; ctx.fillRect(0, 0, width, height); }
           if (prevTr === 'blur') { ctx.filter = `blur(${(1 - e) * 18}px)`; ctx.drawImage(cur, 0, 0); ctx.filter = `blur(${e * 18}px)`; ctx.globalAlpha = 1 - e; ctx.drawImage(snap, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = 1; }
           if (prevTr === 'spin') { ctx.drawImage(cur, 0, 0); ctx.globalAlpha = 1 - e; ctx.translate(width / 2, height / 2); ctx.rotate(e * 0.9); ctx.scale(1 + e * 1.5, 1 + e * 1.5); ctx.drawImage(snap, -width / 2, -height / 2); }
+          if (prevTr === 'pixelate') {
+            const peak = 1 - Math.abs(e - 0.5) * 2, px = Math.max(1, Math.round(4 + peak * 60));
+            tmpPix ||= document.createElement('canvas');
+            const w2 = Math.max(1, Math.round(width / px)), h2 = Math.max(1, Math.round(height / px));
+            tmpPix.width = w2; tmpPix.height = h2;
+            const tc = tmpPix.getContext('2d'); tc.imageSmoothingEnabled = true; tc.drawImage(e < 0.5 ? snap : cur, 0, 0, w2, h2);
+            ctx.imageSmoothingEnabled = false; ctx.drawImage(tmpPix, 0, 0, width, height); ctx.imageSmoothingEnabled = true;
+          }
+          if (prevTr === 'filmburn' || prevTr === 'lightleak') {
+            ctx.drawImage(e < 0.5 ? snap : cur, 0, 0);
+            const peak = 1 - Math.abs(e - 0.5) * 2;
+            ctx.globalCompositeOperation = 'screen';
+            const cols = prevTr === 'filmburn' ? ['255,90,20', '255,200,80', '255,255,230'] : ['255,140,60', '255,60,120', '255,220,160'];
+            for (let k = 0; k < 3; k++) {
+              const cx = width * (0.2 + 0.6 * ((k * 0.37 + e * (k + 1) * 0.6) % 1)), cy = height * (0.3 + 0.4 * Math.sin(k * 2 + e * 3)), R = Math.max(width, height) * (0.25 + peak * (0.5 + k * 0.15));
+              const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R); g.addColorStop(0, `rgba(${cols[k]},${Math.min(1, peak * 1.2)})`); g.addColorStop(1, `rgba(${cols[k]},0)`);
+              ctx.fillStyle = g; ctx.fillRect(0, 0, width, height);
+            }
+            ctx.globalCompositeOperation = 'source-over';
+            if (prevTr === 'filmburn' && peak > 0.7) { ctx.fillStyle = `rgba(255,250,235,${(peak - 0.7) * 3})`; ctx.fillRect(0, 0, width, height); }
+          }
+          if (prevTr === 'ink' || prevTr === 'luma') {
+            // reveal the new scene through a growing noise mask
+            ctx.drawImage(snap, 0, 0);
+            mask ||= document.createElement('canvas');
+            const mw = 160, mh = Math.max(1, Math.round((160 * height) / width));
+            mask.width = mw; mask.height = mh;
+            const mc = mask.getContext('2d');
+            const md = mc.createImageData(mw, mh);
+            for (let yy = 0; yy < mh; yy++) for (let xx = 0; xx < mw; xx++) {
+              let v;
+              if (prevTr === 'ink') { const dx = xx / mw - 0.5, dy = (yy / mh - 0.5) * (mh / mw); v = Math.hypot(dx, dy) * 1.4 + 0.18 * Math.sin(xx * 0.31 + yy * 0.17) * Math.sin(yy * 0.23 - xx * 0.11) + 0.08 * Math.sin(xx * 0.9 + yy * 1.3); }
+              else v = 0.5 + 0.25 * Math.sin(xx * 0.13 + yy * 0.07) * Math.cos(yy * 0.11 - xx * 0.05) + 0.25 * Math.sin(xx * 0.41 + yy * 0.37);
+              const a = clamp((e * 1.25 - v) / 0.08, 0, 1);
+              md.data[(yy * mw + xx) * 4 + 3] = a * 255;
+            }
+            mc.putImageData(md, 0, 0);
+            cur2 ||= document.createElement('canvas');
+            cur2.width = width; cur2.height = height;
+            const c2 = cur2.getContext('2d');
+            c2.clearRect(0, 0, width, height); c2.drawImage(cur, 0, 0);
+            c2.globalCompositeOperation = 'destination-in'; c2.imageSmoothingEnabled = true; c2.drawImage(mask, 0, 0, width, height); c2.globalCompositeOperation = 'source-over';
+            ctx.drawImage(cur2, 0, 0);
+          }
+          if (prevTr === 'zoomblur') {
+            const src = e < 0.5 ? snap : cur, peak = 1 - Math.abs(e - 0.5) * 2;
+            ctx.drawImage(src, 0, 0);
+            for (let k = 1; k <= 6; k++) { const z = 1 + peak * 0.06 * k; ctx.globalAlpha = 0.22; ctx.drawImage(src, width / 2 - (width * z) / 2, height / 2 - (height * z) / 2, width * z, height * z); }
+            ctx.globalAlpha = 1;
+          }
+          if (prevTr === 'slideup') { ctx.drawImage(snap, 0, -height * e); ctx.drawImage(cur, 0, height * (1 - e)); }
+          if (prevTr === 'doors') { ctx.drawImage(cur, 0, 0); ctx.drawImage(snap, 0, 0, width / 2, height, -width / 2 * e, 0, width / 2, height); ctx.drawImage(snap, width / 2, 0, width / 2, height, width / 2 + (width / 2) * e, 0, width / 2, height); }
+          if (prevTr === 'stinger') {
+            ctx.drawImage(u < 0.5 ? snap : cur, 0, 0);
+            const v = videoFor(o.scenes[si - 1].transitionMedia);
+            if (v?.ready) {
+              const vt = Math.min(tau, Math.max(0, (v.el.duration || prevD) - 0.04));
+              await seekVideo(v.el, vt);
+              const mode = o.scenes[si - 1].transitionBlend || 'screen';
+              const src = mode === 'green' ? chromaKey(v.el, { key: 'green', tolerance: 0.38, softness: 0.12, spill: true }, width) : v.el;
+              ctx.globalCompositeOperation = mode === 'screen' ? 'screen' : 'source-over';
+              try { ctx.drawImage(src, 0, 0, width, height); } catch { /* not ready */ }
+              ctx.globalCompositeOperation = 'source-over';
+            }
+          }
           if (prevTr === 'bars') { ctx.drawImage(snap, 0, 0); const n = 10, bh = height / n; ctx.beginPath(); for (let k = 0; k < n; k++) ctx.rect(0, k * bh, width, bh * e); ctx.clip(); ctx.drawImage(cur, 0, 0); }
           if (prevTr === 'glitch') {
             ctx.drawImage(e < 0.5 ? snap : cur, 0, 0);
@@ -242,4 +312,9 @@ async function recordFallback(o, canvas, ctx) {
   await stopped;
   const type = rec.mimeType || 'video/webm';
   return { blob: new Blob(chunks, { type }), ext: type.includes('mp4') ? 'mp4' : 'webm', codec: 'recorder' };
+}
+
+async function seekVideo(el, t) {
+  if (Math.abs(el.currentTime - t) < 0.001 && el.readyState >= 2) return;
+  await new Promise((res) => { const to = setTimeout(res, 2000); el.addEventListener('seeked', () => { clearTimeout(to); res(); }, { once: true }); el.currentTime = t; });
 }

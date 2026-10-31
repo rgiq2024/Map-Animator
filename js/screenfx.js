@@ -13,7 +13,30 @@ const hashStr = (s) => { let h = 2166136261; for (const c of String(s)) h = Math
 export const EFFECT_LOOKS = {
   grain: 'Film grain', oldfilm: 'Old film (sepia, scratches)', vhs: 'VHS tape', glitch: 'Glitch distortion', chroma: 'Colour split (chromatic)',
   lightleak: 'Light leak', flash: 'Flash', rain: 'Rain', snow: 'Snow', shake: 'Camera shake', focus: 'Focus pull (blur → sharp)', fog: 'Fog / haze',
+  storm: 'Thunderstorm (heavy rain + lightning)', hail: 'Hail', blizzard: 'Blizzard (heavy snow, wind)', leaves: 'Falling leaves', petals: 'Blossom petals',
+  embers: 'Rising embers (fire)', ash: 'Falling ash', sandstorm: 'Sandstorm / dust', lightning: 'Lightning strikes', sunrays: 'Sun rays', mist: 'Drifting mist',
 };
+export const PARTICLE_LOOKS = new Set(['rain', 'snow', 'storm', 'hail', 'blizzard', 'leaves', 'petals', 'embers', 'ash', 'sandstorm', 'mist']);
+const LEAF_COLS = { autumn: ['#c4621c', '#e0a030', '#a23a12', '#d88a2a', '#8a5a14'], green: ['#4c8f3a', '#6aa84f', '#3a7a2e', '#8fc04a'], mixed: ['#c4621c', '#e0a030', '#6aa84f', '#a23a12', '#d8b04a'] };
+function leafShape(ctx, x, y, size, rot, col, flip) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(1, flip);
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(-size, 0); ctx.quadraticCurveTo(-size * 0.2, -size * 0.75, size, 0); ctx.quadraticCurveTo(-size * 0.2, size * 0.75, -size, 0); ctx.fill();
+  ctx.strokeStyle = 'rgba(60,30,10,0.45)'; ctx.lineWidth = Math.max(0.6, size * 0.08);
+  ctx.beginPath(); ctx.moveTo(-size * 1.25, 0); ctx.lineTo(size * 0.9, 0); ctx.stroke();
+  ctx.restore();
+}
+function bolt(ctx, r, x0, y0, len, w, depth = 0) {
+  let x = x0, y = y0;
+  ctx.beginPath(); ctx.moveTo(x, y);
+  const steps = 14;
+  for (let i = 0; i < steps; i++) {
+    x += (r() - 0.5) * len * 0.12; y += len / steps;
+    ctx.lineTo(x, y);
+    if (depth < 2 && r() < 0.18) { ctx.stroke(); bolt(ctx, r, x, y, len * 0.45, w * 0.6, depth + 1); ctx.beginPath(); ctx.moveTo(x, y); }
+  }
+  ctx.lineWidth = w; ctx.stroke();
+}
 
 /** 0…1 strength of an effect layer at its timing (fades in and out). */
 function strength(L, tm) {
@@ -160,6 +183,129 @@ export function drawScreenEffects(ctx, sc, o, layerTiming) {
         ctx.fillStyle = g; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
         break;
       }
+      case 'storm': case 'hail': case 'blizzard': {
+        const sp = +s.speed || 1, wind = s.wind ?? (s.look === 'blizzard' ? 0.8 : 0.35), sz = +s.size || 1;
+        const rr = rng(hashStr(L.id));
+        if (s.look === 'blizzard') { ctx.fillStyle = `rgba(225,232,240,${0.28 * Math.min(1, k)})`; ctx.fillRect(fr.x, fr.y, fr.w, fr.h); }
+        if (s.look === 'storm') { ctx.fillStyle = `rgba(20,28,40,${0.32 * Math.min(1, k)})`; ctx.fillRect(fr.x, fr.y, fr.w, fr.h); }
+        const n = Math.round((s.look === 'storm' ? 900 : s.look === 'hail' ? 260 : 700) * k);
+        for (let i = 0; i < n; i++) {
+          const x0 = rr(), y0 = rr(), z = 0.45 + rr() * 0.9;
+          if (s.look === 'storm') {
+            const y = fr.y + (((y0 + t * 2.6 * sp * z) % 1) * fr.h), x = fr.x + ((((x0 + t * 0.6 * wind * sp * z) % 1) + 1) % 1) * fr.w;
+            ctx.strokeStyle = `rgba(190,205,225,${0.38 * z})`; ctx.lineWidth = 1.1 * unit * z * sz;
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 14 * unit * z * wind, y + 28 * unit * z); ctx.stroke();
+          } else if (s.look === 'hail') {
+            const y = fr.y + (((y0 + t * 1.9 * sp * z) % 1) * fr.h), x = fr.x + ((((x0 + t * 0.15 * wind * sp) % 1) + 1) % 1) * fr.w;
+            ctx.fillStyle = `rgba(240,248,255,${0.85 * z})`; ctx.beginPath(); ctx.arc(x, y, 2.2 * unit * z * sz, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = `rgba(240,248,255,${0.25 * z})`; ctx.lineWidth = 1.5 * unit * z; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 10 * unit * z); ctx.stroke();
+          } else {
+            const y = fr.y + (((y0 + t * 0.35 * sp * z) % 1) * fr.h), x = fr.x + ((((x0 + t * 0.45 * wind * sp * z + Math.sin(t * 2 + i) * 0.006) % 1) + 1) % 1) * fr.w;
+            ctx.fillStyle = `rgba(255,255,255,${0.8 * z})`; ctx.beginPath(); ctx.ellipse(x, y, 2.4 * unit * z * sz, 1.6 * unit * z * sz, 0.6, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+        if (s.look === 'storm') {
+          const slot = Math.floor(t / 2.6), rs = rng(hashStr(L.id) + slot * 977), at = slot * 2.6 + rs() * 1.6, dt = t - at;
+          if (dt >= 0 && dt < 0.45 && rs() < 0.8) {
+            const fl = dt < 0.06 ? 1 : dt < 0.12 ? 0.3 : dt < 0.18 ? 0.8 : Math.max(0, 0.6 - dt);
+            ctx.fillStyle = `rgba(220,230,255,${0.45 * fl * Math.min(1, k)})`; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+            ctx.strokeStyle = `rgba(235,240,255,${fl})`; ctx.shadowColor = '#9fc0ff'; ctx.shadowBlur = 18 * unit;
+            bolt(ctx, rng(hashStr(L.id) + slot * 31), fr.x + fr.w * (0.2 + rs() * 0.6), fr.y, fr.h * (0.55 + rs() * 0.35), 2.4 * unit);
+            ctx.shadowBlur = 0;
+          }
+        }
+        break;
+      }
+      case 'leaves': case 'petals': case 'embers': case 'ash': {
+        const sp = +s.speed || 1, wind = s.wind ?? 0.25, sz = +s.size || 1;
+        const rr = rng(hashStr(L.id));
+        const n = Math.round((s.look === 'embers' ? 160 : s.look === 'ash' ? 220 : 90) * k);
+        const cols = s.look === 'petals' ? ['#ffd1e3', '#ffb3cf', '#ffe4ef', '#f7a1c4'] : LEAF_COLS[s.leafColor || 'autumn'] || LEAF_COLS.autumn;
+        if (s.look === 'embers') ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < n; i++) {
+          const x0 = rr(), y0 = rr(), z = 0.5 + rr(), ph = rr() * 6.28, spin = (rr() - 0.5) * 4;
+          if (s.look === 'embers') {
+            const y = fr.y + fr.h - ((((y0 + t * 0.16 * sp * z) % 1) + 1) % 1) * fr.h * 1.1;
+            const x = fr.x + ((((x0 + Math.sin(t * 1.3 + ph) * 0.02 + t * 0.03 * wind) % 1) + 1) % 1) * fr.w;
+            const fl = 0.55 + 0.45 * Math.sin(t * 9 + ph * 3);
+            const R = 1.8 * unit * z * sz;
+            const g = ctx.createRadialGradient(x, y, 0, x, y, R * 3.5); g.addColorStop(0, `rgba(255,220,140,${0.9 * fl})`); g.addColorStop(0.35, `rgba(255,120,30,${0.6 * fl})`); g.addColorStop(1, 'rgba(255,60,0,0)');
+            ctx.fillStyle = g; ctx.fillRect(x - R * 3.5, y - R * 3.5, R * 7, R * 7);
+          } else if (s.look === 'ash') {
+            const y = fr.y + (((y0 + t * 0.05 * sp * z) % 1) * fr.h), x = fr.x + ((((x0 + Math.sin(t * 0.7 + ph) * 0.015 + t * 0.02 * wind) % 1) + 1) % 1) * fr.w;
+            ctx.fillStyle = `rgba(${150 + Math.round(rr() * 40)},${145 + Math.round(rr() * 30)},140,${0.7 * z})`;
+            ctx.save(); ctx.translate(x, y); ctx.rotate(t * spin); ctx.fillRect(-2 * unit * z * sz, -1.2 * unit * z * sz, 4 * unit * z * sz, 2.4 * unit * z * sz); ctx.restore();
+          } else {
+            const fall = s.look === 'petals' ? 0.06 : 0.085;
+            const y = fr.y + (((y0 + t * fall * sp * z) % 1) * fr.h * 1.1) - fr.h * 0.05;
+            const x = fr.x + ((((x0 + Math.sin(t * 1.4 + ph) * 0.035 + t * 0.05 * wind * sp) % 1) + 1) % 1) * fr.w;
+            const size = (s.look === 'petals' ? 4.5 : 7.5) * unit * z * sz;
+            leafShape(ctx, x, y, size, t * spin + ph, cols[i % cols.length], Math.cos(t * 2.2 + ph));
+          }
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        break;
+      }
+      case 'sandstorm': {
+        const sp = +s.speed || 1, wind = s.wind ?? 1;
+        const g = ctx.createLinearGradient(0, fr.y, 0, fr.y + fr.h);
+        g.addColorStop(0, `rgba(196,150,90,${0.45 * Math.min(1, k)})`); g.addColorStop(1, `rgba(170,120,60,${0.65 * Math.min(1, k)})`);
+        ctx.fillStyle = g; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+        const rr = rng(hashStr(L.id));
+        for (let i = 0; i < 14; i++) {
+          const y = fr.y + rr() * fr.h, x = fr.x + ((((rr() + t * 0.12 * sp * wind * (0.6 + rr())) % 1.4) + 1.4) % 1.4 - 0.2) * fr.w, R = (0.15 + rr() * 0.25) * fr.w;
+          const gg = ctx.createRadialGradient(x, y, 0, x, y, R); gg.addColorStop(0, `rgba(210,165,100,${0.35 * k})`); gg.addColorStop(1, 'rgba(210,165,100,0)');
+          ctx.fillStyle = gg; ctx.fillRect(x - R, y - R, R * 2, R * 2);
+        }
+        for (let i = 0; i < Math.round(500 * k); i++) {
+          const y = fr.y + rr() * fr.h, x = fr.x + ((((rr() + t * 0.9 * sp * wind * (0.5 + rr())) % 1) + 1) % 1) * fr.w;
+          ctx.strokeStyle = `rgba(235,200,150,${0.35 * rr()})`; ctx.lineWidth = 1 * unit;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 16 * unit * wind, y + 1.5 * unit); ctx.stroke();
+        }
+        break;
+      }
+      case 'lightning': {
+        const every = 3 / (+s.speed || 1);
+        for (let back = 0; back < 2; back++) {
+          const slot = Math.floor(t / every) - back, rs = rng(hashStr(L.id) + slot * 977), at = slot * every + rs() * every * 0.6, dt = t - at;
+          if (dt < 0 || dt > 0.5) continue;
+          const fl = dt < 0.05 ? 1 : dt < 0.1 ? 0.25 : dt < 0.16 ? 0.9 : Math.max(0, 0.7 - dt * 1.4);
+          ctx.fillStyle = hexA(s.color || '#dfe8ff', 0.5 * fl * Math.min(1, k)); ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+          ctx.strokeStyle = `rgba(245,248,255,${fl})`; ctx.shadowColor = '#a8c4ff'; ctx.shadowBlur = 22 * unit;
+          bolt(ctx, rng(hashStr(L.id) + slot * 31), fr.x + fr.w * (0.15 + rs() * 0.7), fr.y, fr.h * (0.6 + rs() * 0.4), 3 * unit);
+          ctx.shadowBlur = 0;
+        }
+        break;
+      }
+      case 'sunrays': {
+        ctx.globalCompositeOperation = 'screen';
+        const cx = fr.x + fr.w * (s.side === 'right' ? 0.92 : 0.08), cy = fr.y - fr.h * 0.08;
+        const col = s.color && s.color !== '#ff8a3d' ? s.color : '#ffe6a8';
+        const R = Math.hypot(fr.w, fr.h) * 1.1;
+        for (let i = 0; i < 9; i++) {
+          const a0 = (s.side === 'right' ? Math.PI * 0.55 : Math.PI * 0.05) + i * 0.11 + Math.sin(t * 0.25 + i) * 0.02, wd = 0.03 + (i % 3) * 0.015;
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+          g.addColorStop(0, hexA(col, 0.42 * k * (0.6 + 0.4 * Math.sin(t * 0.7 + i * 1.7)))); g.addColorStop(1, hexA(col, 0));
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a0 + wd); ctx.closePath(); ctx.fill();
+        }
+        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, fr.h * 0.6); glow.addColorStop(0, hexA(col, 0.55 * k)); glow.addColorStop(1, hexA(col, 0));
+        ctx.fillStyle = glow; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+        ctx.globalCompositeOperation = 'source-over';
+        break;
+      }
+      case 'mist': {
+        const rr = rng(hashStr(L.id));
+        const sp = +s.speed || 1;
+        for (let i = 0; i < 9; i++) {
+          const y = fr.y + (0.25 + rr() * 0.8) * fr.h, R = (0.25 + rr() * 0.3) * fr.w;
+          const x = fr.x + ((((rr() + t * 0.025 * sp * (0.5 + rr())) % 1.6) + 1.6) % 1.6 - 0.3) * fr.w;
+          const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+          g.addColorStop(0, `rgba(235,240,245,${0.42 * k})`); g.addColorStop(1, 'rgba(235,240,245,0)');
+          ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.35); ctx.translate(-x, -y); ctx.fillStyle = g; ctx.fillRect(x - R, y - R, R * 2, R * 2); ctx.restore();
+        }
+        break;
+      }
       case 'rain': case 'snow': {
         const n = Math.round((s.look === 'rain' ? 380 : 260) * k);
         const rr = rng(hashStr(L.id));
@@ -220,7 +366,8 @@ export function drawVideoLayer(ctx, L, tm, o) {
   ctx.globalAlpha *= a;
   ctx.translate(x + W / 2, y + H / 2); ctx.scale(sc, sc); ctx.translate(-(x + W / 2), -(y + H / 2));
   const rad = full ? 0 : (+s.radius ?? 10) * unit;
-  if (!full && s.shadow !== false) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 24 * unit; ctx.shadowOffsetY = 8 * unit; ctx.fillStyle = '#000'; rr(ctx, x, y, W, H, rad); ctx.fill(); ctx.restore(); }
+  const keyed = s.key && s.key !== 'none';
+  if (!full && s.shadow !== false && !keyed) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 24 * unit; ctx.shadowOffsetY = 8 * unit; ctx.fillStyle = '#000'; rr(ctx, x, y, W, H, rad); ctx.fill(); ctx.restore(); }
   ctx.save();
   rr(ctx, x, y, W, H, rad); ctx.clip();
   if (v?.ready) {
@@ -232,7 +379,8 @@ export function drawVideoLayer(ctx, L, tm, o) {
     const vr = (v.el.videoWidth || 16) / (v.el.videoHeight || 9), br = W / H;
     let dw = W, dh = H;
     if (vr > br) dw = H * vr; else dh = W / vr;
-    try { ctx.drawImage(v.el, x + (W - dw) / 2, y + (H - dh) / 2, dw, dh); } catch { /* frame not ready */ }
+    const src = s.key && s.key !== 'none' ? chromaKey(v.el, s, Math.round(Math.min(1280, dw))) : v.el;
+    try { ctx.drawImage(src, x + (W - dw) / 2, y + (H - dh) / 2, dw, dh); } catch { /* frame not ready */ }
   } else {
     ctx.fillStyle = 'rgba(20,24,30,0.85)'; ctx.fillRect(x, y, W, H);
     ctx.fillStyle = '#fff'; ctx.font = `600 ${14 * unit}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -254,4 +402,47 @@ export function videoTime(L, tm, dur) {
   let t = Math.max(0, tm.edit ? 0.5 : tm.tau) * (+s.speed || 1) + (+s.trim || 0);
   if (s.loop && dur > 0) t %= dur;
   return Math.min(t, Math.max(0, dur - 0.04));
+}
+
+// ---------------------------------------------------------------- green screen (chroma key)
+let keyCv = null;
+/** Remove a green / blue / custom background from a video frame. Returns a canvas with transparency. */
+export function chromaKey(el, s, maxW = 1280) {
+  const vw = el.videoWidth || 0, vh = el.videoHeight || 0;
+  if (!vw || !vh) return el;
+  const w = Math.max(16, Math.min(vw, maxW)), h = Math.max(16, Math.round((vh * w) / vw));
+  keyCv ||= document.createElement('canvas');
+  if (keyCv.width !== w || keyCv.height !== h) { keyCv.width = w; keyCv.height = h; }
+  const c = keyCv.getContext('2d', { willReadFrequently: true });
+  c.clearRect(0, 0, w, h);
+  c.drawImage(el, 0, 0, w, h);
+  const img = c.getImageData(0, 0, w, h);
+  const d = img.data;
+  const mode = s.key;
+  let kr = 0, kg = 177, kb = 64;
+  if (mode === 'blue') { kr = 0; kg = 71; kb = 187; }
+  if (mode === 'custom') { const n = parseInt(String(s.keyColor || '#00b140').slice(1), 16); kr = (n >> 16) & 255; kg = (n >> 8) & 255; kb = n & 255; }
+  const tol = clamp(+s.tolerance || 0.38, 0.02, 1), soft = clamp(+s.softness ?? 0.12, 0, 0.6), spill = s.spill !== false;
+  // work in chroma (colour without brightness) so shadows on the screen are keyed too
+  const kY = 0.299 * kr + 0.587 * kg + 0.114 * kb, kCb = kb - kY, kCr = kr - kY;
+  const kLen = Math.hypot(kCb, kCr) || 1;
+  const domG = mode === 'green' || (mode === 'custom' && kg >= kr && kg >= kb);
+  const domB = mode === 'blue' || (mode === 'custom' && kb > kr && kb > kg);
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const Y = 0.299 * r + 0.587 * g + 0.114 * b, Cb = b - Y, Cr = r - Y;
+    const dist = Math.hypot(Cb - kCb, Cr - kCr) / kLen; // 0 = exactly the key colour
+    let a = 1;
+    if (dist < tol) a = 0; else if (dist < tol + soft) a = (dist - tol) / soft;
+    if (a < 1 && spill) {
+      if (domG && g > Math.max(r, b)) d[i + 1] = Math.max(r, b);
+      if (domB && b > Math.max(r, g)) d[i + 2] = Math.max(r, g);
+    } else if (spill) {
+      if (domG && g > (r + b) / 2 + 8) d[i + 1] = Math.round((r + b) / 2 + 8);
+      if (domB && b > (r + g) / 2 + 8) d[i + 2] = Math.round((r + g) / 2 + 8);
+    }
+    d[i + 3] = Math.round(d[i + 3] * a);
+  }
+  c.putImageData(img, 0, 0);
+  return keyCv;
 }

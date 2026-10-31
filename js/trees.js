@@ -230,5 +230,28 @@ export function drawTrees(ctx, L, tm, o) {
     if (top) { const d = h * 0.7; ctx.drawImage(sp.top, x - d / 2, y - d / 2, d, d); }
     else ctx.drawImage(sp.side, x - h / 2, y - h * 0.955, h, h);
   }
+  // leaves drifting down from the crowns
+  if (s.leaves && !top) {
+    const t = o.time ?? 0;
+    const pal = (PALETTES[s.type] || (s.type === 'autumn' ? PALETTES.autumn : [['#c4621c', '#e0a030', '#6aa84f']]))[0];
+    const cols = s.type === 'autumn' || s.leafColor !== 'green' ? ['#c4621c', '#e0a030', '#a23a12', pal[1]] : [pal[0], pal[1], pal[2]];
+    let n = 0;
+    for (const [[x, y], p, kk] of items) {
+      if ((Math.floor(p.v * 997) % 3) !== 0 || n > 240) continue;
+      const h = hPx * p.s * kk;
+      for (let j = 0; j < 3; j++, n++) {
+        const seed = p.v * 13.7 + j * 0.37;
+        const f = (((t * 0.22 * (+s.leafSpeed || 1) + seed) % 1) + 1) % 1;
+        const lx = x + (((seed * 91) % 1) - 0.5) * h * 0.6 + Math.sin(t * 1.6 + seed * 9) * h * 0.12 + f * h * 0.4 * (+s.wind || 0.3);
+        const ly = y - h * (0.75 - ((seed * 53) % 1) * 0.25) + f * h * 0.85;
+        const sz = Math.max(1.4 * unit, h * 0.035);
+        ctx.save(); ctx.globalAlpha *= f > 0.9 ? (1 - f) * 10 : 1;
+        ctx.translate(lx, ly); ctx.rotate(t * 3 + seed * 10); ctx.scale(1, Math.cos(t * 2.4 + seed * 7));
+        ctx.fillStyle = cols[(j + Math.floor(seed * 7)) % cols.length];
+        ctx.beginPath(); ctx.ellipse(0, 0, sz, sz * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
   ctx.restore();
 }

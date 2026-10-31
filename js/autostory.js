@@ -14,6 +14,30 @@ const D2R = Math.PI / 180;
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// ---------------------------------------------------------------- coordinates
+/** "39.4126, -3.7139", "39.4126 N 3.7139 W", "39°24'45\"N 3°42'50\"W" → [lng, lat] (or null). */
+export function parseLatLon(q) {
+  const t = String(q || '').trim();
+  if (!t) return null;
+  const dms = /(-?\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*['′]\s*)?(?:(\d+(?:\.\d+)?)\s*["″]\s*)?([NSEW])?/gi;
+  const parts = [...t.matchAll(dms)];
+  if (parts.length === 2) {
+    const v = parts.map((m) => { let d = +m[1] + (+m[2] || 0) / 60 + (+m[3] || 0) / 3600; if (/[SW]/i.test(m[4] || '')) d = -d; return { d, h: (m[4] || '').toUpperCase() }; });
+    let [a, b] = v;
+    if (a.h === 'E' || a.h === 'W') [a, b] = [b, a];
+    return Math.abs(a.d) <= 90 && Math.abs(b.d) <= 180 ? [b.d, a.d] : null;
+  }
+  const m = t.match(/(-?\d{1,3}(?:\.\d+)?)\s*([NS])?\s*[,;\s]\s*(-?\d{1,3}(?:\.\d+)?)\s*([EW])?/i);
+  if (!m) return null;
+  let lat = +m[1], lng = +m[3];
+  if (/S/i.test(m[2] || '')) lat = -lat;
+  if (/W/i.test(m[4] || '')) lng = -lng;
+  if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? [lng, lat] : null;
+}
+const COORD_IN_TEXT = /(-?\d{1,2}\.\d{2,})\s*°?\s*([NS])?\s*[,;\s]\s*(-?\d{1,3}\.\d{2,})\s*°?\s*([EW])?|(\d{1,2})\s*°\s*\d{1,2}\s*['′]\s*(?:\d+(?:\.\d+)?\s*["″])?\s*[NS]\s*,?\s*\d{1,3}\s*°\s*\d{1,2}\s*['′]\s*(?:\d+(?:\.\d+)?\s*["″])?\s*[EW]/i;
+export const fmtLatLon = ([lng, lat]) => `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? 'E' : 'W'}`;
+
 // ---------------------------------------------------------------- understanding the text
 const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 const MON_RE = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
@@ -70,9 +94,9 @@ function cleanPlace(p) {
 }
 export function parseBrief(raw) {
   const text = String(raw || '').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
-  const plan = { raw: text, title: '', subtitle: '', date: '', place: '', context: [], from: '', to: '', event: '', mode: '', scenario: 'headon', source: '', endText: '' };
+  const plan = { raw: text, coords: '', title: '', subtitle: '', date: '', place: '', context: [], from: '', to: '', event: '', mode: '', scenario: 'headon', source: '', endText: '' };
   // explicit "key: value" parts (one per line or separated by ;)
-  const KEYS = { title: 'title', headline: 'title', subtitle: 'subtitle', sub: 'subtitle', date: 'date', place: 'place', location: 'place', at: 'place', region: 'context', context: 'context', from: 'from', to: 'to', event: 'event', type: 'event', mode: 'mode', by: 'mode', source: 'source', credit: 'source', end: 'endText' };
+  const KEYS = { coords: 'coords', coordinates: 'coords', latlon: 'coords', latlng: 'coords', gps: 'coords', title: 'title', headline: 'title', subtitle: 'subtitle', sub: 'subtitle', date: 'date', place: 'place', location: 'place', at: 'place', region: 'context', context: 'context', from: 'from', to: 'to', event: 'event', type: 'event', mode: 'mode', by: 'mode', source: 'source', credit: 'source', end: 'endText' };
   let rest = text;
   for (const part of String(raw || '').split(/\n|;/)) {
     const m = part.match(/^\s*([a-z]+)\s*:\s*(.+)$/i);
@@ -82,6 +106,8 @@ export function parseBrief(raw) {
       rest = rest.replace(part.replace(/\s+/g, ' ').trim(), ' ');
     }
   }
+  // exact coordinates written in the sentence
+  if (!plan.coords) { const cm = rest.match(COORD_IN_TEXT); if (cm && parseLatLon(cm[0])) { plan.coords = cm[0].trim(); rest = rest.replace(cm[0], ' ').replace(/\b(?:at|near)\s*(?=[,.;]|$)/i, ''); } }
   // inline "Source: …" / "Credit: …"
   const sm = rest.match(/\b(?:source|credit|credits)\s*:\s*(.+?)\s*$/i);
   if (sm) { plan.source ||= sm[1].replace(/[.]$/, ''); rest = rest.slice(0, sm.index).replace(/[\s.,;]+$/, ''); }
@@ -114,19 +140,26 @@ export function parseBrief(raw) {
     }
     if (!plan.place && plan.event === 'servicearea') { const fm = rest.match(/\bfrom\s+(.+?)(?=[,.;]|$)/i); if (fm) plan.place = cleanPlace(fm[1]); }
     if (!plan.place && plan.event === 'journey') plan.place = plan.to;
-    if (!plan.place) { const caps = rest.match(/\b[A-Z][\p{L}'.-]{2,}(?:\s[A-Z][\p{L}'.-]{2,})*/gu) || []; plan.place = caps.find((c) => !MONTHS.includes(c.toLowerCase()) && !/^(Train|Flood|Cyclone|Storm|Fire|Road|The|A)$/.test(c)) || ''; }
+    if (!plan.place && !plan.coords) { const caps = rest.match(/\b[A-Z][\p{L}'.-]{2,}(?:\s[A-Z][\p{L}'.-]{2,})*/gu) || []; plan.place = caps.find((c) => !MONTHS.includes(c.toLowerCase()) && !/^(Train|Flood|Cyclone|Storm|Fire|Road|The|A)$/.test(c)) || ''; }
   }
   // trailing ", Region, Country" parts become the location lines
   if (!plan.context.length) {
     const segs = rest.split(',').map((x) => x.trim()).filter(Boolean);
     plan.context = segs.slice(1).map((x) => x.replace(/[.]$/, '')).filter((x) => /^[\p{Lu}]/u.test(x) && !/\d{4}/.test(x) && x.split(' ').length <= 4 && x !== plan.place);
   }
-  // titles
-  const where = plan.place || plan.to || '';
-  const storm = rest.match(/\b(Cyclone|Hurricane|Typhoon|Storm)\s+([A-Z][\p{L}-]+)/u);
-  if (plan.event === 'cyclone' && storm && !plan.title) plan.title = `${storm[1]} ${storm[2]}`;
-  plan.title ||= plan.event === 'journey' && plan.from && plan.to ? `${plan.from} → ${plan.to}` : where || 'Breaking';
-  if (!plan.subtitle) {
+  deriveTitles(plan);
+  return plan;
+}
+
+/** Title and subtitle from the plan (kept if the user typed their own). */
+function deriveTitles(plan) {
+  const where = plan.place || plan.to || plan.context?.[0] || '';
+  const storm = plan.raw.match(/\b(Cyclone|Hurricane|Typhoon|Storm)\s+([A-Z][\p{L}-]+)/u);
+  if (!plan.title || plan.autoTitle) {
+    plan.title = plan.event === 'cyclone' && storm ? `${storm[1]} ${storm[2]}` : plan.event === 'journey' && plan.from && plan.to ? `${plan.from} → ${plan.to}` : where || 'Breaking';
+    plan.autoTitle = true;
+  }
+  if (!plan.subtitle || plan.autoSub) {
     const line = plan.from && plan.to ? `${plan.from}–${plan.to}` : '';
     plan.subtitle = {
       traincrash: line ? `The collision on the ${line} line` : `Train collision near ${where}`,
@@ -135,8 +168,8 @@ export function parseBrief(raw) {
       journey: plan.from && plan.to ? `From ${plan.from} to ${plan.to} by ${MODES[plan.mode].toLowerCase()}` : `A journey to ${where}`,
       servicearea: `How far can you get from ${where}?`, place: where,
     }[plan.event] || where;
+    plan.autoSub = true;
   }
-  return plan;
 }
 
 // ---------------------------------------------------------------- finding the places
@@ -159,7 +192,16 @@ export async function resolvePlaces(plan, progress = () => {}) {
   if (plan.to) g.to = await find(plan.to, g.from?.country);
   progress('Finding the place…');
   const hint = plan.context?.length ? plan.context.join(', ') : g.from?.country || g.to?.country || '';
-  if (plan.place) g.place = await find(plan.place, hint);
+  const exact = parseLatLon(plan.coords);
+  if (exact) {
+    g.place = { name: plan.place || 'Incident site', ll: exact, country: '', detail: `Exact location ${fmtLatLon(exact)}`, exact: true };
+    progress('Looking up the exact location…');
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&lat=${exact[1]}&lon=${exact[0]}`, { headers: { 'Accept-Language': navigator.language || 'en' } });
+      const j = r.ok ? await r.json() : null;
+      if (j?.address) { g.place.country = j.address.country || ''; if (!plan.place) { plan.place = j.address.village || j.address.town || j.address.city || j.address.county || j.name || ''; g.place.name = plan.place || g.place.name; deriveTitles(plan); } }
+    } catch { /* fine without it */ }
+  } else if (plan.place) g.place = await find(plan.place, hint);
   const country = g.place?.country || g.from?.country || g.to?.country;
   if (country) { progress('Finding the country…'); const c = await find(country); if (c) g.country = { ...c, name: country }; }
   if (g.from && g.to && plan.event !== 'servicearea') {
@@ -338,7 +380,7 @@ export function buildStory(plan, g, opts = {}) {
     sc.camera.keys = [K(0, V(focus, Math.min(zEnd - 3.5, 13), lb, 0), 'ease'), K(arrive, V(focus, zEnd, camB, tilt), 'linear'), K(D, V(focus, zEnd + 0.3, camB + 28, tilt), 'linear')];
     sc.camera.tilt = tilt;
     const headAt = Math.min(D * 0.45, arrive + 1);
-    sc.layers.push(L('title', null, 0.6, { duration: 2, hold: news ? Math.max(0.8, headAt - 2.8) : Math.max(2, D - 4), style: { look: 'location', text: `${PLACE}${country ? `, ${country.toUpperCase()}` : ''}`, sub: plan.date ? plan.date.toUpperCase() : '', font: '' } }));
+    sc.layers.push(L('title', null, 0.6, { duration: 2, hold: news ? Math.max(0.8, headAt - 2.8) : Math.max(2, D - 4), style: { look: 'location', text: `${PLACE}${country ? `, ${country.toUpperCase()}` : ''}`, sub: [plan.date ? plan.date.toUpperCase() : '', g.place?.exact ? fmtLatLon(focus) : ''].filter(Boolean).join(' · '), font: '' } }));
     if (news) {
       sc.layers.push(L('news', null, headAt, { duration: 1, hold: Math.max(3, D * 0.45), style: { look: 'headline', text: plan.subtitle, sub: [plan.place, ...(plan.context || [])].filter(Boolean).join(' · '), showClock: false } }));
       sc.layers.push(L('news', null, 0.2, { duration: 0.8, style: { look: 'bug', channel: opts.channel || 'NEWS', live: true } }));
@@ -404,7 +446,8 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
         <label><span>What happens</span><select data-f="event">${Object.entries(EVENTS).map(([k, v]) => `<option value="${k}" ${k === plan.event ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         <label ${plan.event === 'traincrash' ? '' : 'hidden'}><span>Crash type</span><select data-f="scenario"><option value="headon" ${plan.scenario === 'headon' ? 'selected' : ''}>Head-on, same track</option><option value="sideswipe" ${plan.scenario === 'sideswipe' ? 'selected' : ''}>Derails into the next track</option><option value="rearend" ${plan.scenario === 'rearend' ? 'selected' : ''}>Rear-end</option></select></label>
         <label ${plan.event === 'journey' || plan.event === 'servicearea' ? '' : 'hidden'}><span>Travel by</span><select data-f="mode">${Object.entries(MODES).map(([k, v]) => `<option value="${k}" ${k === plan.mode ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-        <label><span>Place ${geo ? ok(geo.place) : ''}</span><input data-f="place" type="text" value="${esc(plan.place)}" /></label>
+        <label><span>Place ${geo && !geo.place?.exact ? ok(geo.place) : ''}</span><input data-f="place" type="text" value="${esc(plan.place)}" /></label>
+        <label class="wide"><span>Exact location — latitude, longitude ${plan.coords ? (parseLatLon(plan.coords) ? '<i class="av-ok">✓ used for the event</i>' : '<i class="av-no">not understood</i>') : '<i class="muted">(optional — e.g. 39.4126, -3.7139 or 39°24′45″N 3°42′50″W)</i>'}</span><input data-f="coords" type="text" value="${esc(plan.coords)}" placeholder="Leave empty to use the place name" /></label>
         <label><span>Region / country lines</span><input data-f="context" type="text" value="${esc((plan.context || []).join(', '))}" /></label>
         <label><span>Route from ${geo && plan.from ? ok(geo.from) : ''}</span><input data-f="from" type="text" value="${esc(plan.from)}" placeholder="optional" /></label>
         <label><span>Route to ${geo && plan.to ? ok(geo.to) : ''}</span><input data-f="to" type="text" value="${esc(plan.to)}" placeholder="optional" /></label>
@@ -442,8 +485,11 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
     if (!plan) return;
     const k = e.target.dataset.f;
     readFields();
+    if (k === 'title') plan.autoTitle = false;
+    if (k === 'subtitle') plan.autoSub = false;
     if (k === 'event') renderPlan();
-    if (['place', 'from', 'to', 'context'].includes(k)) { $('#av-make').disabled = true; status('Places changed — press “Find the places”'); }
+    if (k === 'coords') renderPlan();
+    if (['place', 'from', 'to', 'context', 'coords'].includes(k)) { $('#av-make').disabled = true; status('Places changed — press “Find the places”'); }
   });
   $('#av-check').onclick = check;
   $('#av-make').onclick = async () => {
