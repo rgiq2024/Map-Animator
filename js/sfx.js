@@ -1,6 +1,7 @@
 // Synthesised cinematic sound: background scores and sound effects (explosions, bomb whistles, jet
 // fly-bys, drones, helicopters, missile launches, rocket rumble, wind, whooshes, HUD beeps & glitches,
 // typing). Everything is generated with Web Audio, so it works offline and exports into the MP4.
+import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 
 import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
@@ -309,12 +310,118 @@ Object.assign(SYN, {
     for (let t = 1.2; t < d - 1; t += 3 + Math.random() * 3) SYN.thunder(ctx, out, w + t, { vol: v * 0.6 });
   },
 });
+// military & radar sounds
+Object.assign(SYN, {
+  radar(ctx, out, w, p) {
+    const d = clamp(p.dur || 6, 1, 60), v = p.vol ?? 1, per = clamp(p.period || 2.4, 0.8, 8);
+    const hum = osc(ctx, 'sine', 100, w, d); const hg = env(ctx, w, [[0.4, 0.05 * v], [d - 0.4, 0.05 * v], [d, 0.001, 1]]); hum.connect(hg).connect(out);
+    const h2 = osc(ctx, 'sine', 200, w, d); const h2g = env(ctx, w, [[0.4, 0.015 * v], [d - 0.4, 0.015 * v], [d, 0.001, 1]]); h2.connect(h2g).connect(out);
+    for (let t = 0; t < d - 0.3; t += per) {
+      const n = src(ctx, 'pink', w + t, per); const f = filt(ctx, 'bandpass', 700, 1.5);
+      f.frequency.setValueAtTime(400, w + t); f.frequency.linearRampToValueAtTime(1300, w + t + per * 0.5); f.frequency.linearRampToValueAtTime(400, w + t + per);
+      const g = env(ctx, w + t, [[per * 0.5, 0.16 * v], [per, 0.001, 1]]); n.connect(f).connect(g).connect(out);
+      SYN.ping(ctx, out, w + t + per * 0.5, { freq: 1180, vol: 0.35 * v });
+    }
+  },
+  acquire(ctx, out, w, p) {
+    const d = clamp(p.dur || 1.5, 0.2, 20), v = p.vol ?? 1;
+    const o = osc(ctx, 'triangle', 820, w, d);
+    const fm = osc(ctx, 'sine', 9, w, d); const fg = ctx.createGain(); fg.gain.value = 70; fm.connect(fg).connect(o.frequency);
+    o.frequency.linearRampToValueAtTime(980, w + d);
+    const am = ctx.createGain(); am.gain.value = 0.6;
+    const al = osc(ctx, 'square', 26, w, d); const alg = ctx.createGain(); alg.gain.value = 0.4; al.connect(alg).connect(am.gain);
+    const f = filt(ctx, 'lowpass', 2600);
+    const g = env(ctx, w, [[0.08, 0.13 * v], [d - 0.05, 0.13 * v], [d, 0.001, 1]]);
+    o.connect(am).connect(f).connect(g).connect(out);
+  },
+  lockon(ctx, out, w, p) {
+    const d = clamp(p.dur || 1.2, 0.2, 10), v = p.vol ?? 1;
+    const o = osc(ctx, 'square', 1560, w, d); const f = filt(ctx, 'lowpass', 3200);
+    const g = env(ctx, w, [[0.01, 0.07 * v], [d - 0.05, 0.07 * v], [d, 0.001, 1]]);
+    o.connect(f).connect(g).connect(out);
+  },
+  missilewarn(ctx, out, w, p) {
+    const d = clamp(p.dur || 2.4, 0.3, 20), v = p.vol ?? 1;
+    let i = 0;
+    for (let t = 0; t < d; t += 0.14, i++) {
+      const o = osc(ctx, 'square', i % 2 ? 1050 : 1350, w + t, 0.09); const f = filt(ctx, 'lowpass', 3000);
+      const g = env(ctx, w + t, [[0.004, 0.08 * v], [0.08, 0.08 * v], [0.09, 0.001, 1]]); o.connect(f).connect(g).connect(out);
+    }
+  },
+  morse(ctx, out, w, p) {
+    const tl = morseTimeline(p.text || 'SOS', p.wpm || 15), v = p.vol ?? 1;
+    const o = osc(ctx, 'sine', p.freq || 700, w, tl.total + 0.1);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, w);
+    for (const e of tl.els) {
+      g.gain.setValueAtTime(0, w + e.t); g.gain.linearRampToValueAtTime(0.16 * v, w + e.t + 0.006);
+      g.gain.setValueAtTime(0.16 * v, w + e.t + e.d - 0.006); g.gain.linearRampToValueAtTime(0, w + e.t + e.d);
+    }
+    o.connect(g).connect(out);
+  },
+  klaxon(ctx, out, w, p) {
+    const d = clamp(p.dur || 3.3, 0.5, 20), v = p.vol ?? 1;
+    for (let t = 0; t < d - 0.2; t += 1.1) {
+      for (const fr of [180, 183.5]) {
+        const o = osc(ctx, 'sawtooth', fr, w + t, 0.85); o.frequency.linearRampToValueAtTime(fr * 1.9, w + t + 0.25); o.frequency.setValueAtTime(fr * 1.9, w + t + 0.7); o.frequency.linearRampToValueAtTime(fr * 1.3, w + t + 0.85);
+        const f = filt(ctx, 'lowpass', 1800); const g = env(ctx, w + t, [[0.05, 0.07 * v], [0.75, 0.07 * v], [0.85, 0.001, 1]]); o.connect(f).connect(g).connect(out); g.connect(reverb(ctx, out));
+      }
+    }
+  },
+  siren(ctx, out, w, p) {
+    const d = clamp(p.dur || 6, 1, 30), v = p.vol ?? 1;
+    const o = osc(ctx, 'sawtooth', 260, w, d), o2 = osc(ctx, 'sine', 262, w, d);
+    for (const x of [o, o2]) { x.frequency.exponentialRampToValueAtTime(620, w + d * 0.45); x.frequency.setValueAtTime(620, w + d * 0.6); x.frequency.exponentialRampToValueAtTime(200, w + d); }
+    const f = filt(ctx, 'lowpass', 1500); const g = env(ctx, w, [[d * 0.3, 0.09 * v], [d * 0.8, 0.09 * v], [d, 0.001, 1]]);
+    o.connect(f); o2.connect(f); f.connect(g).connect(out); g.connect(reverb(ctx, out));
+  },
+  comms(ctx, out, w, p) {
+    const d = clamp(p.dur || 2.5, 0.5, 20), v = p.vol ?? 1;
+    SYN.static(ctx, out, w, { dur: 0.18, vol: 0.8 * v });
+    const n = src(ctx, 'pink', w + 0.15, d); const f1 = filt(ctx, 'bandpass', 900, 3), f2 = filt(ctx, 'highpass', 350), f3 = filt(ctx, 'lowpass', 2800);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, w);
+    for (let t = 0.15; t < d; t += 0.08 + Math.random() * 0.14) {
+      const a = Math.random() < 0.18 ? 0 : (0.25 + Math.random() * 0.45) * v;
+      g.gain.linearRampToValueAtTime(a, w + t); f1.frequency.linearRampToValueAtTime(500 + Math.random() * 1300, w + t);
+    }
+    g.gain.linearRampToValueAtTime(0, w + d + 0.1);
+    n.connect(f1).connect(f2).connect(f3).connect(g).connect(out);
+    SYN.radio(ctx, out, w + d + 0.12, { vol: v });
+  },
+  teletype(ctx, out, w, p) {
+    const d = clamp(p.dur || 2, 0.3, 20), v = p.vol ?? 1;
+    for (let t = 0; t < d; t += 0.09 + Math.random() * 0.03) {
+      const c = src(ctx, 'white', w + t, 0.03); const f = filt(ctx, 'bandpass', 1800 + Math.random() * 1200, 1.5);
+      const g = env(ctx, w + t, [[0.001, 0.2 * v], [0.025, 0.001, 1]]); c.connect(f).connect(g).connect(out);
+      const k = osc(ctx, 'sine', 140, w + t, 0.04); const kg = env(ctx, w + t, [[0.002, 0.12 * v], [0.035, 0.001, 1]]); k.connect(kg).connect(out);
+    }
+    SYN.beep(ctx, out, w + d, { freq: 2600, vol: 0.4 * v });
+  },
+  datalink(ctx, out, w, p) {
+    const d = clamp(p.dur || 0.9, 0.2, 6), v = p.vol ?? 1;
+    for (let t = 0; t < d; t += 0.035) {
+      const o = osc(ctx, 'sine', [1200, 2200, 1650, 2400, 980][Math.floor(Math.random() * 5)], w + t, 0.035);
+      const g = env(ctx, w + t, [[0.003, 0.07 * v], [0.032, 0.001, 1]]); o.connect(g).connect(out);
+    }
+  },
+  servo(ctx, out, w, p) {
+    const d = clamp(p.dur || 0.7, 0.2, 4), v = p.vol ?? 1;
+    const o = osc(ctx, 'sawtooth', 160, w, d); o.frequency.linearRampToValueAtTime(340, w + d * 0.7); o.frequency.linearRampToValueAtTime(290, w + d);
+    const f = filt(ctx, 'bandpass', 900, 2); const g = env(ctx, w, [[0.05, 0.07 * v], [d - 0.08, 0.07 * v], [d, 0.001, 1]]);
+    o.connect(f).connect(g).connect(out);
+  },
+  countdown(ctx, out, w, p) {
+    const n = clamp(Math.round(p.n && p.n < 11 ? p.n : 5), 1, 10), v = p.vol ?? 1;
+    for (let i = 0; i < n; i++) SYN.beep(ctx, out, w + i, { freq: 1000, vol: v });
+    const o = osc(ctx, 'sine', 1500, w + n, 0.7); const g = env(ctx, w + n, [[0.005, 0.2 * v], [0.65, 0.2 * v], [0.7, 0.001, 1]]); o.connect(g).connect(out);
+  },
+});
 /** The sound library: sounds you can drop on the timeline. */
 export const SOUND_LIBRARY = {
   'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
   'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', rocket: 'Rocket launch' },
   'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
+  'Military & radar': { radar: 'Radar sweep', acquire: 'Missile seeker growl', lockon: 'Lock-on tone', missilewarn: 'Missile warning', morse: 'Morse code (SOS)', comms: 'Radio chatter', teletype: 'Teletype', datalink: 'Data link', servo: 'Camera gimbal', klaxon: 'Klaxon', siren: 'Air-raid siren', countdown: 'Countdown beeps' },
   'Ambience': { wind: 'Wind', rain: 'Rain', storm: 'Storm (wind, rain, thunder)', crowd: 'Crowd murmur' },
 };
 export const SOUND_NAMES = Object.assign({}, ...Object.values(SOUND_LIBRARY));
@@ -427,6 +534,10 @@ export function buildEvents(project, models) {
         if (a) push(t0, a, { dur: D, vol: vol * 0.8 });
       } else if (L.kind === 'hud') {
         push(t0, 'hudboot', { vol });
+        if (s.variant === 'geoint') { push(t0 + 0.35, 'servo', { dur: 0.8, vol }); push(t0 + 1.3, 'datalink', { dur: 0.8, vol: vol * 0.8 }); push(t0 + 2.4, 'comms', { dur: 2.2, vol: vol * 0.7 }); }
+        if (s.variant === 'c2') { for (let k = 0; k < 8; k++) push(t0 + k * (D * 0.7 / 8) + 0.05, 'click', { vol }); push(t0 + D * 0.75, 'teletype', { dur: 1.6, vol: vol * 0.7 }); push(t0 + D + 0.4, 'datalink', { vol: vol * 0.7 }); push(t0 + D + 1.8, 'comms', { dur: 2.4, vol: vol * 0.6 }); }
+        if (s.variant === 'ops') { for (let k = 0; k < 6; k++) push(t0 + k * 0.12 * D + 0.05, 'click', { vol }); push(t0 + D * 0.8, 'datalink', { vol: vol * 0.7 }); }
+        if (s.variant === 'sigint') { const tl = morseTimeline(s.text || SIGINT_DEFAULT, s.wpm || 15); push(t0, 'static', { dur: tl.total + MORSE_DELAY + 0.8, vol: vol * 0.35 }); push(t0 + MORSE_DELAY, 'morse', { text: s.text || SIGINT_DEFAULT, wpm: s.wpm || 15, freq: 640, vol }); }
         if (s.variant === 'target') push(t0 + D * 0.95, 'lock', { vol });
         if (s.variant === 'radar') for (let k = 0; k < 12; k++) push(t0 + 0.6 + k * ((Math.PI * 2) / (1.6 * (+s.speed || 1))), 'ping', { vol: vol * 0.45 });
         if (s.variant === 'mission') push(t0 + 0.2, 'type', { n: (s.text || '').length, dur: D * 0.95, vol: vol * 0.8 });
@@ -434,9 +545,12 @@ export function buildEvents(project, models) {
       } else if (L.kind === 'target') {
         const lt = Math.max(0.3, D) * 0.75;
         for (let k = 0; k < 6; k++) { const tt = t0 + (k / 6) * lt * (1 - k * 0.05); push(tt, 'beep', { freq: 1400 + k * 120, vol: vol * 0.4 }); }
+        push(t0, 'acquire', { dur: lt, vol: vol * 0.8 });
         push(t0 + lt, 'lock', { vol });
+        push(t0 + lt + 0.05, 'lockon', { dur: 1.1, vol: vol * 0.8 });
       } else if (L.kind === 'hudtext') {
-        if (s.look === 'alert') for (let k = 0; k < 4; k++) push(t0 + k * 0.45, 'beep', { freq: 880, vol: vol * 0.6 });
+        if (s.look === 'morse') push(t0 + MORSE_DELAY, 'morse', { text: s.text || 'SOS', wpm: s.wpm || 15, freq: 700, vol });
+        else if (s.look === 'alert') for (let k = 0; k < 4; k++) push(t0 + k * 0.45, 'beep', { freq: 880, vol: vol * 0.6 });
         else if (s.look === 'terminal' || s.look === 'telemetry') push(t0, 'type', { n: (s.text || '').length, dur: Math.max(0.5, D), vol: vol * 0.7 });
         else if (s.look === 'stamp') push(t0 + 0.12, 'braam', { vol: vol * 0.5 });
         else push(t0, 'glitch', { dur: 0.3, vol: vol * 0.6 });

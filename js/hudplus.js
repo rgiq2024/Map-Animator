@@ -1,6 +1,7 @@
 // More HUD looks (tactical, radar scope, thermal, mission briefing, terrain scanner), placeable HUD text
 // boxes (telemetry, alert, terminal, live coordinates, stamp, ticker) and animated target markers.
 import { placeAt } from './place.js';
+import { milFilter, drawMorseText } from './milhud.js';
 
 const MONO = '"JetBrains Mono",ui-monospace,Menlo,monospace';
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
@@ -44,9 +45,10 @@ export const HUD_PLUS = {
 /** CSS filter for the map while a thermal HUD is on. */
 export function thermalFilter(scene, t, layerTiming) {
   for (const L of scene.layers || []) {
-    if (L.kind !== 'hud' || L.hidden || L.style?.variant !== 'thermal') continue;
+    if (L.kind !== 'hud' || L.hidden || !['thermal', 'geoint'].includes(L.style?.variant)) continue;
     const tm = layerTiming(L, t);
     if (!tm.visible) continue;
+    if (L.style.variant === 'geoint') { const f = milFilter(L); if (f) return f; continue; }
     const base = 'grayscale(1) contrast(1.45) brightness(1.06)';
     return L.style.polarity === 'black' ? `${base} invert(1)` : base;
   }
@@ -254,12 +256,13 @@ export function drawHUDPlus(ctx, L, tm, o) {
 // ================================================================= HUD text boxes (placeable)
 export const HUDTEXT_STYLES = {
   telemetry: 'Telemetry (label: value lines)', alert: 'Alert / warning banner', terminal: 'Terminal (typed lines)',
-  coords: 'Live coordinates', stamp: 'Stamp (CLASSIFIED…)', ticker: 'Ticker (scrolling)',
+  coords: 'Live coordinates', stamp: 'Stamp (CLASSIFIED…)', ticker: 'Ticker (scrolling)', morse: 'Morse code (dots, dashes and sound)',
 };
 export function drawHudText(ctx, L, tm, o) {
   const { frame, unit } = o;
   const s = L.style;
   const st = s.look || 'telemetry';
+  if (st === 'morse') { drawMorseText(ctx, L, tm, o); return; }
   const col = s.color || (st === 'alert' || st === 'stamp' ? '#ff3b30' : '#7CFF7C');
   const k = +s.size || 1;
   const t = o.time ?? 0;

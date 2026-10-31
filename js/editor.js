@@ -27,6 +27,7 @@ import { IMG_KINDS, readGeoImages, storeImage, imageFor, preloadImages, mediaOf,
 import { WaybackLayers, waybackReleases, yearlyReleases } from './wayback.js';
 import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, liveWeather } from './livesat.js';
 import { thermalFilter } from './hudplus.js';
+import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 import { drawLetterbox, TITLE_LOOKS } from './titles.js';
 import { NEWS_LOOKS } from './news.js';
 import { drawScreenEffects, effectFilter, shakeAt, EFFECT_LOOKS } from './screenfx.js';
@@ -1626,9 +1627,10 @@ export function createEditor() {
     if (L.style.font) loadFonts(scene()).then(repaint);
     if (kind === 'video') $('#file-video').click();
   });
-  $('#add-info').addEventListener('click', (e) => {
+  const addInfo = (e) => {
     const b = e.target.closest('[data-add]');
     if (!b) return;
+    if (b.dataset.add === 'target') { startAdd('target'); return; }
     cancelDrawing();
     const L = newLayer(b.dataset.add, null, { start: newStart() });
     if (b.dataset.type) {
@@ -1653,13 +1655,19 @@ export function createEditor() {
         coords: ['Live coordinates', '', 'bottom-right'],
         stamp: ['Stamp', 'CLASSIFIED', 'top-right'],
         ticker: ['News ticker', 'Satellite imagery confirms new construction\nRescue teams reach the flooded district\nMore updates to follow', 'bottom'],
+        morse: ['Morse code', 'SOS DE ALPHA ONE', 'bottom-left'],
       }[b.dataset.look];
       if (T) { [L.name, L.style.text, L.style.position] = T; }
+      if (b.dataset.look === 'morse') { Object.assign(L.style, { color: '#ffb020', wpm: 15, label: 'MORSE · CW', wave: true }); L.anim = 'none'; L.duration = +(morseTimeline(L.style.text, 15).total + MORSE_DELAY + 0.3).toFixed(2); L.hold = 3; }
       if (b.dataset.look === 'stamp') L.anim = 'fade';
     }
     if (b.dataset.variant) {
       L.style.variant = b.dataset.variant;
-      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock', tactical: 'Tactical HUD', radar: 'Radar scope', thermal: 'Thermal camera', scanner: 'Terrain scanner', mission: 'Mission briefing' }[b.dataset.variant];
+      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock', tactical: 'Tactical HUD', radar: 'Radar scope', thermal: 'Thermal camera', scanner: 'Terrain scanner', mission: 'Mission briefing', geoint: 'GEOINT drone feed', c2: 'Command & control wall', ops: 'Operations dashboard', sigint: 'Signals intercept' }[b.dataset.variant];
+      if (b.dataset.variant === 'geoint') { Object.assign(L.style, { color: '#ffffff', label: 'GEOINT · EO/IR', tint: b.dataset.tint || 'blue', scan: true }); L.duration = 1.5; }
+      if (b.dataset.variant === 'c2') { Object.assign(L.style, { color: '#38d0ff', label: 'COMMAND & CONTROL · OPS CENTER', panels: true, lights: true, clock: '20:45' }); L.anim = 'boot'; L.duration = 3; }
+      if (b.dataset.variant === 'ops') { Object.assign(L.style, { color: '#38d0ff', label: 'OPERATIONS DASHBOARD', status: 'THREAT LEVEL: ELEVATED', clock: '20:45' }); L.duration = 2; }
+      if (b.dataset.variant === 'sigint') { Object.assign(L.style, { color: '#7CFF7C', label: 'SIGINT · INTERCEPT', text: SIGINT_DEFAULT, freq: '7.0235', wpm: 15, position: 'bottom' }); L.anim = 'fade'; L.duration = 0.6; L.hold = +(morseTimeline(SIGINT_DEFAULT, 15).total + 2.5).toFixed(1); }
       if (b.dataset.variant === 'thermal') { L.style.color = '#ffffff'; L.style.label = 'FLIR-1'; }
       if (b.dataset.variant === 'mission') { L.style.position = 'top-left'; L.style.label = 'MISSION BRIEFING'; L.duration = 4; }
       if (b.dataset.variant === 'radar') L.style.label = 'AIR SEARCH';
@@ -1669,7 +1677,9 @@ export function createEditor() {
       if (b.dataset.variant === 'target') { L.style.color = '#ff5a52'; L.style.label = 'TGT-07'; L.duration = 2; }
     }
     addLayer(L);
-  });
+  };
+  $('#add-info').addEventListener('click', addInfo);
+  $('#add-mil')?.addEventListener('click', addInfo);
 
   // editor form
   const fRow = (label, inner, cls = '') => `<label class="row ${cls}"><span>${label}</span>${inner}</label>`;
