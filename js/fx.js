@@ -12,6 +12,7 @@ import { drawCyclone, drawCycloneLegend, drawPressure, drawFront, FRONT_TYPES, d
 import { drawTitle, TITLE_LOOKS } from './titles.js';
 import { drawNews, NEWS_LOOKS } from './news.js';
 import { EFFECT_LOOKS, drawVideoLayer } from './screenfx.js';
+import { TWIN_KINDS, TWIN_ANIMS, TWIN_DEFAULTS, TWIN_FORMS, TWIN_SET, twinPhases, drawTwin, drawSensor } from './twin.js';
 import { HZ_KINDS, HZ_ANIMS, HZ_DEFAULTS, HZ_FORMS, HZ_SET, hzPhases, drawHazard } from './hazards.js';
 import { drawPeople, CROWD_BEHAVIOURS, CROWD_LOOKS } from './people.js';
 import { NET_KINDS, NET_ANIMS, NET_DEFAULTS, NET_FORMS, NET_SET, netPhases, drawNet } from './network.js';
@@ -38,6 +39,7 @@ function hexA(hex, a) {
 
 // ---------------------------------------------------------------- catalogue (merged into LAYER_KINDS)
 export const FX_KINDS = {
+  ...TWIN_KINDS,
   crowd: { name: 'People / crowd', icon: '🧍', geom: 'point', desc: 'Animated people: a crowd, a protest march, people walking, gathering or running away' },
   ...HZ_KINDS,
   ...NET_KINDS,
@@ -74,6 +76,7 @@ export const FX_KINDS = {
   forecast:  { name: 'Weather forecast', icon: '📅', geom: null, desc: 'TV weather panels: days ahead, cities, current conditions, warnings' },
 };
 export const FX_ANIMS = {
+  ...TWIN_ANIMS,
   crowd: { none: 'Already there', appear: 'Appear one by one' },
   ...HZ_ANIMS,
   ...NET_ANIMS,
@@ -106,6 +109,7 @@ export const FX_ANIMS = {
   forecast: { in: 'Animate in' },
 };
 export const FX_DEFAULTS = {
+  ...TWIN_DEFAULTS,
   crowd: { anim: 'none', duration: 1.5, style: { behaviour: 'crowd', look: 'people', count: 150, radius: 40, width: 14, speed: 1, size: 1, exaggerate: 3, flagColor: '#e53935', view: 'auto', seed: 0 } },
   ...HZ_DEFAULTS,
   ...NET_DEFAULTS,
@@ -145,6 +149,7 @@ const VEHICLES = { missile: 'Missile (arc)', rocket: 'Rocket (high arc)', drone:
 const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', center: 'Centre', ...CUSTOM_POS };
 /** Form fields for the layer editor: [path, label, type, options]. */
 export const FX_FORMS = {
+  ...TWIN_FORMS,
   crowd: [['style.behaviour', 'What they do', 'select', CROWD_BEHAVIOURS], ['style.look', 'Who', 'select', CROWD_LOOKS], ['style.count', 'How many people', 'range', [5, 800, 5]], ['style.radius', 'Spread (m around the point)', 'range', [5, 600, 1], (L) => L.geom?.type === 'Point'], ['style.width', 'Width of the march (m)', 'range', [2, 120, 1], (L) => L.geom?.type === 'LineString'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.exaggerate', 'Make people bigger (so they show)', 'range', [1, 10, 0.1]], ['style.flagColor', 'Flag colour', 'color', null, (L) => L.style.look === 'protest'], ['style.view', 'Seen from', 'select', { auto: 'Automatic (side when tilted)', side: 'Always from the side', top: 'Always from above' }], ['style.seed', 'Shuffle', 'number', 1]],
   ...HZ_FORMS,
   ...NET_FORMS,
@@ -157,7 +162,7 @@ export const FX_FORMS = {
   capture: [['style.color', 'Colour', 'color'], ['style.opacity', 'Opacity', 'range', [0.05, 0.9, 0.01]], ['style.dir', 'Advances from', 'select', { W: 'The west', E: 'The east', N: 'The north', S: 'The south', C: 'The middle' }], ['style.hatch', 'Hatching', 'switch'], ['style.arrows', 'Arrows on the front', 'switch'], ['style.flag', 'Flag when captured', 'switch'], ['style.label', 'Flag text', 'text'], ['style.font', 'Font', 'font']],
   vehicle: [['style.model3d', '3D model (instead of the flat symbol)', 'select', { '': 'None — flat symbol', ...MODEL_CHOICES }], ['style.alt3d', 'Flying height (3D)', 'range', [0, 300, 1], (L) => !!L.style.model3d && L.kind === 'bombing'], ['style.sizeMode', 'Size is', 'select', { screen: 'The same on screen', real: 'Real size (metres)' }, (L) => !!L.style.model3d], ['style.shadow', 'Shadow on the ground', 'switch', null, (L) => !!L.style.model3d], ['style.sprite', 'Vehicle', 'select', SPRITES], ['style.color', 'Accent colour', 'color'], ['style.size', 'Size', 'range', [0.4, 4, 0.05]], ['style.wake', 'Wake / trail', 'switch'], ['style.path', 'Show the path', 'switch'], ['style.label', 'Label', 'text']],
   chart: [['style.type', 'Type', 'select', { bar: 'Bar chart', hbar: 'Horizontal bars', line: 'Line chart', donut: 'Donut chart', counter: 'Counter', progress: 'Progress bars' }], ['style.title', 'Title', 'text'], ['style.data', 'Data (one “Label: value” per line)', 'textarea'], ['style.prefix', 'Before numbers', 'text'], ['style.suffix', 'After numbers', 'text'], ['style.position', 'Position', 'select', POS], ['style.size', 'Size', 'range', [0.5, 2, 0.05]], ['style.accent', 'Colour', 'color'], ['style.font', 'Font', 'font']],
-  model3d: [['style.source', 'Model', 'model'], ['style.livery', 'Train colours', 'select', LIVERY_NAMES, (L) => L.style.source === 'builtin:hst'], ['style.cars', 'Cars', 'range', [2, 12, 1], (L) => L.style.source === 'builtin:hst'], ['style.color', 'Accent colour (built-in models)', 'color'], ['style.size', 'Size', 'range', [0.1, 6, 0.05]], ['style.sizeMode', 'Size is', 'select', { screen: 'The same on screen at any zoom', real: 'Real-world metres (× size)' }], ['style.altitude', 'Height above ground', 'range', [0, 400, 1]], ['style.heading', 'Heading (°)', 'range', [-180, 180, 1]], ['style.pitch', 'Pitch (°)', 'range', [-90, 90, 1]], ['style.roll', 'Roll (°)', 'range', [-180, 180, 1]], ['style.motion', 'Motion', 'select', { none: 'None', move: 'Move along the path', spin: 'Spin', float: 'Float up and down' }], ['style.spinSpeed', 'Spin speed (°/s)', 'number', 1], ['style.yawOffset', 'Model faces (° offset)', 'number', 1], ['style.playAnim', 'Play the model’s own animation', 'switch']],
+  model3d: [['style.source', 'Model', 'model'], ['style.livery', 'Train colours', 'select', LIVERY_NAMES, (L) => L.style.source === 'builtin:hst'], ['style.cars', 'Cars', 'range', [2, 12, 1], (L) => L.style.source === 'builtin:hst'], ['style.color', 'Accent colour (built-in models)', 'color'], ['style.size', 'Size', 'range', [0.1, 6, 0.05]], ['style.sizeMode', 'Size is', 'select', { screen: 'The same on screen at any zoom', real: 'Real-world metres (× size)' }], ['style.altitude', 'Height above ground', 'range', [0, 400, 1]], ['style.heading', 'Heading (°)', 'range', [-180, 180, 1]], ['style.pitch', 'Pitch (°)', 'range', [-90, 90, 1]], ['style.roll', 'Roll (°)', 'range', [-180, 180, 1]], ['style.motion', 'Motion', 'select', { none: 'None', move: 'Move along the path', takeoff: 'Take off (runway → climb)', landing: 'Land (descend → runway)', spin: 'Spin', float: 'Float up and down' }], ['style.climb', 'Climb height (m)', 'range', [50, 3000, 10], (L) => ['takeoff', 'landing'].includes(L.style.motion)], ['style.spinSpeed', 'Spin speed (°/s)', 'number', 1], ['style.yawOffset', 'Model faces (° offset)', 'number', 1], ['style.playAnim', 'Play the model’s own animation', 'switch']],
   videofx: [['style.media', 'Clip', 'video'], ['style.size', 'Size', 'range', [0.1, 6, 0.05]], ['style.rotation', 'Rotation (°)', 'range', [-180, 180, 1]], ['style.blend', 'Background', 'select', { screen: 'Black background (screen blend)', lighter: 'Black background (add light)', normal: 'Transparent / normal' }], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.anchor', 'Anchor', 'select', { ground: 'Bottom on the point (explosions)', center: 'Centred on the point' }], ['style.speed', 'Playback speed', 'range', [0.25, 3, 0.05]], ['style.loop', 'Loop', 'switch'], ['style.flip', 'Mirror', 'switch'], ['style.boom', 'Add explosion sound', 'switch']],
   flicker: [['style.text', 'Text', 'text'], ['style.sub', 'Second line', 'text'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.font', 'Font', 'font'], ['style.box', 'Dark box behind', 'switch'], ['style.cursor', 'Blinking cursor', 'switch'], ['style.keepFlicker', 'Keep flickering a little', 'switch']],
   hud: [['style.variant', 'Style', 'select', { drone: 'Drone camera', satellite: 'Satellite feed', target: 'Target lock', minimal: 'Minimal frame', ...HUD_PLUS }], ['style.color', 'Colour', 'color'], ['style.label', 'Label', 'text'],
@@ -1253,6 +1258,8 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'servicearea': case 'odflow': case 'netroute': case 'geofence': drawNet(ctx, L, tm, o, phase); break;
     case 'blastzone': case 'wildfire': case 'deforest': case 'affected': drawHazard(ctx, L, tm, o, phase); break;
     case 'crowd': if (phase === 'above') drawPeople(ctx, L, tm, o); break;
+    case 'twin': drawTwin(ctx, L, tm, o, phase); break;
+    case 'sensor': if (phase === 'above') drawSensor(ctx, L, tm, o); break;
     case 'cyclone': if (phase === 'above') drawCyclone(ctx, L, tm, o); else if (phase === 'captions' && frame) drawCycloneLegend(ctx, L, tm, o); break;
     case 'pressure': if (phase === 'above') drawPressure(ctx, L, tm, o); break;
     case 'front': if (phase === 'below') drawFront(ctx, L, tm, o); break;
@@ -1291,6 +1298,7 @@ export function drawFX(ctx, L, tm, o, phase) {
 export function fxPhases(kind) {
   if (NET_SET.has(kind)) return netPhases(kind);
   if (HZ_SET.has(kind)) return hzPhases(kind);
+  if (TWIN_SET.has(kind)) return twinPhases(kind);
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];
   if (kind === 'forecast') return ['captions'];

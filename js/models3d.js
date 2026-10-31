@@ -620,7 +620,10 @@ export class ModelLayer {
       const role = it.job.role;
       if (role === 'model') {
         heading = +s.heading || 0;
-        const u = tm.edit ? 0.5 : ease(tm.tau / D);
+        const air = s.motion === 'takeoff' || s.motion === 'landing';
+        // take-off: speed up along the runway, lift off after 40 %; landing: the reverse
+        const lin = tm.edit ? 0.5 : clamp(tm.tau / D, 0, 1);
+        const u = air ? (s.motion === 'takeoff' ? lin * lin * 0.6 + lin * 0.4 : 1 - (1 - lin) * (1 - lin) * 0.6 - (1 - lin) * 0.4) : tm.edit ? 0.5 : ease(tm.tau / D);
         if (L.geom.type === 'LineString') {
           const p = pathAt(L.geom.coordinates, s.motion === 'none' ? 0 : u);
           ll = p.ll;
@@ -630,6 +633,12 @@ export class ModelLayer {
         altitude = +s.altitude || 0;
         if (s.motion === 'float') altitude += Math.sin(tt * 2) * (+s.size || 1) * 4;
         pitch = +s.pitch || 0; roll = +s.roll || 0;
+        if (air && L.geom.type === 'LineString') {
+          const climb = s.motion === 'takeoff' ? clamp((u - 0.4) / 0.6, 0, 1) : clamp((0.6 - u) / 0.6, 0, 1);
+          const top = Math.max(50, +s.climb || (real ? 250 : 120));
+          altitude += top * climb ** 1.6;
+          pitch += (s.motion === 'takeoff' ? 1 : -0.4) * (climb > 0 && climb < 0.98 ? 11 : 0) * Math.min(1, climb * 6);
+        }
         const pop = tm.edit ? 1 : Math.min(1, tm.tau / 0.4);
         if (L.anim === 'pop') scale *= 0.2 + 0.8 * pop;
       } else if (role === 'colA' || role === 'colB') {

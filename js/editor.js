@@ -40,6 +40,7 @@ import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
 import { AffectedBuildings } from './hazards.js';
+import { TwinCity } from './twin.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
 
@@ -109,7 +110,7 @@ export function createEditor() {
   let rafId = 0;
   let dpr = window.devicePixelRatio || 1;
   let selLayer = null, drawing = null, pickOrigin = null;
-  let floods = null, bldFactor = null, models = null, wayback = null, affected = null;
+  let floods = null, bldFactor = null, models = null, wayback = null, affected = null, twin = null;
 
   const scene = () => project.scenes[sceneIdx];
 
@@ -129,6 +130,8 @@ export function createEditor() {
     wayback = new WaybackLayers(map);
     affected = new AffectedBuildings(map);
     affected.onCount = () => repaint();
+    twin = new TwinCity(map);
+    twin.onChange = () => repaint();
     map.on('error', (e) => console.warn('map:', e?.error?.message || e));
     map.on('movestart', (e) => {
       if (e.originalEvent && viewMode === 'play' && !exporting) setViewMode('edit');
@@ -169,6 +172,7 @@ export function createEditor() {
       models?.attach();
       wayback?.attach();
       affected?.attach();
+      twin?.attach();
       $('#map').style.filter = gradeFilter(scene().look.grade);
       setSpaceBackground(scene().look.globe);
       applyTimeEffects(viewMode === 'play' ? time : null);
@@ -1205,7 +1209,7 @@ export function createEditor() {
     if (pendingStyle) { Object.assign(L.style, pendingStyle); pendingStyle = null; }
     if (L.kind === 'pressure') { L.name = L.style.type === 'H' ? 'High pressure' : 'Low pressure'; if (L.style.type === 'H') L.style.hpa = 1032; }
     if (L.kind === 'front') L.name = FRONT_TYPES_NAMES[L.style.type] || 'Front';
-    if (d.pathModel && L.kind === 'model3d') { L.style.motion = 'move'; L.name = '3D model on a path'; L.duration = 6; }
+    if (d.pathModel && L.kind === 'model3d') { if (!['takeoff', 'landing'].includes(L.style.motion)) L.style.motion = 'move'; L.name = L.style.motion === 'takeoff' ? 'Plane taking off' : L.style.motion === 'landing' ? 'Plane landing' : '3D model on a path'; L.duration = L.style.motion === 'takeoff' || L.style.motion === 'landing' ? 9 : 6; }
     if (d.pathModel && L.kind === 'trees') L.name = 'Tree row';
     if (L.kind === 'geofence') { L.style.path = defaultFencePath(geom); toast('A sample vehicle path crosses the zone — use “Draw the vehicle’s path” to draw your own', 4600); }
     if (L.kind === 'netroute') { const on = ['car', 'bike', 'foot', 'train', 'plane'].filter((k) => L.style[k]).map((k) => NET_MODES[k].name.toLowerCase()); L.name = `Route by ${on.join(', ')}`; }
@@ -1231,7 +1235,7 @@ export function createEditor() {
     renderCamSelects();
     floods?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); renderFloodInfo(); });
     models?.sync(scene()).then(() => { applyTimeEffects(viewMode === 'play' ? time : null); repaint(); });
-    wayback?.sync(scene()); affected?.sync(scene()); applyTimeEffects(viewMode === 'play' ? time : null);
+    wayback?.sync(scene()); affected?.sync(scene()); twin?.sync(scene()); applyTimeEffects(viewMode === 'play' ? time : null);
     preloadImages(scene()).then(repaint);
     eventsCache = null;
     if (layersOf().some((L) => NET_SET.has(L.kind))) scheduleNet();
@@ -1354,18 +1358,28 @@ export function createEditor() {
     const tip = { servicearea: 'Click the map where the zones start (e.g. a hospital or shop)', odflow: 'Click the origin first, then each destination — then press Finish', netroute: 'Click the start (A), then the end (B)', geofence: 'Click around the zone — then press Finish' }[b.dataset.add];
     if (tip) showHint(tip);
   });
-  // people, crowds and hazard zones
-  for (const sel of ['#add-people', '#add-hazard']) $(sel).addEventListener('click', (e) => {
+  // people, crowds, hazard zones and digital twins
+  for (const sel of ['#add-people', '#add-hazard', '#add-twin']) $(sel).addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
     if (!b) return;
     let st = null;
     try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
     pendingStyle = st;
     const k = b.dataset.add;
+    if (b.dataset.source) { pendingStyle = { ...(pendingStyle || {}), source: b.dataset.source }; }
+    if (k === 'twin') {
+      const sc = scene();
+      if (!['dark', 'fiord', 'neon', 'synthwave', 'deepocean', 'blueprint'].includes(sc.look.theme)) {
+        pushUndo();
+        Object.assign(sc.look, { theme: 'dark', placeNames: false, buildings3d: false });
+        applyLook(sc);
+        toast('Map switched to Dark for the digital-twin look — change it in Look. Click the centre of the city.', 5200);
+      }
+    }
     startAdd(k);
-    const tip = { crowdline: 'Click the route of the march — then press Finish', crowdarea: 'Click around the area — then press Finish', wildfire: 'Click around the area that burns — then press Finish', deforest: 'Click around the forest — then press Finish', affectedarea: 'Click around the affected area — then press Finish', blastzone: 'Click ground zero', affected: 'Click the centre of the affected area', crowd: 'Click where the people are' }[k];
+    const tip = { crowdline: 'Click the route of the march — then press Finish', crowdarea: 'Click around the area — then press Finish', wildfire: 'Click around the area that burns — then press Finish', deforest: 'Click around the forest — then press Finish', affectedarea: 'Click around the affected area — then press Finish', blastzone: 'Click ground zero', affected: 'Click the centre of the affected area', crowd: 'Click where the people are', twin: 'Click the centre of the city — the model rises from there', sensor: 'Click where the sensor is', model3dpath: 'Click the path (e.g. along the runway, then into the sky) — then press Finish', odflow: 'Click the origin first, then each destination — then press Finish' }[k];
     if (tip) showHint(tip);
-    if (/affected|blastzone/.test(k) && map.getZoom() < 13.5) toast('Buildings show from street level — zoom in to a city (zoom 14+) and tilt the camera', 4600);
+    if (/affected|blastzone|twin/.test(k) && map.getZoom() < 13.5) toast('Buildings show from street level — zoom in to a city (zoom 14+) and tilt the camera', 4600);
     if (/crowd/.test(k) && map.getPitch() < 20) toast('Tilt the camera to see the people standing up', 3600);
   });
   // computing network analysis results (service areas, routes) in the background
@@ -3062,6 +3076,7 @@ export function createEditor() {
     models?.update(sc, t, layerTiming);
     wayback?.update(sc, t, layerTiming);
     affected?.update(sc, t, layerTiming);
+    twin?.update(sc, t, layerTiming);
     if (!exporting) { const f = mapFilterAt(sc, t); const el = $('#map'); if (el.style.filter !== f) el.style.filter = f === 'none' ? '' : f; }
     const f = t == null || !m ? 1 : m.buildingsAt(t);
     const q = Math.round(f * 200) / 200;
@@ -3433,7 +3448,7 @@ export function createEditor() {
       const blob = await renderStill({
         map, width, height,
         beforeFrame: (s2, m, tt) => seekScene(s2, tt, layerTiming),
-        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); affected.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
+        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); affected.sync(s2); twin.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); jumpCam(c, sc, tt); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2, tt) => mapFilterAt(s2, tt),
         background: spaceBg,
