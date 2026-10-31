@@ -41,6 +41,7 @@ import { saveProject } from './store.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
 import { AffectedBuildings } from './hazards.js';
 import { TwinCity } from './twin.js';
+import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
 
@@ -1207,6 +1208,14 @@ export function createEditor() {
     } else geom = { type: 'Point', coordinates: d.coords[0] };
     const L = newLayer(d.kind, geom, { start: newStart(), preset: d.preset });
     if (pendingStyle) { Object.assign(L.style, pendingStyle); pendingStyle = null; }
+    if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
+    if (L.kind === 'smartmap' && !(L.style.data || []).length) {
+      const n = { rings: 40, reach: 24, halo: 24, circles: 60 }[L.style.mode] || 180;
+      L.style.data = sampleData(L.geom.coordinates[0], n, Math.floor(Math.random() * 1000));
+      L.style.dataName = 'sample data';
+      L.name = { cells: 'Population (mosaic)', glow: 'Income (hot spots)', rings: 'Potential sites', reach: 'Drive times', halo: 'Projected revenue', heat: 'Heat map', circles: 'Sized circles' }[L.style.mode] || 'Smart map';
+      toast('Filled with sample data — load your own CSV / GeoJSON in the layer settings', 4200);
+    }
     if (L.kind === 'pressure') { L.name = L.style.type === 'H' ? 'High pressure' : 'Low pressure'; if (L.style.type === 'H') L.style.hpa = 1032; }
     if (L.kind === 'front') L.name = FRONT_TYPES_NAMES[L.style.type] || 'Front';
     if (d.pathModel && L.kind === 'model3d') { if (!['takeoff', 'landing'].includes(L.style.motion)) L.style.motion = 'move'; L.name = L.style.motion === 'takeoff' ? 'Plane taking off' : L.style.motion === 'landing' ? 'Plane landing' : '3D model on a path'; L.duration = L.style.motion === 'takeoff' || L.style.motion === 'landing' ? 9 : 6; }
@@ -1357,6 +1366,55 @@ export function createEditor() {
     startAdd(b.dataset.add);
     const tip = { servicearea: 'Click the map where the zones start (e.g. a hospital or shop)', odflow: 'Click the origin first, then each destination — then press Finish', netroute: 'Click the start (A), then the end (B)', geofence: 'Click around the zone — then press Finish' }[b.dataset.add];
     if (tip) showHint(tip);
+  });
+  // smart maps: data layers over a region, legends, info cards
+  const SM_NAMES = { cells: 'Population (mosaic)', glow: 'Income (hot spots)', rings: 'Potential sites', reach: 'Drive times', halo: 'Projected revenue', heat: 'Heat map', circles: 'Sized circles' };
+  function sitesFrom(data, n) {
+    const sorted = [...data].sort((a, b) => (+b[2] || 0) - (+a[2] || 0));
+    const out = [];
+    for (const d of sorted) { if (out.length >= n) break; if (out.every((o) => Math.hypot(o[0] - d[0], o[1] - d[1]) > 0.02)) out.push(d); }
+    return out;
+  }
+  $('#add-smart').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    let st = null;
+    try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
+    const k = b.dataset.add;
+    if (k === 'nightroads') {
+      pushUndo();
+      const sc = scene();
+      Object.assign(sc.look, { theme: 'nightroads', placeNames: false, buildings3d: false, terrain: false, shading: true });
+      sc.camera.tilt = Math.max(+sc.camera.tilt || 0, 45);
+      applyLook(sc); renderLookControls(); save();
+      toast('Night roads map with a 45° tilt — glowing roads on dark relief', 3600);
+      return;
+    }
+    if (k === 'smartmap') {
+      const prev = [...layersOf()].reverse().find((x) => x.kind === 'smartmap' && x.geom);
+      if (prev) {
+        // reuse the region and data of the last smart map
+        cancelDrawing();
+        const L = newLayer('smartmap', JSON.parse(JSON.stringify(prev.geom)), { start: newStart() });
+        if (st?.anim) { L.anim = st.anim; delete st.anim; }
+        Object.assign(L.style, st || {});
+        const sitesLayer = [...layersOf()].reverse().find((x) => x.kind === 'smartmap' && x.style.mode === 'rings');
+        const base = prev.style.mode === 'rings' || prev.style.mode === 'reach' || prev.style.mode === 'halo' ? (layersOf().find((x) => x.kind === 'smartmap' && !['rings', 'reach', 'halo'].includes(x.style.mode))?.style.data || prev.style.data) : prev.style.data;
+        L.style.data = ['rings', 'reach', 'halo'].includes(L.style.mode) ? (sitesLayer && sitesLayer !== L ? sitesLayer.style.data.slice() : sitesFrom(base || [], L.style.mode === 'rings' ? 40 : 24)) : (base || []).slice();
+        L.style.dataName = prev.style.dataName || '';
+        L.name = SM_NAMES[L.style.mode] || 'Smart map';
+        addLayer(L);
+        toast(`${L.name} added over the same region and data`, 3000);
+        return;
+      }
+      pendingStyle = st;
+      startAdd('smartmap');
+      showHint('Click around the region (a state, a city…) — then press Finish');
+      return;
+    }
+    pendingStyle = st;
+    startAdd(k);
+    if (k === 'infocard') showHint('Click the place the card stands on');
   });
   // people, crowds, hazard zones and digital twins
   for (const sel of ['#add-people', '#add-hazard', '#add-twin']) $(sel).addEventListener('click', (e) => {
@@ -1707,6 +1765,13 @@ export function createEditor() {
       if (IMG_KINDS.has(L.kind) && L.geom) h += renderGeoref(L);
       if (L.kind === 'wxfield') h += `<div class="btn-row"><button class="btn sm" data-act="wxLive">${L.style.grid ? 'Refresh live data' : 'Load live data for this area'}</button></div><p class="hint-line">${L.style.grid ? `Live data from Open-Meteo${L.style.grid.time ? ` · ${esc(L.style.grid.time.replace('T', ' '))} UTC` : ''}. Saved in the project, so the video stays the same.` : 'Real temperature, rain, wind, humidity and pressure right now (Open-Meteo, free). Drag the corners to change the area first.'}</p>`;
       if (NET_SET.has(L.kind)) h += renderNetTools(L);
+      if (L.kind === 'smartmap') {
+        const polys = layersOf().filter((x) => x !== L && x.geom && /Polygon/.test(x.geom.type));
+        h += `<h5>Data</h5><div class="net-status">${(L.style.data || []).length} points · ${esc(L.style.dataName || 'no data')}</div>`;
+        h += '<div class="btn-row"><button class="btn sm" data-act="smLoad">Load CSV / GeoJSON…</button><button class="btn sm" data-act="smSample">New sample data</button></div>';
+        if (polys.length) h += `<div class="btn-row"><select id="sm-region">${polys.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="smRegion">Use this region</button></div>`;
+        h += '<p class="hint-line">CSV with latitude / longitude columns and a number column (population, sales…). The first number column is used. Drag the region corners to reshape it.</p>';
+      }
       if (L.kind === 'cyclone') h += '<p class="hint-line">Draw the track point by point; give each point a category (TD, TS, 1–5). The storm spins anticlockwise in the north and clockwise in the south.</p>';
       if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
       if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
@@ -2067,6 +2132,9 @@ export function createEditor() {
         toast(`${frames.length} satellite image${frames.length === 1 ? '' : 's'} loaded`);
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
     }
+    if (a === 'smLoad') $('#file-sm').click();
+    if (a === 'smSample') { pushUndo(); L.style.data = sampleData(L.geom.coordinates[0], { rings: 40, reach: 24, halo: 24, circles: 60 }[L.style.mode] || 180, Math.floor(Math.random() * 1000)); L.style.dataName = 'sample data'; commitLayers(); renderLayerEditor(); }
+    if (a === 'smRegion') { const src = layerById($('#sm-region').value); if (src?.geom) { pushUndo(); const g = src.geom.type === 'MultiPolygon' ? { type: 'Polygon', coordinates: src.geom.coordinates.reduce((m, p) => (p[0].length > m[0].length ? p : m)) } : JSON.parse(JSON.stringify(src.geom)); L.geom = g; commitLayers(); renderLayerEditor(); toast('Region copied — press “New sample data” or load your data for it'); } }
     if (a === 'netRun') { L.style.resultTry = ''; L.style.resultSig = ''; L.style.resultErr = ''; scheduleNet(0); }
     if (a === 'fenceReset') { pushUndo(); L.style.path = defaultFencePath(L.geom); commitLayers(); renderLayerEditor(); }
     if (a === 'fencePath') {
@@ -2834,6 +2902,39 @@ export function createEditor() {
   $('#join-secs').addEventListener('change', (e) => { scene().transitionSeconds = +e.target.value; save(); });
   $('#stinger-btn').addEventListener('click', () => $('#file-stinger').click());
   $('#stinger-blend').addEventListener('change', (e) => { scene().transitionBlend = e.target.value; save(); });
+  $('#file-sm').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    const L = selLayer && layerById(selLayer);
+    if (!f || !L || L.kind !== 'smartmap') return;
+    try {
+      const text = await f.text();
+      let data = [];
+      if (/\.(geo)?json$/i.test(f.name) || text.trim().startsWith('{')) {
+        const gj = JSON.parse(text);
+        const feats = gj.type === 'FeatureCollection' ? gj.features : gj.type === 'Feature' ? [gj] : [];
+        const numKey = (() => { for (const ft of feats) for (const [k, v] of Object.entries(ft.properties || {})) if (Number.isFinite(+v) && v !== '' && v !== null && typeof v !== 'boolean') return k; return null; })();
+        for (const ft of feats) {
+          const g = ft.geometry; if (!g) continue;
+          let c = null;
+          if (g.type === 'Point') c = g.coordinates;
+          else { const ring = g.type === 'Polygon' ? g.coordinates[0] : g.type === 'MultiPolygon' ? g.coordinates[0][0] : g.type === 'LineString' ? g.coordinates : null; if (ring) { let x = 0, y = 0; for (const p of ring) { x += p[0]; y += p[1]; } c = [x / ring.length, y / ring.length]; } }
+          if (c) data.push([+c[0].toFixed(5), +c[1].toFixed(5), numKey ? +ft.properties[numKey] || 0 : 1]);
+        }
+        L.style.dataName = `${f.name}${numKey ? ` · ${numKey}` : ''}`;
+      } else {
+        const r = parseCSVPoints(text);
+        const vi = r.header.findIndex((h, i) => i !== r.lat && i !== r.lon && r.rows.filter((row) => Number.isFinite(+row[i]) && row[i] !== '').length > r.rows.length * 0.8);
+        data = r.rows.map((row) => [+(+row[r.lon]).toFixed(5), +(+row[r.lat]).toFixed(5), vi >= 0 ? +row[vi] || 0 : 1]);
+        L.style.dataName = `${f.name}${vi >= 0 ? ` · ${r.header[vi]}` : ''}`;
+      }
+      if (!data.length) throw new Error('No points with coordinates were found');
+      pushUndo();
+      L.style.data = data.slice(0, 20000);
+      commitLayers(); renderLayerEditor();
+      toast(`${data.length.toLocaleString()} points loaded`);
+    } catch (err) { toast(err.message || 'Could not read that file', 4200); }
+  });
   $('#file-stinger').addEventListener('change', async (e) => {
     const f = e.target.files[0];
     e.target.value = '';

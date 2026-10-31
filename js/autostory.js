@@ -2,7 +2,8 @@
 // Toledo, Castilla-La Mancha") and get a finished multi-scene project: an opening title, a news-explainer map
 // with the route and places, the event itself in 3D (train collision, flood, cyclone, fire, blast, route…)
 // and an end card. Everything is built from the app's own layers, so every part stays editable.
-import { geocode } from './services.js';
+import { geocode, searchBoundaries } from './services.js';
+import { sampleData } from './smartmap.js';
 import { newScene, fitCamera } from './scene.js';
 import { newLayer } from './layers.js';
 import { presetGrade } from './effects.js';
@@ -52,6 +53,7 @@ export const EVENTS = {
   quake: 'Earthquake',
   fire: 'Fire / wildfire',
   strike: 'Explosion / strike',
+  siteselection: 'Site selection (where to open a store)',
   journey: 'Journey from A to B',
   servicearea: 'Reach from a place (drive / walk time)',
   place: 'Spotlight on a place',
@@ -63,6 +65,7 @@ function detectEvent(t) {
   if (/(plane|aircraft|airliner|flight|jet)[^.]*?(crash|down)/.test(x)) return 'planecrash';
   if (/(ship|vessel|ferry|boat|tanker)[^.]*?(collision|collid|crash|sink|sank|aground)/.test(x)) return 'shipcrash';
   if (/(car|road|traffic|bus|truck|lorry|highway|motorway)[^.]*?(crash|accident|collision|pile-?up)/.test(x)) return 'carcrash';
+  if (/site selection|(best|new|open|ideal)\s+(a\s+)?(store|shop|branch|outlet|restaurant|location|site)|where to (open|build|put)/.test(x)) return 'siteselection';
   if (/flood|inundat/.test(x)) return 'flood';
   if (/cyclone|hurricane|typhoon|storm|tropical depression/.test(x)) return 'cyclone';
   if (/earthquake|quake|seismic|tremor/.test(x)) return 'quake';
@@ -166,7 +169,7 @@ function deriveTitles(plan) {
       carcrash: `Road crash near ${where}`, shipcrash: `Ship collision off ${where}`, planecrash: `Plane crash near ${where}`,
       flood: `Flooding in ${where}`, cyclone: `The storm reaches ${where}`, quake: `Earthquake near ${where}`, fire: `Fire near ${where}`, strike: `Blast in ${where}`,
       journey: plan.from && plan.to ? `From ${plan.from} to ${plan.to} by ${MODES[plan.mode].toLowerCase()}` : `A journey to ${where}`,
-      servicearea: `How far can you get from ${where}?`, place: where,
+      servicearea: `How far can you get from ${where}?`, place: where, siteselection: `Where to open the next store in ${where}`,
     }[plan.event] || where;
     plan.autoSub = true;
   }
@@ -203,6 +206,24 @@ export async function resolvePlaces(plan, progress = () => {}) {
     } catch { /* fine without it */ }
   } else if (plan.place) g.place = await find(plan.place, hint);
   const country = g.place?.country || g.from?.country || g.to?.country;
+  if (plan.event === 'siteselection' && plan.place) {
+    progress('Finding the region outline…');
+    try {
+      const b = (await searchBoundaries(plan.place))[0];
+      if (b) {
+        const polys = b.geometry.type === 'Polygon' ? [b.geometry.coordinates] : b.geometry.coordinates;
+        let ring = polys.reduce((m, p) => (p[0].length > m.length ? p[0] : m), []);
+        const step = Math.max(1, Math.ceil(ring.length / 400));
+        ring = ring.filter((_, i) => i % step === 0);
+        ring.push(ring[0]);
+        g.region = ring.map(([x, y]) => [r6(x), r6(y)]);
+      }
+    } catch { /* fall back below */ }
+    if (!g.region && g.place) {
+      const bb = g.place.bbox || [[g.place.ll[0] - 1.5, g.place.ll[1] - 1.2], [g.place.ll[0] + 1.5, g.place.ll[1] + 1.2]];
+      g.region = [[bb[0][0], bb[0][1]], [bb[1][0], bb[0][1]], [bb[1][0], bb[1][1]], [bb[0][0], bb[1][1]], [bb[0][0], bb[0][1]]];
+    }
+  }
   if (country) { progress('Finding the country…'); const c = await find(country); if (c) g.country = { ...c, name: country }; }
   if (g.from && g.to && plan.event !== 'servicearea') {
     progress('Tracing the route…');
@@ -268,7 +289,80 @@ const circle = (c, m, n = 48) => { const r = Array.from({ length: n }, (_, i) =>
  * Build the scenes. opts: { length: seconds target (30 / 60 / 120), aspect: width / height, style: 'news' | 'documentary' }.
  * Returns { name, scenes }.
  */
+function buildSiteStory(plan, g, opts) {
+  const k = clamp((+opts.length || 45) / 30, 0.7, 4);
+  const vh = REF_W / (opts.aspect || 16 / 9);
+  const ring = g.region;
+  if (!ring) throw new Error('No region outline found — check the place name');
+  const data = sampleData(ring, 180, 7);
+  const sorted = [...data].sort((a, b) => b[2] - a[2]);
+  const sites = [];
+  const b0 = bboxOf(ring);
+  const minGap = Math.max(b0[1][0] - b0[0][0], b0[1][1] - b0[0][1]) * 0.025;
+  for (const d of sorted) { if (sites.length >= 40) break; if (sites.every((o) => Math.hypot(o[0] - d[0], o[1] - d[1]) > minGap)) sites.push(d); }
+  const best = sites[0];
+  const fit = fitCamera(b0, REF_W, vh, 0.06);
+  const zR = clamp(fit.zoom, 3, 11);
+  const regionGeom = { type: 'Polygon', coordinates: [ring] };
+  const span = Math.max(b0[1][0] - b0[0][0], b0[1][1] - b0[0][1]);
+  const reachKm = Math.max(1.5, span * 111 * 0.035);
+  const sm = (start, dur, style, anim, name) => L('smartmap', JSON.parse(JSON.stringify(regionGeom)), start, { duration: dur, anim, name, style: { data: style.data || data, dataName: 'sample data — load your own in the layer settings', ...style } });
+  const legend = (start, items, hold) => L('legend', null, start, { hold, style: { items } });
+  const scenes = [];
+  // 1. the region: population, income, potential stores
+  {
+    const D = 12.5 * k;
+    const sc = newScene('Region');
+    Object.assign(sc.look, { theme: 'nightroads', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
+    sc.camera.mode = 'keyframes'; sc.camera.tilt = 48;
+    sc.camera.keys = [K(0, V(fit.center, zR - 0.25, -10, 48), 'linear'), K(D, V(fit.center, zR + 0.15, 4, 50), 'linear')];
+    sc.stillStart = 0; sc.stillEnd = 0.3;
+    sc.camera.lens = { ...sc.camera.lens, vignette: 0.45 };
+    sc.layers.push(L('boundary', JSON.parse(JSON.stringify(regionGeom)), 0.3, { duration: 1.8, name: plan.place || 'Region', style: { stroke: '#ffb547', width: 1.6, fill: '#ffb547', fillOpacity: 0.04, glow: true, maskOutside: 0.35 } }));
+    const t1 = 1.4 * k, t2 = 4.6 * k, t3 = 8 * k;
+    sc.layers.push(sm(t1, 2.6, { mode: 'cells', ramp: 'blue', opacity: 0.8, cellKm: Math.max(1, span * 111 * 0.025), spreadKm: Math.max(4, span * 111 * 0.06) }, 'wipe', 'Population'));
+    sc.layers.push(sm(t2, 2, { mode: 'glow', ramp: 'orange', opacity: 0.9, spreadKm: Math.max(3, span * 111 * 0.03), size: 1 }, 'fade', 'Income'));
+    sc.layers.push(sm(t3, 2.5, { mode: 'rings', ramp: 'white', data: sites }, 'pop', 'Potential stores'));
+    sc.layers.push(legend(0, `Population | #4f8cff | ${t1.toFixed(1)}\nIncome | #ff8a3d | ${t2.toFixed(1)}\nPotential stores | #ffffff | ${t3.toFixed(1)}`, 0));
+    sc.transition = 'blur'; sc.transitionSeconds = 0.9;
+    scenes.push(sc);
+  }
+  // 2. drive times and projected revenue around the best cluster
+  {
+    const D = 10 * k;
+    const sc = newScene('Drive times');
+    Object.assign(sc.look, { theme: 'nightroads', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false });
+    const near = sites.filter((d) => Math.hypot(d[0] - best[0], d[1] - best[1]) < span * 0.18);
+    const c = [near.reduce((a, d) => a + d[0], 0) / near.length, near.reduce((a, d) => a + d[1], 0) / near.length];
+    sc.camera.mode = 'keyframes'; sc.camera.tilt = 50;
+    sc.camera.keys = [K(0, V(c, zR + 1.4, 4, 50), 'linear'), K(D, V(c, zR + 2.1, 12, 52), 'linear')];
+    sc.camera.lens = { ...sc.camera.lens, vignette: 0.45, dof: true, blur: 5, focus: 0.55, band: 0.45 };
+    sc.stillStart = 0; sc.stillEnd = 0.3;
+    sc.layers.push(sm(0, 0.5, { mode: 'rings', ramp: 'white', data: sites }, 'none', 'Potential stores'));
+    sc.layers.push(sm(0.9 * k, 3, { mode: 'reach', ramp: 'green', opacity: 0.85, reachKm, data: sites }, 'grow', 'Drive times'));
+    sc.layers.push(sm(4.8 * k, 2.6, { mode: 'halo', ramp: 'yellow', opacity: 0.95, reachKm, size: 1, data: sites }, 'grow', 'Projected revenue'));
+    sc.layers.push(legend(0, `Potential stores | #ffffff | 0\nDrive times | #43b062 | ${(0.9 * k).toFixed(1)}\nProjected revenue | #eef27a | ${(4.8 * k).toFixed(1)}`, 0));
+    sc.transition = 'blur'; sc.transitionSeconds = 0.9;
+    scenes.push(sc);
+  }
+  // 3. the selected store, close up with the info card
+  {
+    const D = 8 * k;
+    const sc = newScene('Selected store');
+    Object.assign(sc.look, { theme: 'nightroads', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false });
+    sc.camera.mode = 'keyframes'; sc.camera.tilt = 58;
+    sc.camera.keys = [K(0, V(best, 12.6, 14, 56), 'linear'), K(D, V(best, 13.1, 22, 58), 'linear')];
+    sc.camera.lens = { ...sc.camera.lens, vignette: 0.5, dof: true, blur: 6, focus: 0.55, band: 0.4 };
+    sc.stillStart = 0; sc.stillEnd = 0.4;
+    sc.layers.push(L('infocard', pt(best), 0.9, { duration: 2.6, style: { title: 'New store location', line1: plan.place ? `${plan.place} · best site` : 'Best site', line2: fmtLatLon(best), badge: 'NOW OPEN' } }));
+    sc.layers.push(legend(0, 'Selected store | #ffffff | 0.4', 0));
+    scenes.push(sc);
+  }
+  return { name: plan.title || `Site selection · ${plan.place}`, scenes };
+}
+
 export function buildStory(plan, g, opts = {}) {
+  if (plan.event === 'siteselection') return buildSiteStory(plan, g, opts);
   const k = clamp((+opts.length || 45) / 45, 0.6, 3);
   const vh = REF_W / (opts.aspect || 16 / 9);
   const focus = g.place?.ll || g.to?.ll || g.from?.ll;
@@ -406,6 +500,7 @@ export function buildStory(plan, g, opts = {}) {
 // ---------------------------------------------------------------- the dialog
 const EXAMPLES = [
   'Train collision at Urda on the Madrid–Seville line, 28 October 2026, Toledo, Castilla-La Mancha',
+  'Best location for a new store in Texas',
   'Road trip from Dubai to Muscat by car',
   'Flood in Valencia, 29 October 2024',
   'Cyclone Mocha hits Sittwe, Myanmar, 14 May 2023',

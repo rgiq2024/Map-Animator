@@ -12,6 +12,8 @@ import { drawCyclone, drawCycloneLegend, drawPressure, drawFront, FRONT_TYPES, d
 import { drawTitle, TITLE_LOOKS } from './titles.js';
 import { drawNews, NEWS_LOOKS } from './news.js';
 import { EFFECT_LOOKS, drawVideoLayer } from './screenfx.js';
+import { SM_KINDS, SM_ANIMS, SM_DEFAULTS, SM_FORMS, SM_SET, smPhases, drawSmartMap, drawLegend, drawInfoCard } from './smartmap.js';
+import { imageFor as smImage } from './geoimage.js';
 import { TWIN_KINDS, TWIN_ANIMS, TWIN_DEFAULTS, TWIN_FORMS, TWIN_SET, twinPhases, drawTwin, drawSensor } from './twin.js';
 import { HZ_KINDS, HZ_ANIMS, HZ_DEFAULTS, HZ_FORMS, HZ_SET, hzPhases, drawHazard } from './hazards.js';
 import { drawPeople, CROWD_BEHAVIOURS, CROWD_LOOKS } from './people.js';
@@ -39,6 +41,7 @@ function hexA(hex, a) {
 
 // ---------------------------------------------------------------- catalogue (merged into LAYER_KINDS)
 export const FX_KINDS = {
+  ...SM_KINDS,
   ...TWIN_KINDS,
   crowd: { name: 'People / crowd', icon: '🧍', geom: 'point', desc: 'Animated people: a crowd, a protest march, people walking, gathering or running away' },
   ...HZ_KINDS,
@@ -76,6 +79,7 @@ export const FX_KINDS = {
   forecast:  { name: 'Weather forecast', icon: '📅', geom: null, desc: 'TV weather panels: days ahead, cities, current conditions, warnings' },
 };
 export const FX_ANIMS = {
+  ...SM_ANIMS,
   ...TWIN_ANIMS,
   crowd: { none: 'Already there', appear: 'Appear one by one' },
   ...HZ_ANIMS,
@@ -109,6 +113,7 @@ export const FX_ANIMS = {
   forecast: { in: 'Animate in' },
 };
 export const FX_DEFAULTS = {
+  ...SM_DEFAULTS,
   ...TWIN_DEFAULTS,
   crowd: { anim: 'none', duration: 1.5, style: { behaviour: 'crowd', look: 'people', count: 150, radius: 40, width: 14, speed: 1, size: 1, exaggerate: 3, flagColor: '#e53935', view: 'auto', seed: 0 } },
   ...HZ_DEFAULTS,
@@ -149,6 +154,7 @@ const VEHICLES = { missile: 'Missile (arc)', rocket: 'Rocket (high arc)', drone:
 const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', center: 'Centre', ...CUSTOM_POS };
 /** Form fields for the layer editor: [path, label, type, options]. */
 export const FX_FORMS = {
+  ...SM_FORMS,
   ...TWIN_FORMS,
   crowd: [['style.behaviour', 'What they do', 'select', CROWD_BEHAVIOURS], ['style.look', 'Who', 'select', CROWD_LOOKS], ['style.count', 'How many people', 'range', [5, 800, 5]], ['style.radius', 'Spread (m around the point)', 'range', [5, 600, 1], (L) => L.geom?.type === 'Point'], ['style.width', 'Width of the march (m)', 'range', [2, 120, 1], (L) => L.geom?.type === 'LineString'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.exaggerate', 'Make people bigger (so they show)', 'range', [1, 10, 0.1]], ['style.flagColor', 'Flag colour', 'color', null, (L) => L.style.look === 'protest'], ['style.view', 'Seen from', 'select', { auto: 'Automatic (side when tilted)', side: 'Always from the side', top: 'Always from above' }], ['style.seed', 'Shuffle', 'number', 1]],
   ...HZ_FORMS,
@@ -1259,6 +1265,9 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'blastzone': case 'wildfire': case 'deforest': case 'affected': drawHazard(ctx, L, tm, o, phase); break;
     case 'crowd': if (phase === 'above') drawPeople(ctx, L, tm, o); break;
     case 'twin': drawTwin(ctx, L, tm, o, phase); break;
+    case 'smartmap': drawSmartMap(ctx, L, tm, o, phase); break;
+    case 'legend': if (phase === 'captions') drawLegend(ctx, L, tm, o); break;
+    case 'infocard': if (phase === 'above') drawInfoCard(ctx, L, tm, o, smImage); break;
     case 'sensor': if (phase === 'above') drawSensor(ctx, L, tm, o); break;
     case 'cyclone': if (phase === 'above') drawCyclone(ctx, L, tm, o); else if (phase === 'captions' && frame) drawCycloneLegend(ctx, L, tm, o); break;
     case 'pressure': if (phase === 'above') drawPressure(ctx, L, tm, o); break;
@@ -1299,6 +1308,7 @@ export function fxPhases(kind) {
   if (NET_SET.has(kind)) return netPhases(kind);
   if (HZ_SET.has(kind)) return hzPhases(kind);
   if (TWIN_SET.has(kind)) return twinPhases(kind);
+  if (SM_SET.has(kind)) return smPhases(kind);
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];
   if (kind === 'forecast') return ['captions'];

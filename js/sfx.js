@@ -4,7 +4,7 @@
 
 import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -492,6 +492,13 @@ export function buildEvents(project, models) {
       } else if (L.kind === 'twin') {
         if (L.anim !== 'none') { push(Math.max(0, t0 - 0.2), 'riser', { dur: Math.min(4, D), vol: vol * 0.6 }); push(t0 + D * 0.95, 'hit', { vol: vol * 0.4 }); }
         push(t0 + 0.1, 'hudboot', { vol: vol * 0.4 });
+      } else if (L.kind === 'smartmap') {
+        if (s.mode === 'rings') for (let k = 0; k < 5; k++) push(t0 + 0.1 + k * D * 0.15, 'ping', { vol: vol * 0.3 });
+        else push(t0, 'whoosh', { dur: Math.min(2.5, D), vol: vol * 0.45 });
+      } else if (L.kind === 'legend') {
+        for (const ln of String(s.items || '').split('\n')) { const at = +(ln.split('|')[2] || 0); if (ln.trim()) push(t0 + at, 'click', { vol: vol * 0.5 }); }
+      } else if (L.kind === 'infocard') {
+        push(t0, 'swoosh', { vol: vol * 0.6 }); if (s.badge) push(t0 + D * 0.5, 'ping', { vol: vol * 0.5 });
       } else if (L.kind === 'sensor') {
         push(t0 + 0.3, 'ping', { vol: vol * 0.45 });
       } else if (L.kind === 'wildfire') {

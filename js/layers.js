@@ -842,7 +842,7 @@ export function hitLayer(ctx, layers, proj, p, unit, frame) {
         ring.forEach((c, i) => { const q = proj(c); if (i) path.lineTo(q[0], q[1]); else path.moveTo(q[0], q[1]); });
         path.closePath();
       }
-      const filled = L.kind === 'flood' || L.kind === 'wxfield' || L.kind === 'city3d' || L.kind === 'geofence' || L.kind === 'servicearea' || L.kind === 'wildfire' || L.kind === 'deforest' || L.kind === 'affected' || L.kind === 'crowd' || L.kind === 'image' || L.kind === 'compare' || L.kind === 'timeseries' || (L.style.fillOpacity > 0.02);
+      const filled = L.kind === 'flood' || L.kind === 'wxfield' || L.kind === 'city3d' || L.kind === 'geofence' || L.kind === 'servicearea' || L.kind === 'wildfire' || L.kind === 'deforest' || L.kind === 'affected' || L.kind === 'crowd' || L.kind === 'smartmap' || L.kind === 'image' || L.kind === 'compare' || L.kind === 'timeseries' || (L.style.fillOpacity > 0.02);
       if (filled && ctx.isPointInPath(path, p[0], p[1], 'evenodd')) return L.id;
     } else {
       for (const line of linesOf(g)) line.forEach((c, i) => { const q = proj(c); if (i) path.lineTo(q[0], q[1]); else path.moveTo(q[0], q[1]); });

@@ -30,6 +30,11 @@ export const THEMES = {
     pal: P({ land: '#3b4d63', water: '#1f2d40', waterLine: '#26364b', wood: '#3a5064', grass: '#3d5268', park: '#3b5167', urban: '#44566c', sand: '#4a5a6e', ice: '#5a6c80', building: '#4b5d73', motorway: '#8fa6c0', roadMajor: '#7088a3', roadMid: '#5f7690', roadMinor: '#53697f', casing: '#2f3e51', rail: '#5c7088', border: '#9db1c8', stateBorder: '#6e849c', label: '#e3ecf5', halo: '#2b3a4d', waterLabel: '#8ca4be' }),
     shade: { shadow: '#18222f', highlight: '#7d93ad', accent: '#2a394c', strength: 0.4 }, swatch: ['#3b4d63', '#1f2d40', '#ffb347'],
   },
+  nightroads: {
+    name: 'Night roads', desc: 'Dark relief with glowing amber roads — great for data stories', line: '#ffb547', dark: true,
+    pal: P({ land: '#131416', water: '#050607', waterLine: '#0a0b0d', wood: '#151719', grass: '#151618', park: '#16181a', urban: '#1a1b1d', sand: '#18191b', ice: '#1d1e20', building: '#202124', motorway: '#ffbf5a', roadMajor: '#f0a040', roadMid: '#c47f2c', roadMinor: '#7a5222', casing: '#131416', rail: '#4a3a24', border: '#6b6b6b', stateBorder: '#3d3d3d', label: '#8d8f93', halo: '#0e0f10', waterLabel: '#4a5258' }),
+    shade: { shadow: '#000000', highlight: '#3a3c40', accent: '#0d0e10', strength: 0.6 }, swatch: ['#131416', '#050607', '#ffb547'],
+  },
   satellite: { name: 'Satellite', desc: 'Esri World Imagery with optional names and roads', satellite: true, line: '#ffd23f', dark: true, swatch: ['#3f5a3a', '#1f3b5c', '#ffd23f'] },
   treasure: {
     name: 'Treasure', desc: 'Parchment and ink, like an old treasure map', line: '#b3261e',
