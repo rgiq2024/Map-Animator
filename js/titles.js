@@ -1,5 +1,6 @@
 // Film-style text: opening titles, cinematic titles, chapter cards, location stamps, rolling credits,
 // quotes and end titles. Plus letterbox bars (black strips top and bottom) for the cinema look.
+import { drawTagTitle, TAG_STYLES } from './vizfx.js';
 import { placeAt } from './place.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -16,7 +17,7 @@ function rng(seed) {
 const hashStr = (s) => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 export const TITLE_LOOKS = {
   opener: 'Opening title (letters close in)', cinematic: 'Cinematic (blur-in with light sweep)', glitch: 'Glitch title', chapter: 'Chapter card',
-  explainer: 'News explainer (side panel)', location: 'Location stamp (typed)', credits: 'Rolling credits', quote: 'Quote', ending: 'End title',
+  explainer: 'News explainer (side panel)', tag: 'Tag label (coloured boxes)', location: 'Location stamp (typed)', credits: 'Rolling credits', quote: 'Quote', ending: 'End title',
 };
 
 /** Draw text with extra letter spacing; returns width. */
@@ -49,6 +50,7 @@ export function drawTitle(ctx, L, tm, o) {
   ctx.save();
   ctx.globalAlpha *= tm.alpha;
   if (look === 'explainer') { drawExplainer(ctx, s, frame, unit, tm, k); ctx.restore(); return; }
+  if (look === 'tag') { drawTagTitle(ctx, L, tm, o); ctx.restore(); return; }
   // optional dim behind the text
   if (+s.dim > 0) { ctx.fillStyle = `rgba(0,0,0,${clamp(+s.dim, 0, 1) * (tm.edit ? 1 : ease(u * 2))})`; ctx.fillRect(frame.x, frame.y, frame.w, frame.h); }
   ctx.textBaseline = 'alphabetic';

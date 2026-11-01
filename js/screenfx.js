@@ -1,6 +1,6 @@
 // Whole-picture effects (film grain, old film, VHS, glitch, colour split, light leaks, flash, rain, snow,
 // camera shake, focus pull) and your own videos placed on screen (full frame or picture-in-picture).
-import { drawHologram } from './vizfx.js';
+import { drawHologram, drawCrosses, drawLensFlare } from './vizfx.js';
 import { placeAt } from './place.js';
 import { videoFor } from './videofx.js';
 
@@ -15,7 +15,7 @@ export const EFFECT_LOOKS = {
   grain: 'Film grain', oldfilm: 'Old film (sepia, scratches)', vhs: 'VHS tape', glitch: 'Glitch distortion', chroma: 'Colour split (chromatic)',
   lightleak: 'Light leak', flash: 'Flash', rain: 'Rain', snow: 'Snow', shake: 'Camera shake', focus: 'Focus pull (blur → sharp)', fog: 'Fog / haze',
   storm: 'Thunderstorm (heavy rain + lightning)', hail: 'Hail', blizzard: 'Blizzard (heavy snow, wind)', leaves: 'Falling leaves', petals: 'Blossom petals',
-  embers: 'Rising embers (fire)', ash: 'Falling ash', sandstorm: 'Sandstorm / dust', lightning: 'Lightning strikes', sunrays: 'Sun rays', mist: 'Drifting mist', hologram: 'Hologram projection (blue, light beams, pixel glitch)',
+  embers: 'Rising embers (fire)', ash: 'Falling ash', sandstorm: 'Sandstorm / dust', lightning: 'Lightning strikes', sunrays: 'Sun rays', mist: 'Drifting mist', hologram: 'Hologram projection (blue, light beams, pixel glitch)', crosses: 'Plus-mark grid', lensflare: 'Sun lens flare (sunrise)',
 };
 export const PARTICLE_LOOKS = new Set(['rain', 'snow', 'storm', 'hail', 'blizzard', 'leaves', 'petals', 'embers', 'ash', 'sandstorm', 'mist']);
 const LEAF_COLS = { autumn: ['#c4621c', '#e0a030', '#a23a12', '#d88a2a', '#8a5a14'], green: ['#4c8f3a', '#6aa84f', '#3a7a2e', '#8fc04a'], mixed: ['#c4621c', '#e0a030', '#6aa84f', '#a23a12', '#d8b04a'] };
@@ -111,6 +111,8 @@ export function drawScreenEffects(ctx, sc, o, layerTiming) {
     ctx.save();
     ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.clip();
     switch (s.look) {
+      case 'crosses': drawCrosses(ctx, fr, unit, t, Math.min(1, k), s.color === '#ff8a3d' ? '#ffffff' : s.color); break;
+      case 'lensflare': drawLensFlare(ctx, fr, unit, t, Math.min(1.2, k), s); break;
       case 'hologram': drawHologram(ctx, fr, unit, t, Math.min(1, k), o.src, hashStr(L.id)); break;
       case 'grain': case 'oldfilm': {
         const n = Math.round(900 * k * (s.look === 'oldfilm' ? 1.4 : 1));

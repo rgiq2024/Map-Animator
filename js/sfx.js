@@ -5,7 +5,7 @@ import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 
 import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph', 'tiles', 'vortex', 'vessel', 'photocard', 'arpanel', 'linecallout', 'detect']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -571,6 +571,23 @@ export function buildEvents(project, models) {
         push(t0, 'datalink', { dur: D, vol: vol * 0.5 }); for (let k = 0; k < 5; k++) push(t0 + (k / 5) * D, 'ping', { freq: 1600 + k * 140, vol: vol * 0.25 });
       } else if (L.kind === 'viewshed') {
         push(t0, 'radar', { dur: D + 0.5, period: Math.max(0.8, D), vol: vol * 0.7 });
+      } else if (L.kind === 'tiles') {
+        for (let k = 0; k < 4; k++) push(t0 + k * 0.25 * D, 'click', { vol: vol * 0.6 });
+      } else if (L.kind === 'vortex') {
+        push(t0, 'wind', { dur: D + 4, vol }); push(t0, 'riser', { dur: D, vol: vol * 0.5 });
+      } else if (L.kind === 'vessel') {
+        push(t0, 'engine', { dur: D, vol: vol * 0.5 }); push(t0 + 0.4, 'radio', { vol: vol * 0.7 });
+      } else if (L.kind === 'photocard') {
+        push(t0, 'shutter', { vol }); push(t0 + 0.1, 'swoosh', { vol: vol * 0.6 });
+      } else if (L.kind === 'arpanel') {
+        push(t0, 'glitch', { dur: 0.3, vol: vol * 0.5 }); push(t0 + 0.2, 'datalink', { vol: vol * 0.6 });
+      } else if (L.kind === 'linecallout') {
+        const n = String(s.items || '').split('\n').filter((x) => x.trim()).length;
+        for (let k = 0; k < n; k++) push(t0 + (0.15 + k * 0.15) * D, 'swoosh', { vol: vol * 0.6 });
+      } else if (L.kind === 'detect') {
+        push(t0, 'datalink', { vol: vol * 0.5 }); for (let k = 0; k < 4; k++) push(t0 + 0.4 + k * 0.6, 'beep', { freq: 1900, vol: vol * 0.3 });
+      } else if (L.kind === 'title' && s.look === 'tag') {
+        push(t0, 'swoosh', { vol: vol * 0.8 }); push(t0 + 0.15, 'hit', { vol: vol * 0.4 });
       } else if (L.kind === 'kgraph') {
         push(t0, 'datalink', { dur: 0.8, vol: vol * 0.6 });
         const n = String(s.data || '').split('\n').filter((x) => x.trim()).length;

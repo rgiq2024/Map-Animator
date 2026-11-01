@@ -1699,12 +1699,15 @@ export function createEditor() {
       if (st) Object.assign(L.style, st);
       if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
       if (b.dataset.name) L.name = b.dataset.name;
+      if (b.dataset.dur) L.duration = +b.dataset.dur;
+      if (b.dataset.hold) L.hold = +b.dataset.hold;
+      if (L.kind === 'title' && L.style.font) loadFonts(scene()).then(repaint);
       addLayer(L);
       return;
     }
     pendingStyle = st;
     startAdd(k);
-    const tip = { block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
+    const tip = { tiles: 'Click around the area — then press Finish', vortex: 'Click the eye of the storm', vessel: 'Click the ship’s route — then press Finish', photocard: 'Click the place the picture belongs to', linecallout: 'Click the point the callout lines come from', detect: 'Click along the road — then press Finish', block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
     if (tip) showHint(tip);
   });
 

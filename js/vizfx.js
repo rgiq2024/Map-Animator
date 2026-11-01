@@ -83,6 +83,13 @@ export const VZ_KINDS = {
   mesh: { name: 'Network mesh', icon: '⋰', geom: 'polygon', desc: 'Glowing nodes connected by lines with pulses (smart city / 5G network)' },
   viewshed: { name: 'Viewshed', icon: '👁', geom: 'point', desc: 'What can be seen from a point: rays blocked by the buildings around it' },
   kgraph: { name: 'Knowledge graph', icon: '🕸', geom: null, desc: 'Linked entities (people, vehicles, repairs, incidents…) that grow out from a centre node, with a details panel' },
+  tiles: { name: 'Highlight tiles', icon: '▣', geom: 'polygon', desc: 'Glowing squares that pop over the map, or a two-colour mosaic tint over the area' },
+  vortex: { name: 'Storm vortex', icon: '🌀', geom: 'point', desc: 'Spinning light streaks round an eye with wind-speed labels' },
+  vessel: { name: 'Ship track (AIS)', icon: '🚢', geom: 'line', desc: 'A ship sails a dashed track with a live LAT / LON / COG / SOG callout and a buoy at the end' },
+  photocard: { name: 'Photo card', icon: '🖼', geom: 'point', desc: 'A picture card with a bracketed title, linked to a place' },
+  arpanel: { name: 'AR floating panel', icon: '◇', geom: null, desc: 'A tilted holographic panel with a wireframe terrain and floating numbers' },
+  linecallout: { name: 'Line callouts', icon: '⌐', geom: 'point', desc: 'A target circle with lines to text boxes (issue, big number that counts up, label)' },
+  detect: { name: 'Object detection', icon: '⬚', geom: 'line', desc: 'Vehicles moving along a road with tracking boxes or rings and labels' },
   fmv: { name: 'Drone video footprint', icon: '🎥', geom: 'line', desc: 'A drone flies the path: camera footprint and track on the map, and a video player window' },
 };
 export const VZ_ANIMS = {
@@ -96,6 +103,13 @@ export const VZ_ANIMS = {
   mesh: { grow: 'Grow the network', none: 'Already there' },
   viewshed: { sweep: 'Sweep round', none: 'Already there' },
   fmv: { fly: 'Fly the path' },
+  tiles: { pop: 'Pop in', fade: 'Fade in', none: 'Already there' },
+  vortex: { spin: 'Spin up', none: 'Already there' },
+  vessel: { sail: 'Sail the track' },
+  photocard: { pop: 'Pop out', none: 'Already there' },
+  arpanel: { unfold: 'Unfold', none: 'Already there' },
+  linecallout: { draw: 'Draw out', none: 'Already there' },
+  detect: { track: 'Track', none: 'Already there' },
   kgraph: { build: 'Grow the graph', fade: 'Fade in', none: 'Already there' },
 };
 export const VZ_DEFAULTS = {
@@ -108,10 +122,17 @@ export const VZ_DEFAULTS = {
   beams: { anim: 'shoot', duration: 2.5, style: { count: 36, radiusKm: 4, arc: 0.6, palette: 'rainbow', color: '#4fc3ff', particles: true, useLayers: false, seed: 1 } },
   mesh: { anim: 'grow', duration: 3, style: { count: 40, links: 3, color: '#cfe9ff', pulses: true, seed: 1 } },
   viewshed: { anim: 'sweep', duration: 2, style: { radiusM: 250, rays: 360, color: '#39d353', buildings: true, bldColor: '#29a8ff', circle: true, label: true } },
+  tiles: { anim: 'pop', duration: 1.5, style: { mode: 'pop', color: '#ff3df2', color2: '#3d6bff', count: 14, size: 1, cellM: 180, angle: 0, opacity: 0.6, seed: 1 } },
+  vortex: { anim: 'spin', duration: 2, style: { radiusKm: 300, streaks: 90, speed: 1, labels: 9, title: 'WIND SPEED', unit: 'MPH', value: 105, spread: 6, glow: true } },
+  vessel: { anim: 'sail', duration: 10, style: { name: 'Spirit of Enderby', color: '#e8323c', sog: 9.6, callout: true, buoy: true, ship: true } },
+  photocard: { anim: 'pop', duration: 0.8, style: { title: 'Snares Island', media: '', dx: -220, dy: 60, width: 260 } },
+  arpanel: { anim: 'unfold', duration: 1.2, style: { color: '#ffc46b', numbers: '-31546.037\n-21254.351\n31643.034\n-25941.208', title: '16709.490', position: 'center', size: 1 } },
+  linecallout: { anim: 'draw', duration: 1.5, style: { items: 'ISSUE: Water loss in county / AVERAGE LEAK: 89.36 GPM\n$32,498,193\nPROJECTED SAVINGS', color: '#ffffff', size: 1 } },
+  detect: { anim: 'track', duration: 1, style: { look: 'boxes', count: 10, speed: 1, labels: true, cars: true, size: 1.6, lanes: 2 } },
   kgraph: { anim: 'build', duration: 3, style: { layout: 'panel', data: 'BUS: 5836 | bus\nKimbell Todor | person\nRaphael Gilardengo | person\nEngracia Tonna | person\nCarol-Jean Yakunikov | person\nBecca Turri | person\nRepair ID: 527 | repair\nRepair ID: 525 | repair\nElnora Lewis | person\nNelson Lambshine | person\nRozele Todaro | person\nCollision: pedestrian | alert | Rozele Todaro\nBUS: 9490 | bus | Rozele Todaro', cloud: 120, panel: true, props: 'NUM: 5836\nBUS ID: MTA NYCT_5836', search: '', color: '#29c6e0', size: 1 } },
   fmv: { anim: 'fly', duration: 10, style: { color: '#ffe11a', aheadM: 350, footM: 220, window: true, title: 'FMV · Exercise 3', position: 'top-left', winSize: 0.42, frustum: true } },
 };
-const PALETTES = { spectral: 'Spectral (false colour)', thermal: 'Thermal (heat)', ndvi: 'Vegetation (NDVI)', ice: 'Ice blue' };
+const PALETTES = { spectral: 'Spectral (false colour)', thermal: 'Thermal (heat)', ndvi: 'Vegetation (NDVI)', ice: 'Ice blue', violet: 'Violet city (purple / blue)', night: 'Night blue' };
 export const VZ_FORMS = {
   spectral: [['style.mode', 'Show', 'select', { split: 'Split screen (sepia | false colour)', full: 'Whole picture in false colour', duo: 'Whole picture in sepia' }], ['style.palette', 'False colours', 'select', PALETTES], ['style.split', 'Split position', 'range', [0.2, 0.8, 0.01], (L) => L.style.mode === 'split'], ['style.boxes', 'Analysis frames and labels', 'switch'], ['style.titleL', 'Left title', 'text', null, (L) => L.style.boxes !== false], ['style.subL', 'Left subtitle', 'text', null, (L) => L.style.boxes !== false], ['style.tagL', 'Left corner tag', 'text', null, (L) => L.style.boxes !== false], ['style.noteL', 'Left note', 'text', null, (L) => L.style.boxes !== false], ['style.titleR', 'Right title', 'text', null, (L) => L.style.boxes !== false && L.style.mode === 'split'], ['style.subR', 'Right subtitle', 'text', null, (L) => L.style.boxes !== false && L.style.mode === 'split'], ['style.tagR', 'Right corner tag', 'text', null, (L) => L.style.boxes !== false && L.style.mode === 'split'], ['style.noteR', 'Right note', 'text', null, (L) => L.style.boxes !== false && L.style.mode === 'split'], ['style.bands', 'Bottom bar — “Label | colour” per line (empty = none)', 'textarea', null, (L) => L.style.boxes !== false], ['style.stretch', 'Auto contrast', 'switch']],
   splitgrid: [['style.layout', 'Layout', 'select', { '2x2': 'Four panels (2 × 2)', '2h': 'Two side by side', '2v': 'Two above each other', '3': 'One big + two small' }], ['style.mapPanel', 'Map shows in panel', 'select', { 0: '1', 1: '2', 2: '3', 3: '4', '-1': 'None (pictures only)' }], ['style.media', 'Picture A', 'image'], ['style.media2', 'Picture B', 'image'], ['style.media3', 'Picture C', 'image'], ['style.cap1', 'Caption panel 1', 'text'], ['style.cap2', 'Caption panel 2', 'text'], ['style.cap3', 'Caption panel 3', 'text'], ['style.cap4', 'Caption panel 4', 'text'], ['style.gutter', 'Gap (px)', 'range', [0, 30, 1]], ['style.kenburns', 'Slow zoom on pictures', 'switch']],
@@ -122,13 +143,20 @@ export const VZ_FORMS = {
   beams: [['style.count', 'Beams', 'range', [3, 200, 1]], ['style.radiusKm', 'Reach (km)', 'range', [0.2, 2000, 0.1]], ['style.arc', 'Arc height', 'range', [0, 2, 0.05]], ['style.palette', 'Colours', 'select', { rainbow: 'Blue, green, orange, pink', blue: 'Blue', single: 'One colour' }], ['style.color', 'Colour', 'color', null, (L) => L.style.palette === 'single'], ['style.particles', 'Particles', 'switch'], ['style.useLayers', 'Shoot to the other points in this scene', 'switch'], ['style.seed', 'Shuffle', 'number', 1]],
   mesh: [['style.count', 'Nodes', 'range', [5, 200, 1]], ['style.links', 'Links per node', 'range', [1, 6, 1]], ['style.color', 'Colour', 'color'], ['style.pulses', 'Pulses along the lines', 'switch'], ['style.seed', 'Shuffle', 'number', 1]],
   viewshed: [['style.radiusM', 'Radius (m)', 'range', [30, 3000, 5]], ['style.color', 'Visible area colour', 'color'], ['style.buildings', 'Colour the buildings', 'switch'], ['style.bldColor', 'Building colour', 'color', null, (L) => L.style.buildings !== false], ['style.circle', 'Range circle', 'switch'], ['style.label', '% visible label', 'switch'], ['style.rays', 'Rays (detail)', 'range', [36, 720, 1]]],
+  tiles: [['style.mode', 'Show', 'select', { pop: 'Glowing squares popping in and out', mosaic: 'Two-colour mosaic tint' }], ['style.color', 'Colour', 'color'], ['style.color2', 'Second colour', 'color', null, (L) => L.style.mode === 'mosaic'], ['style.count', 'Squares', 'range', [1, 80, 1], (L) => L.style.mode !== 'mosaic'], ['style.size', 'Square size', 'range', [0.3, 4, 0.05], (L) => L.style.mode !== 'mosaic'], ['style.angle', 'Rotation (°)', 'range', [-45, 45, 1], (L) => L.style.mode !== 'mosaic'], ['style.cellM', 'Cell size (m)', 'range', [20, 5000, 10], (L) => L.style.mode === 'mosaic'], ['style.opacity', 'Strength', 'range', [0.1, 1, 0.01]], ['style.seed', 'Shuffle', 'number', 1]],
+  vortex: [['style.radiusKm', 'Radius (km)', 'range', [1, 2000, 1]], ['style.streaks', 'Streaks', 'range', [10, 300, 1]], ['style.speed', 'Spin speed', 'range', [0.1, 4, 0.05]], ['style.labels', 'Labels', 'range', [0, 20, 1]], ['style.title', 'Label title', 'text'], ['style.value', 'Value', 'number', 1], ['style.spread', 'Value spread ±', 'number', 1], ['style.unit', 'Unit', 'text'], ['style.glow', 'Bright glow', 'switch']],
+  vessel: [['style.name', 'Ship name', 'text'], ['style.color', 'Track colour', 'color'], ['style.sog', 'Speed (knots)', 'number', 0.1], ['style.callout', 'Position callout', 'switch'], ['style.ship', 'Ship icon', 'switch'], ['style.buoy', 'Buoy at the end', 'switch']],
+  photocard: [['style.title', 'Title', 'text'], ['style.media', 'Picture', 'image'], ['style.width', 'Width (px)', 'range', [120, 600, 1]], ['style.dx', 'Card offset ←→', 'range', [-600, 600, 1]], ['style.dy', 'Card offset ↑↓', 'range', [-400, 400, 1]]],
+  arpanel: [['style.title', 'Number on the panel', 'text'], ['style.numbers', 'Floating numbers (one per line)', 'textarea'], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]], ['style.position', 'Position', 'select', { center: 'Centre', ...POS }]],
+  linecallout: [['style.items', 'Boxes — one per line (“ / ” makes a new line inside a box; numbers count up)', 'textarea'], ['style.color', 'Colour', 'color'], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]]],
+  detect: [['style.look', 'Look', 'select', { boxes: 'Detection boxes (green)', rings: 'Tracking rings (cyan)' }], ['style.count', 'Vehicles', 'range', [1, 60, 1]], ['style.lanes', 'Lanes each way', 'range', [1, 5, 1]], ['style.speed', 'Speed', 'range', [0, 4, 0.05]], ['style.cars', 'Draw the cars', 'switch'], ['style.labels', 'Labels', 'switch'], ['style.size', 'Size', 'range', [0.3, 4, 0.05]]],
   kgraph: [['style.data', 'Nodes — “Name | type | linked to” per line (types: person, bus, car, repair, alert, building, doc, phone, place; the first line is the centre)', 'textarea'], ['style.layout', 'Layout', 'select', { panel: 'Lower panel (map above)', full: 'Whole screen', overlay: 'Over the map (no background)' }], ['style.cloud', 'Background network (nodes, 0 = none)', 'range', [0, 400, 1]], ['style.panel', 'Details panel', 'switch'], ['style.props', 'Details — “Label: value” per line', 'textarea', null, (L) => L.style.panel !== false], ['style.search', 'Search box text', 'text'], ['style.color', 'Accent colour', 'color'], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]]],
   fmv: [['style.color', 'Colour', 'color'], ['style.aheadM', 'Camera looks ahead (m)', 'range', [0, 3000, 10]], ['style.footM', 'Footprint size (m)', 'range', [20, 3000, 10]], ['style.frustum', 'Camera lines', 'switch'], ['style.window', 'Video player window', 'switch'], ['style.title', 'Window title', 'text', null, (L) => L.style.window !== false], ['style.position', 'Window position', 'select', POS, (L) => L.style.window !== false], ['style.winSize', 'Window size', 'range', [0.2, 0.7, 0.01], (L) => L.style.window !== false]],
 };
 export const VZ_SET = new Set(Object.keys(VZ_KINDS));
-export const VZ_SCREEN = new Set(['spectral', 'splitgrid', 'hexbadges', 'kgraph']);
+export const VZ_SCREEN = new Set(['spectral', 'splitgrid', 'hexbadges', 'kgraph', 'arpanel']);
 export function vzPhases(k) {
-  return { spectral: ['below', 'captions'], splitgrid: ['captions'], block: ['below', 'above'], datapin: ['above'], hexbadges: ['captions'], kgraph: ['captions'], flowlines: ['below'], beams: ['above'], mesh: ['above'], viewshed: ['below', 'above'], fmv: ['above', 'captions'] }[k] || ['above'];
+  return { spectral: ['below', 'captions'], splitgrid: ['captions'], block: ['below', 'above'], datapin: ['above'], hexbadges: ['captions'], kgraph: ['captions'], tiles: ['below'], vortex: ['above'], vessel: ['above'], photocard: ['above'], arpanel: ['captions'], linecallout: ['above'], detect: ['above'], flowlines: ['below'], beams: ['above'], mesh: ['above'], viewshed: ['below', 'above'], fmv: ['above', 'captions'] }[k] || ['above'];
 }
 export function drawViz(ctx, L, tm, o, phase) {
   ctx.save();
@@ -140,6 +168,13 @@ export function drawViz(ctx, L, tm, o, phase) {
       case 'datapin': dataPin(ctx, L, tm, o); break;
       case 'hexbadges': hexBadges(ctx, L, tm, o); break;
       case 'kgraph': kGraph(ctx, L, tm, o); break;
+      case 'tiles': tiles(ctx, L, tm, o); break;
+      case 'vortex': vortex(ctx, L, tm, o); break;
+      case 'vessel': vessel(ctx, L, tm, o); break;
+      case 'photocard': photoCard(ctx, L, tm, o); break;
+      case 'arpanel': arPanel(ctx, L, tm, o); break;
+      case 'linecallout': lineCallout(ctx, L, tm, o); break;
+      case 'detect': detect(ctx, L, tm, o); break;
       case 'flowlines': flowLines(ctx, L, tm, o); break;
       case 'beams': beams(ctx, L, tm, o); break;
       case 'mesh': mesh(ctx, L, tm, o); break;
@@ -155,6 +190,8 @@ const LUTS = {
   spectral: [[0, '#1b0a6b'], [0.16, '#3048ff'], [0.3, '#18d4e6'], [0.44, '#34f06a'], [0.58, '#d4f52a'], [0.7, '#ffb21e'], [0.82, '#ff3fbf'], [1, '#7a2bff']],
   thermal: [[0, '#05030f'], [0.2, '#3a0b6e'], [0.4, '#b3125a'], [0.6, '#f0541a'], [0.8, '#ffc21a'], [1, '#fffbe0']],
   ndvi: [[0, '#6b3a1a'], [0.25, '#c88a3a'], [0.45, '#f2e35a'], [0.65, '#8bd34a'], [0.85, '#2e9e3a'], [1, '#0c5a24']],
+  violet: [[0, '#0a0620'], [0.3, '#3a1258'], [0.5, '#7a2a7a'], [0.68, '#5a63c8'], [0.85, '#9cb6ff'], [1, '#e6eeff']],
+  night: [[0, '#02040c'], [0.4, '#0b1e4a'], [0.7, '#2f5fd0'], [0.9, '#9cc8ff'], [1, '#ffffff']],
   ice: [[0, '#030b24'], [0.35, '#0f4fa8'], [0.65, '#4fc3ff'], [0.85, '#bff0ff'], [1, '#ffffff']],
 };
 const lutCache = new Map();
@@ -1248,5 +1285,459 @@ function kGraph(ctx, L, tm, o) {
       ctx.restore();
     }
   }
+  ctx.restore();
+}
+
+// ================================================================= highlight tiles / mosaic
+function tiles(ctx, L, tm, o) {
+  if (L.geom?.type !== 'Polygon') return;
+  const s = L.style, unit = o.unit, t = o.time || 0;
+  const ring = ring0(L.geom);
+  const u = prog(L, tm);
+  const op = clamp(+s.opacity || 0.6, 0, 1);
+  ctx.globalAlpha *= tm.alpha * (L.anim === 'fade' ? ease(u) : 1);
+  if (s.mode === 'mosaic') {
+    const lat = ring[0][1], kx = kxOf(lat), cm = Math.max(10, +s.cellM || 180);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const dx = cm / kx, dy = cm / KY;
+    const nx = Math.ceil((x1 - x0) / dx), ny = Math.ceil((y1 - y0) / dy);
+    const step = Math.max(1, Math.ceil(Math.sqrt((nx * ny) / 5000)));
+    const seed = hashStr(L.id) + (+s.seed || 0) * 17;
+    ctx.save();
+    ctx.beginPath(); ring.forEach((p, i) => { const q = o.proj(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath(); ctx.clip();
+    ctx.globalCompositeOperation = 'color';
+    for (let i = 0; i < nx; i += step) for (let j = 0; j < ny; j += step) {
+      const coarse = rng(seed + Math.floor(i / 3) * 104729 + Math.floor(j / 3) * 7);
+      const r = rng(seed + i * 7919 + j);
+      const h = (coarse() - 0.5) * 1.6 + (r() - 0.5) * 0.8;
+      const k = L.anim === 'pop' && !tm.edit ? clamp(u * 1.5 - r() * 0.5, 0, 1) : 1;
+      if (k <= 0) continue;
+      const a = o.proj([x0 + i * dx, y0 + (j + step) * dy]), b = o.proj([x0 + (i + step) * dx, y0 + j * dy]);
+      ctx.fillStyle = hexA(h > 0 ? s.color || '#ff3df2' : s.color2 || '#3d6bff', op * k * (0.55 + 0.45 * Math.abs(h)));
+      ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]) + 0.6, Math.abs(b[1] - a[1]) + 0.6);
+    }
+    ctx.restore();
+    return;
+  }
+  const pts = samplePoly(ring, clamp(Math.round(+s.count || 14), 1, 120), hashStr(L.id) + (+s.seed || 0) * 31);
+  const r = rng(hashStr(L.id) + 5);
+  ctx.globalCompositeOperation = 'screen';
+  pts.forEach((g, i) => {
+    const p = o.proj(g);
+    const sz = (40 + r() * 140) * unit * (+s.size || 1);
+    const per = 3 + r() * 3, ph = r() * per;
+    const life = tm.edit ? 1 : Math.sin(Math.PI * clamp(((t + ph) % per) / per, 0, 1)) ** 0.6;
+    const k = L.anim === 'pop' && !tm.edit ? clamp(u * 2 - (i / pts.length), 0, 1) : 1;
+    const a = op * life * k;
+    if (a <= 0.01) return;
+    ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate((+s.angle || 0) * D2R);
+    const g2 = ctx.createLinearGradient(-sz / 2, -sz / 2, sz / 2, sz / 2);
+    g2.addColorStop(0, hexA(s.color || '#ff3df2', a)); g2.addColorStop(1, hexA(s.color || '#ff3df2', a * 0.45));
+    ctx.fillStyle = g2; ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
+    ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,255,255,${0.08 * a})`; ctx.fillRect(-sz / 2, -sz / 2, sz, sz);
+    ctx.restore();
+  });
+}
+
+// ================================================================= storm vortex
+function vortex(ctx, L, tm, o) {
+  if (L.geom?.type !== 'Point') return;
+  const s = L.style, unit = o.unit, t = o.time || 0;
+  const c = L.geom.coordinates;
+  const P = o.proj(c);
+  const E = o.proj([c[0] + ((+s.radiusKm || 300) * 1000) / kxOf(c[1]), c[1]]);
+  const u = prog(L, tm);
+  const grow = L.anim === 'spin' && !tm.edit ? easeOut(u) : 1;
+  const R = clamp(Math.hypot(E[0] - P[0], E[1] - P[1]), 30 * unit, Math.min(ctx.canvas.width, ctx.canvas.height) * 0.48) * grow;
+  const sp = (+s.speed || 1) * (L.anim === 'spin' && !tm.edit ? 0.4 + 0.6 * u : 1);
+  ctx.globalAlpha *= tm.alpha;
+  if (s.glow !== false) {
+    const g = ctx.createRadialGradient(P[0], P[1] - R * 0.15, R * 0.05, P[0], P[1] - R * 0.15, R * 0.75);
+    g.addColorStop(0, 'rgba(255,240,255,0.0)'); g.addColorStop(0.2, 'rgba(255,235,255,0.55)'); g.addColorStop(1, 'rgba(255,200,255,0)');
+    ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = g; ctx.fillRect(P[0] - R, P[1] - R * 1.2, R * 2, R * 2);
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  const r = rng(hashStr(L.id));
+  const cols = ['#ffffff', '#ffffff', '#8affdc', '#ffbf7a', '#ff7a9a'];
+  const n = clamp(Math.round(+s.streaks || 90), 5, 400);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < n; i++) {
+    const rr2 = R * (0.12 + 0.88 * Math.sqrt(r()));
+    const len = 0.25 + r() * 1.2;
+    const a0 = r() * Math.PI * 2 + t * sp * (0.6 + 1.8 * (R / rr2) * 0.12) * 1.4;
+    const col = rr2 < R * 0.45 ? (r() < 0.8 ? '#ffffff' : cols[2]) : cols[Math.floor(r() * cols.length)];
+    const w = (1 + r() * 2) * unit;
+    const seg = 10;
+    for (let j = 0; j < seg; j++) {
+      const f0 = j / seg, f1 = (j + 1) / seg;
+      ctx.strokeStyle = hexA(col, 0.85 * f1);
+      ctx.lineWidth = w * (0.4 + 0.6 * f1);
+      ctx.beginPath(); ctx.arc(P[0], P[1], rr2, a0 - len * (1 - f0), a0 - len * (1 - f1)); ctx.stroke();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  const eye = ctx.createRadialGradient(P[0], P[1], 0, P[0], P[1], R * 0.13);
+  eye.addColorStop(0, 'rgba(10,10,14,0.85)'); eye.addColorStop(1, 'rgba(10,10,14,0)');
+  ctx.fillStyle = eye; ctx.beginPath(); ctx.arc(P[0], P[1], R * 0.13, 0, Math.PI * 2); ctx.fill();
+  // wind labels
+  const nl = clamp(Math.round(+s.labels ?? 9), 0, 30);
+  const rl = rng(hashStr(L.id) + 3);
+  for (let i = 0; i < nl; i++) {
+    const k = tm.edit ? 1 : clamp((u - 0.3 - i * 0.05) / 0.25, 0, 1);
+    if (k <= 0) continue;
+    const a = (i / nl) * Math.PI * 2 + rl() * 0.4, d = R * (0.55 + rl() * 0.45);
+    const x = P[0] + Math.cos(a) * d, y = P[1] + Math.sin(a) * d;
+    const val = Math.round((+s.value || 105) + (rl() - 0.5) * 2 * (+s.spread || 6) + Math.sin(t * 0.7 + i) * 1.5);
+    ctx.save(); ctx.globalAlpha *= k;
+    ctx.fillStyle = '#f2d67a'; ctx.fillRect(x - 3 * unit, y - 3 * unit, 6 * unit, 6 * unit);
+    const bx = x + 20 * unit, by = y - 46 * unit;
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1 * unit;
+    ctx.beginPath(); ctx.moveTo(x + 3 * unit, y - 3 * unit); ctx.lineTo(bx, by + 34 * unit); ctx.stroke();
+    ctx.fillStyle = 'rgba(30,30,36,0.35)'; ctx.fillRect(bx, by, 76 * unit, 34 * unit); ctx.strokeRect(bx, by, 76 * unit, 34 * unit);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.font = `700 ${6 * unit}px ${UI}`; ctx.fillText(s.title || 'WIND SPEED', bx + 4 * unit, by + 8 * unit);
+    ctx.font = `600 ${20 * unit}px ${UI}`; ctx.fillText(String(val), bx + 4 * unit, by + 29 * unit);
+    ctx.font = `700 ${9 * unit}px ${UI}`; ctx.fillText(s.unit || 'MPH', bx + 46 * unit, by + 20 * unit);
+    ctx.fillStyle = '#ff8fb0'; ctx.fillRect(bx + 50 * unit, by + 24 * unit, 6 * unit, 5 * unit);
+    ctx.restore();
+  }
+}
+
+// ================================================================= ship track (AIS)
+const dm = (v, pos, neg) => `${Math.floor(Math.abs(v))} ${((Math.abs(v) % 1) * 60).toFixed(1)} ${v >= 0 ? pos : neg}`;
+function vessel(ctx, L, tm, o) {
+  const c = L.geom?.coordinates;
+  if (L.geom?.type !== 'LineString' || c.length < 2) return;
+  const s = L.style, unit = o.unit, t = o.time || 0;
+  const f = tm.edit ? 0.55 : clamp(tm.tau / Math.max(0.5, +L.duration || 10), 0, 1);
+  const st = pathAt(c, f);
+  const col = s.color || '#e8323c';
+  ctx.globalAlpha *= tm.alpha;
+  const P = c.map((p) => o.proj(p));
+  ctx.strokeStyle = col; ctx.lineWidth = 4 * unit; ctx.setLineDash([14 * unit, 10 * unit]); ctx.lineDashOffset = -t * 20 * unit;
+  ctx.beginPath(); P.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke(); ctx.setLineDash([]);
+  // buoy at the end
+  if (s.buoy !== false) {
+    const B = P.at(-1), h = 46 * unit;
+    ctx.save();
+    ctx.strokeStyle = '#f59a1a'; ctx.lineWidth = 4 * unit; ctx.beginPath(); ctx.moveTo(B[0], B[1]); ctx.lineTo(B[0], B[1] - h * 0.6); ctx.stroke();
+    const bw = 22 * unit, bh = 30 * unit, by = B[1] - h * 0.6 - bh;
+    ctx.fillStyle = '#f08a10'; ctx.beginPath(); ctx.moveTo(B[0] - bw, by); ctx.lineTo(B[0] - bw * 0.85, by + bh); ctx.quadraticCurveTo(B[0], by + bh + 8 * unit, B[0] + bw * 0.85, by + bh); ctx.lineTo(B[0] + bw, by); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffb03a'; ctx.beginPath(); ctx.ellipse(B[0], by, bw, 8 * unit, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  const S = o.proj(st.p);
+  const bearing = o.map?.getBearing?.() || 0;
+  if (s.ship !== false) {
+    ctx.save(); ctx.translate(S[0], S[1]); ctx.rotate(st.hd - bearing * D2R);
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8 * unit;
+    ctx.fillStyle = '#f4f6f8'; ctx.strokeStyle = '#9aa3ad'; ctx.lineWidth = 1 * unit;
+    ctx.beginPath(); ctx.moveTo(0, -30 * unit); ctx.lineTo(11 * unit, -12 * unit); ctx.lineTo(11 * unit, 26 * unit); ctx.lineTo(-11 * unit, 26 * unit); ctx.lineTo(-11 * unit, -12 * unit); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.fillStyle = '#c9cfd6'; ctx.fillRect(-6 * unit, 0, 12 * unit, 16 * unit);
+    ctx.restore();
+  }
+  if (s.callout !== false) {
+    const cx = S[0] - 10 * unit, cy = S[1] - 70 * unit;
+    const lat = st.p[1], lon = st.p[0];
+    const cog = String(Math.round(((st.hd / D2R) + 360) % 360)).padStart(3, '0');
+    ctx.save();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4 * unit;
+    ctx.font = `italic 700 ${16 * unit}px ${UI}`; ctx.fillText(s.name || 'Vessel', cx, cy - 40 * unit);
+    ctx.font = `500 ${13 * unit}px ${UI}`;
+    ctx.fillText(`LAT: ${dm(lat, 'N', 'S')}, LON: ${dm(lon, 'E', 'W')}`, cx, cy - 20 * unit);
+    ctx.fillText(`COG: ${cog} SOG: ${(+s.sog || 9.6).toFixed(1)}KT`, cx, cy);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * unit;
+    ctx.beginPath(); ctx.moveTo(cx - 6 * unit, cy - 62 * unit); ctx.lineTo(cx + 10 * unit, cy - 62 * unit); ctx.lineTo(cx + 10 * unit, cy + 8 * unit); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ================================================================= photo card
+function photoCard(ctx, L, tm, o) {
+  if (L.geom?.type !== 'Point') return;
+  const s = L.style, unit = o.unit;
+  const P = o.proj(L.geom.coordinates);
+  const u = prog(L, tm);
+  const k = L.anim === 'pop' && !tm.edit ? backOut(u) : 1;
+  if (k <= 0) return;
+  const W = (+s.width || 260) * unit, H = W * 0.62;
+  const x = P[0] + (+s.dx || -220) * unit - W / 2, y = P[1] + (+s.dy || 60) * unit;
+  ctx.globalAlpha *= tm.alpha * clamp(u * 3, 0, 1);
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.2 * unit;
+  ctx.beginPath(); ctx.moveTo(P[0], P[1]); ctx.lineTo(x + W / 2, y); ctx.stroke();
+  ctx.translate(x + W / 2, y + H / 2); ctx.scale(k, k); ctx.translate(-(x + W / 2), -(y + H / 2));
+  ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 22 * unit; ctx.shadowOffsetY = 8 * unit;
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 3 * unit, y - 3 * unit, W + 6 * unit, H + 6 * unit);
+  ctx.shadowColor = 'transparent';
+  const im = s.media ? imageFor(s.media) : null;
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, W, H); ctx.clip();
+  if (im?.bmp) coverImage(ctx, im.bmp, { x, y, w: W, h: H });
+  else {
+    const g = ctx.createLinearGradient(0, y, 0, y + H);
+    g.addColorStop(0, '#9cc7ea'); g.addColorStop(0.45, '#cfe4f2'); g.addColorStop(0.46, '#3f6b3a'); g.addColorStop(0.7, '#2b4a33'); g.addColorStop(0.71, '#2a4652'); g.addColorStop(1, '#1b2e38');
+    ctx.fillStyle = g; ctx.fillRect(x, y, W, H);
+    ctx.fillStyle = '#4c7a43'; ctx.beginPath(); ctx.moveTo(x, y + H * 0.5); ctx.quadraticCurveTo(x + W * 0.3, y + H * 0.2, x + W * 0.6, y + H * 0.42); ctx.quadraticCurveTo(x + W * 0.8, y + H * 0.3, x + W, y + H * 0.46); ctx.lineTo(x + W, y + H * 0.6); ctx.lineTo(x, y + H * 0.6); ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = `500 ${18 * unit}px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 4 * unit;
+  ctx.fillText(s.title || '', x + 8 * unit, y - 12 * unit);
+  const tw = ctx.measureText(s.title || '').width;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6 * unit; ctx.beginPath(); ctx.moveTo(x, y - 30 * unit); ctx.lineTo(x, y - 6 * unit); ctx.lineTo(x + tw + 16 * unit, y - 6 * unit); ctx.stroke();
+}
+
+// ================================================================= AR floating panel
+function arPanel(ctx, L, tm, o) {
+  const s = L.style, fr = o.frame, t = o.time || 0;
+  if (!fr) return;
+  const unit = o.unit * (+s.size || 1);
+  const col = s.color || '#ffc46b';
+  const u = prog(L, tm);
+  const k = L.anim === 'unfold' && !tm.edit ? easeOut(u) : 1;
+  const W = 300 * unit, H = 230 * unit;
+  const pos = s.position || 'center';
+  const m = 60 * o.unit;
+  let cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2;
+  if (pos.includes('left')) cx = fr.x + m + W / 2; if (pos.includes('right')) cx = fr.x + fr.w - m - W / 2 - 120 * unit;
+  if (pos.includes('top')) cy = fr.y + m + H / 2; if (pos.includes('bottom')) cy = fr.y + fr.h - m - H / 2;
+  placeAt(ctx, L, fr, cx - W / 2, cy - H / 2, W + 140 * unit, H);
+  ctx.globalAlpha *= tm.alpha;
+  const panel = (px, py, pw, ph, main) => {
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.transform(1, -0.2, 0.32, 1, 0, 0);
+    ctx.scale(1, k);
+    ctx.shadowColor = hexA(col, 0.8); ctx.shadowBlur = 18 * unit;
+    const g = ctx.createLinearGradient(-pw / 2, -ph / 2, pw / 2, ph / 2);
+    g.addColorStop(0, hexA(col, 0.08)); g.addColorStop(1, hexA(col, 0.32));
+    ctx.fillStyle = g; ctx.fillRect(-pw / 2, -ph / 2, pw, ph);
+    ctx.strokeStyle = hexA(col, 0.95); ctx.lineWidth = 1.6 * unit; ctx.strokeRect(-pw / 2, -ph / 2, pw, ph);
+    ctx.shadowBlur = 0;
+    if (main) {
+      // wireframe terrain
+      const nx = 9, ny = 6, r = rng(hashStr(L.id));
+      const hgt = Array.from({ length: (nx + 1) * (ny + 1) }, () => r());
+      const pt = (i, j) => [-pw / 2 + (i / nx) * pw, ph * 0.05 + (j / ny) * ph * 0.42 - hgt[j * (nx + 1) + i] * 14 * unit * (1 + 0.15 * Math.sin(t + i))];
+      ctx.strokeStyle = hexA(col, 0.55); ctx.lineWidth = 0.8 * unit;
+      for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+        const a = pt(i, j);
+        if (i < nx) { const b = pt(i + 1, j); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+        if (j < ny) { const b = pt(i, j + 1); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); if (i < nx && (i + j) % 2) { const d = pt(i + 1, j + 1); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(d[0], d[1]); ctx.stroke(); } }
+        ctx.fillStyle = hexA(col, 0.9); ctx.fillRect(a[0] - 1.2 * unit, a[1] - 1.2 * unit, 2.4 * unit, 2.4 * unit);
+      }
+      ctx.fillStyle = '#fff4dc'; ctx.font = `300 ${15 * unit}px ${UI}`; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText(s.title || '', pw / 2 - 10 * unit, -ph / 2 + 10 * unit);
+      ctx.font = `400 ${6 * unit}px ${UI}`; ctx.fillStyle = hexA(col, 0.8); ctx.textAlign = 'left';
+      for (let i = 0; i < 4; i++) ctx.fillText('— survey line · depth · offset —'.slice(0, 18 + i * 3), pw * 0.05, ph * 0.3 + i * 8 * unit);
+    }
+    ctx.restore();
+  };
+  panel(cx - W * 0.62, cy - H * 0.12, W * 0.32, H * 0.5, false);
+  panel(cx, cy, W, H * 0.8, true);
+  // floating numbers
+  const nums = String(s.numbers || '').split('\n').filter(Boolean);
+  ctx.fillStyle = '#fff1d6'; ctx.font = `300 ${19 * unit}px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = hexA(col, 0.9); ctx.shadowBlur = 8 * unit;
+  nums.forEach((n, i) => {
+    const kk = tm.edit ? 1 : clamp(u * 2 - i * 0.2, 0, 1);
+    const r2 = rng(hashStr(L.id) + i + Math.floor(t * 4));
+    const txt = kk < 1 ? n.replace(/\d/g, () => String(Math.floor(r2() * 10))) : n;
+    ctx.globalAlpha = tm.alpha * kk;
+    ctx.fillText(txt, cx + W * 0.62 + i * 6 * unit, cy - H * 0.3 + i * 30 * unit);
+  });
+}
+
+// ================================================================= line callouts
+function lineCallout(ctx, L, tm, o) {
+  if (L.geom?.type !== 'Point') return;
+  const s = L.style, unit = o.unit * (+s.size || 1);
+  const P = o.proj(L.geom.coordinates);
+  const col = s.color || '#ffffff';
+  const items = String(s.items || '').split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 6);
+  const u = prog(L, tm);
+  const slots = [[-250, -150, 'L'], [110, -95, 'R'], [-260, 30, 'L'], [110, 50, 'R'], [-240, -260, 'L'], [110, -220, 'R']];
+  ctx.globalAlpha *= tm.alpha;
+  const cr = 24 * unit * (tm.edit ? 1 : easeOut(u * 3));
+  ctx.strokeStyle = col; ctx.lineWidth = 2 * unit;
+  ctx.beginPath(); ctx.arc(P[0], P[1], cr, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(P[0], P[1], 4 * unit, 0, Math.PI * 2); ctx.fill();
+  items.forEach((it, i) => {
+    const [dx, dy, side] = slots[i];
+    const k = tm.edit || L.anim === 'none' ? 1 : clamp((u - 0.15 - i * 0.15) / 0.35, 0, 1);
+    if (k <= 0) return;
+    const lines = it.split(' / ');
+    const big = lines.length === 1 && /^[^\w]?[\d,.]+$/.test(it.replace(/[$€£\s]/g, '')) ;
+    const fs = (big ? 30 : 14) * unit;
+    ctx.font = `${big ? 300 : 500} ${fs}px ${UI}`;
+    const shown = lines.map((l) => (big ? countUpTxt(l, k) : l));
+    const bw = Math.max(...shown.map((l) => ctx.measureText(l).width)) + 30 * unit, bh = lines.length * fs * 1.45 + 16 * unit;
+    const bx = side === 'L' ? P[0] + dx * unit - bw + 140 * unit : P[0] + dx * unit, by = P[1] + dy * unit;
+    // elbow line: from the circle edge, vertical, then horizontal into the box
+    const ex = side === 'L' ? bx + bw : bx, ey = by + bh / 2;
+    const sx = P[0], sy = P[1] + (ey < P[1] ? -cr : cr);
+    const len1 = Math.abs(ey - sy), len2 = Math.abs(ex - sx);
+    const d = (len1 + len2) * clamp(k * 1.6, 0, 1);
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5 * unit;
+    ctx.beginPath(); ctx.moveTo(sx, sy);
+    if (d <= len1) ctx.lineTo(sx, sy + Math.sign(ey - sy) * d);
+    else { ctx.lineTo(sx, ey); ctx.lineTo(sx + Math.sign(ex - sx) * (d - len1), ey); }
+    ctx.stroke();
+    const kb = clamp(k * 1.6 - 0.6, 0, 1);
+    if (kb <= 0) return;
+    ctx.save(); ctx.globalAlpha *= kb;
+    ctx.fillStyle = 'rgba(20,24,28,0.55)'; ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeRect(bx, by, bw, bh);
+    ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    shown.forEach((l, j) => ctx.fillText(l, bx + 15 * unit, by + 8 * unit + fs * 1.45 * (j + 0.5)));
+    ctx.restore();
+  });
+}
+function countUpTxt(raw, k) {
+  const m = String(raw).match(/^([^\d]*)([\d,]*\.?\d+)(.*)$/);
+  if (!m || k >= 1) return raw;
+  const v = parseFloat(m[2].replace(/,/g, '')), dp = (m[2].split('.')[1] || '').length;
+  return `${m[1]}${(v * easeOut(k)).toLocaleString('en', { minimumFractionDigits: dp, maximumFractionDigits: dp })}${m[3]}`;
+}
+
+// ================================================================= object detection
+function detect(ctx, L, tm, o) {
+  const c = L.geom?.coordinates;
+  if (L.geom?.type !== 'LineString' || c.length < 2) return;
+  const s = L.style, unit = o.unit * (+s.size || 1), t = o.time || 0;
+  const P = resample(c.map((p) => o.proj(p)), 4 * o.unit);
+  const n = clamp(Math.round(+s.count || 10), 1, 80), lanes = clamp(Math.round(+s.lanes || 2), 1, 6);
+  const r = rng(hashStr(L.id));
+  const u = prog(L, tm);
+  ctx.globalAlpha *= tm.alpha;
+  const lw = 14 * unit;
+  const CAR = ['#d8dde3', '#2b2f36', '#8c939c', '#b3282d', '#2f5fa8', '#f2f2f2'];
+  for (let i = 0; i < n; i++) {
+    const dir = r() < 0.5 ? 1 : -1;
+    const lane = (1 + Math.floor(r() * lanes)) * dir;
+    const v = (0.03 + r() * 0.04) * (+s.speed ?? 1);
+    let f = (r() + t * v * dir) % 1; if (f < 0) f += 1;
+    const idx = Math.min(P.length - 2, Math.floor(f * (P.length - 1)));
+    const a = P[idx], b = P[idx + 1];
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const nx = -Math.sin(ang), ny = Math.cos(ang);
+    const x = a[0] + nx * (lane - Math.sign(lane) * 0.5) * lw, y = a[1] + ny * (lane - Math.sign(lane) * 0.5) * lw;
+    const carCol = CAR[Math.floor(r() * CAR.length)];
+    const conf = (0.82 + r() * 0.17).toFixed(2);
+    const k = tm.edit ? 1 : clamp(u * 2 - i / n, 0, 1);
+    if (s.cars !== false) {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(ang + (dir < 0 ? Math.PI : 0));
+      ctx.fillStyle = carCol; rr(ctx, -9 * unit, -4.5 * unit, 18 * unit, 9 * unit, 2.5 * unit); ctx.fill();
+      ctx.fillStyle = 'rgba(20,30,40,0.7)'; ctx.fillRect(2 * unit, -3.5 * unit, 3.5 * unit, 7 * unit); ctx.fillRect(-6 * unit, -3.5 * unit, 2.5 * unit, 7 * unit);
+      ctx.restore();
+    }
+    if (k <= 0) continue;
+    ctx.save(); ctx.globalAlpha *= k;
+    if (s.look === 'rings') {
+      const R = 16 * unit;
+      ctx.strokeStyle = '#3fe0d0'; ctx.shadowColor = '#3fe0d0'; ctx.shadowBlur = 6 * unit;
+      ctx.lineWidth = 2.5 * unit; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1.2 * unit;
+      for (let q = 0; q < 4; q++) { const a0 = q * Math.PI / 2 + t * 1.5; ctx.beginPath(); ctx.arc(x, y, R * 1.35, a0, a0 + 1.1); ctx.stroke(); }
+      for (let q = 0; q < 12; q++) { const a0 = q * Math.PI / 6; ctx.beginPath(); ctx.moveTo(x + Math.cos(a0) * R * 1.05, y + Math.sin(a0) * R * 1.05); ctx.lineTo(x + Math.cos(a0) * R * 1.18, y + Math.sin(a0) * R * 1.18); ctx.stroke(); }
+    } else {
+      const w = 26 * unit, h = 20 * unit;
+      ctx.strokeStyle = 'rgba(80,255,150,0.55)'; ctx.lineWidth = 1 * unit; ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+      ctx.strokeStyle = '#4dff8a'; ctx.lineWidth = 2 * unit;
+      const bb = 6 * unit;
+      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const px = x + sx * w / 2, py = y + sy * h / 2; ctx.beginPath(); ctx.moveTo(px, py - sy * bb); ctx.lineTo(px, py); ctx.lineTo(px - sx * bb, py); ctx.stroke(); }
+      if (i % 3 === 0) { ctx.strokeStyle = 'rgba(255,60,80,0.8)'; ctx.lineWidth = 1 * unit; ctx.strokeRect(x - w * 0.32, y - h * 0.32, w * 0.64, h * 0.64); }
+    }
+    if (s.labels !== false) {
+      ctx.fillStyle = s.look === 'rings' ? '#3fe0d0' : '#4dff8a'; ctx.font = `700 ${8 * unit}px ${MONO}`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.shadowBlur = 0;
+      ctx.fillText(`CAR ${conf}`, x - 13 * unit, y - (s.look === 'rings' ? 24 : 12) * unit);
+    }
+    ctx.restore();
+  }
+}
+
+// ================================================================= tag title (pink label boxes)
+export const TAG_STYLES = { spaced: 'Letter-spaced in a box', bold: 'Bold capitals in boxes' };
+export function drawTagTitle(ctx, L, tm, o) {
+  const s = L.style, fr = o.frame, t = o.time || 0;
+  const unit = o.unit * (+s.size || 1);
+  const D = Math.max(0.2, +L.duration || 1);
+  const u = tm.edit ? 1 : clamp(tm.tau / D, 0, 1);
+  const box = s.accent && s.accent !== '#e8c27a' ? s.accent : '#ff2d55';
+  const main = String(s.text || '').split('|').map((x) => x.trim()).filter(Boolean);
+  const sub = String(s.sub || '').split('|').map((x) => x.trim()).filter(Boolean);
+  const spacedLook = (s.tagStyle || (main.length === 1 && !sub.length ? 'spaced' : 'bold')) === 'spaced';
+  const rows = [
+    ...main.map((txt) => ({ txt: txt.toUpperCase(), bg: box, fg: spacedLook ? (s.color && s.color !== '#ffffff' ? s.color : '#ffffff') : '#14122a', fs: (spacedLook ? 22 : 38) * unit, sp: spacedLook ? 9 * unit : 1 * unit, w: spacedLook ? 400 : 800 })),
+    ...sub.map((txt) => ({ txt: txt.toUpperCase(), bg: '#ffffff', fg: '#14122a', fs: 17 * unit, sp: 7 * unit, w: 700 })),
+  ];
+  if (!rows.length) return;
+  const meas = (r) => { ctx.font = `${r.w} ${r.fs}px ${fam2(s.font)}`; const ws = [...r.txt].map((c) => ctx.measureText(c).width); return ws.reduce((a, b) => a + b, 0) + r.sp * (r.txt.length - 1); };
+  rows.forEach((r) => { r.tw = meas(r); r.bw = r.tw + r.fs * 0.9; r.bh = r.fs * 1.5; });
+  const gap = 8 * unit;
+  const totalH = rows.reduce((a, r) => a + r.bh + gap, -gap);
+  const maxW = Math.max(...rows.map((r) => r.bw));
+  const al = s.tagAlign || 'left';
+  const ax = fr.x + fr.w * (al === 'right' ? 0.94 : al === 'center' ? 0.5 : 0.15), ay = fr.y + fr.h * (+s.tagY || 0.5) - totalH / 2;
+  const right = al === 'right';
+  placeAt(ctx, L, fr, right ? ax - maxW : ax, ay, maxW, totalH);
+  ctx.globalAlpha *= tm.alpha;
+  let y = ay;
+  rows.forEach((r, i) => {
+    const k = clamp((u - i * 0.12) / 0.45, 0, 1);
+    const kw = easeOut(k);
+    const x0 = right ? ax - r.bw : (al === 'center' ? ax - r.bw / 2 : ax);
+    if (kw > 0) {
+      const bwNow = r.bw * kw;
+      const bx = right ? x0 + r.bw - bwNow : x0;
+      ctx.fillStyle = r.bg; ctx.fillRect(bx, y, bwNow, r.bh);
+      ctx.save(); ctx.beginPath(); ctx.rect(bx, y, bwNow, r.bh); ctx.clip();
+      ctx.fillStyle = r.fg; ctx.font = `${r.w} ${r.fs}px ${fam2(s.font)}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      const ta = clamp((k - 0.4) / 0.6, 0, 1);
+      ctx.globalAlpha *= ta;
+      let cx = x0 + r.fs * 0.45 + (1 - ta) * 14 * unit;
+      for (const ch of r.txt) { ctx.fillText(ch, cx, y + r.bh / 2 + r.fs * 0.04); cx += ctx.measureText(ch).width + r.sp; }
+      ctx.restore();
+    }
+    y += r.bh + gap;
+  });
+}
+const fam2 = (f) => (f ? `"${f}", "Montserrat", ${UI}` : `"Montserrat","Gotham",${UI}`);
+
+// ================================================================= plus-mark grid & lens flare (screen effects)
+export function drawCrosses(ctx, fr, unit, t, k, col) {
+  ctx.save();
+  ctx.strokeStyle = hexA(col || '#ffffff', 0.85 * k); ctx.lineWidth = 1.2 * unit;
+  const nx = 9, ny = 5;
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+    const r = rng(i * 131 + j * 7 + 3);
+    if (r() < 0.25) continue;
+    const blink = 0.5 + 0.5 * Math.sin(t * (0.8 + r() * 2) + r() * 6);
+    ctx.globalAlpha = 0.4 + 0.6 * blink;
+    const x = fr.x + ((i + 0.5) / nx) * fr.w, y = fr.y + ((j + 0.5) / ny) * fr.h, d = 4 * unit;
+    ctx.beginPath(); ctx.moveTo(x - d, y); ctx.lineTo(x + d, y); ctx.moveTo(x, y - d); ctx.lineTo(x, y + d); ctx.stroke();
+  }
+  ctx.restore();
+}
+export function drawLensFlare(ctx, fr, unit, t, k, s) {
+  const x = fr.x + fr.w * (s.sunX ?? 0.5), y = fr.y + fr.h * (s.sunY ?? 0.32);
+  const R = Math.min(fr.w, fr.h) * 0.55;
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  let g = ctx.createRadialGradient(x, y, 0, x, y, R);
+  g.addColorStop(0, `rgba(255,255,240,${k})`); g.addColorStop(0.06, `rgba(255,236,190,${0.95 * k})`); g.addColorStop(0.2, `rgba(255,170,80,${0.45 * k})`); g.addColorStop(0.55, `rgba(255,120,40,${0.12 * k})`); g.addColorStop(1, 'rgba(255,100,30,0)');
+  ctx.fillStyle = g; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+  // horizontal streak
+  g = ctx.createLinearGradient(fr.x, 0, fr.x + fr.w, 0);
+  g.addColorStop(0, 'rgba(255,200,140,0)'); g.addColorStop((x - fr.x) / fr.w, `rgba(255,230,190,${0.35 * k})`); g.addColorStop(1, 'rgba(255,200,140,0)');
+  ctx.fillStyle = g; ctx.fillRect(fr.x, y - 2 * unit, fr.w, 4 * unit);
+  // ghosts along the line through the centre
+  const cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2;
+  [[0.5, 22, '255,180,90'], [1.3, 40, '120,200,255'], [1.7, 14, '255,140,200'], [2.2, 60, '180,255,200']].forEach(([f, r, c]) => {
+    const gx = x + (cx - x) * f, gy = y + (cy - y) * f;
+    const gg = ctx.createRadialGradient(gx, gy, 0, gx, gy, r * unit);
+    gg.addColorStop(0, `rgba(${c},${0.18 * k})`); gg.addColorStop(1, `rgba(${c},0)`);
+    ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(gx, gy, r * unit, 0, Math.PI * 2); ctx.fill();
+  });
   ctx.restore();
 }
