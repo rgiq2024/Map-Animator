@@ -82,6 +82,7 @@ export const VZ_KINDS = {
   beams: { name: 'Light beams', icon: '✺', geom: 'point', desc: 'Colourful arcs of light shooting out from a hub with travelling particles' },
   mesh: { name: 'Network mesh', icon: '⋰', geom: 'polygon', desc: 'Glowing nodes connected by lines with pulses (smart city / 5G network)' },
   viewshed: { name: 'Viewshed', icon: '👁', geom: 'point', desc: 'What can be seen from a point: rays blocked by the buildings around it' },
+  kgraph: { name: 'Knowledge graph', icon: '🕸', geom: null, desc: 'Linked entities (people, vehicles, repairs, incidents…) that grow out from a centre node, with a details panel' },
   fmv: { name: 'Drone video footprint', icon: '🎥', geom: 'line', desc: 'A drone flies the path: camera footprint and track on the map, and a video player window' },
 };
 export const VZ_ANIMS = {
@@ -95,6 +96,7 @@ export const VZ_ANIMS = {
   mesh: { grow: 'Grow the network', none: 'Already there' },
   viewshed: { sweep: 'Sweep round', none: 'Already there' },
   fmv: { fly: 'Fly the path' },
+  kgraph: { build: 'Grow the graph', fade: 'Fade in', none: 'Already there' },
 };
 export const VZ_DEFAULTS = {
   spectral: { anim: 'wipe', duration: 1.6, style: { mode: 'split', palette: 'spectral', left: 'duo', split: 0.5, boxes: true, titleL: 'RAMP / DTW18', subL: 'SSR PN', titleR: 'RAMP / DTW18', subR: 'm/Gup', tagL: 'VCID* 1, 6', tagR: 'VCID* 2', noteL: 'True Scale Latitude', noteR: 'Cloud Cover Truncated', bands: 'Geometric RMSE Verify | #3ddc84\nGain Band (1-5, 6 VCID* 1) | #4d7cff\nTIRS Blackbody Stability | #3ddc84\nGain Band (1-5 VCID* 2) | #4d7cff', stretch: true } },
@@ -106,6 +108,7 @@ export const VZ_DEFAULTS = {
   beams: { anim: 'shoot', duration: 2.5, style: { count: 36, radiusKm: 4, arc: 0.6, palette: 'rainbow', color: '#4fc3ff', particles: true, useLayers: false, seed: 1 } },
   mesh: { anim: 'grow', duration: 3, style: { count: 40, links: 3, color: '#cfe9ff', pulses: true, seed: 1 } },
   viewshed: { anim: 'sweep', duration: 2, style: { radiusM: 250, rays: 360, color: '#39d353', buildings: true, bldColor: '#29a8ff', circle: true, label: true } },
+  kgraph: { anim: 'build', duration: 3, style: { layout: 'panel', data: 'BUS: 5836 | bus\nKimbell Todor | person\nRaphael Gilardengo | person\nEngracia Tonna | person\nCarol-Jean Yakunikov | person\nBecca Turri | person\nRepair ID: 527 | repair\nRepair ID: 525 | repair\nElnora Lewis | person\nNelson Lambshine | person\nRozele Todaro | person\nCollision: pedestrian | alert | Rozele Todaro\nBUS: 9490 | bus | Rozele Todaro', cloud: 120, panel: true, props: 'NUM: 5836\nBUS ID: MTA NYCT_5836', search: '', color: '#29c6e0', size: 1 } },
   fmv: { anim: 'fly', duration: 10, style: { color: '#ffe11a', aheadM: 350, footM: 220, window: true, title: 'FMV · Exercise 3', position: 'top-left', winSize: 0.42, frustum: true } },
 };
 const PALETTES = { spectral: 'Spectral (false colour)', thermal: 'Thermal (heat)', ndvi: 'Vegetation (NDVI)', ice: 'Ice blue' };
@@ -119,12 +122,13 @@ export const VZ_FORMS = {
   beams: [['style.count', 'Beams', 'range', [3, 200, 1]], ['style.radiusKm', 'Reach (km)', 'range', [0.2, 2000, 0.1]], ['style.arc', 'Arc height', 'range', [0, 2, 0.05]], ['style.palette', 'Colours', 'select', { rainbow: 'Blue, green, orange, pink', blue: 'Blue', single: 'One colour' }], ['style.color', 'Colour', 'color', null, (L) => L.style.palette === 'single'], ['style.particles', 'Particles', 'switch'], ['style.useLayers', 'Shoot to the other points in this scene', 'switch'], ['style.seed', 'Shuffle', 'number', 1]],
   mesh: [['style.count', 'Nodes', 'range', [5, 200, 1]], ['style.links', 'Links per node', 'range', [1, 6, 1]], ['style.color', 'Colour', 'color'], ['style.pulses', 'Pulses along the lines', 'switch'], ['style.seed', 'Shuffle', 'number', 1]],
   viewshed: [['style.radiusM', 'Radius (m)', 'range', [30, 3000, 5]], ['style.color', 'Visible area colour', 'color'], ['style.buildings', 'Colour the buildings', 'switch'], ['style.bldColor', 'Building colour', 'color', null, (L) => L.style.buildings !== false], ['style.circle', 'Range circle', 'switch'], ['style.label', '% visible label', 'switch'], ['style.rays', 'Rays (detail)', 'range', [36, 720, 1]]],
+  kgraph: [['style.data', 'Nodes — “Name | type | linked to” per line (types: person, bus, car, repair, alert, building, doc, phone, place; the first line is the centre)', 'textarea'], ['style.layout', 'Layout', 'select', { panel: 'Lower panel (map above)', full: 'Whole screen', overlay: 'Over the map (no background)' }], ['style.cloud', 'Background network (nodes, 0 = none)', 'range', [0, 400, 1]], ['style.panel', 'Details panel', 'switch'], ['style.props', 'Details — “Label: value” per line', 'textarea', null, (L) => L.style.panel !== false], ['style.search', 'Search box text', 'text'], ['style.color', 'Accent colour', 'color'], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]]],
   fmv: [['style.color', 'Colour', 'color'], ['style.aheadM', 'Camera looks ahead (m)', 'range', [0, 3000, 10]], ['style.footM', 'Footprint size (m)', 'range', [20, 3000, 10]], ['style.frustum', 'Camera lines', 'switch'], ['style.window', 'Video player window', 'switch'], ['style.title', 'Window title', 'text', null, (L) => L.style.window !== false], ['style.position', 'Window position', 'select', POS, (L) => L.style.window !== false], ['style.winSize', 'Window size', 'range', [0.2, 0.7, 0.01], (L) => L.style.window !== false]],
 };
 export const VZ_SET = new Set(Object.keys(VZ_KINDS));
-export const VZ_SCREEN = new Set(['spectral', 'splitgrid', 'hexbadges']);
+export const VZ_SCREEN = new Set(['spectral', 'splitgrid', 'hexbadges', 'kgraph']);
 export function vzPhases(k) {
-  return { spectral: ['below', 'captions'], splitgrid: ['captions'], block: ['below', 'above'], datapin: ['above'], hexbadges: ['captions'], flowlines: ['below'], beams: ['above'], mesh: ['above'], viewshed: ['below', 'above'], fmv: ['above', 'captions'] }[k] || ['above'];
+  return { spectral: ['below', 'captions'], splitgrid: ['captions'], block: ['below', 'above'], datapin: ['above'], hexbadges: ['captions'], kgraph: ['captions'], flowlines: ['below'], beams: ['above'], mesh: ['above'], viewshed: ['below', 'above'], fmv: ['above', 'captions'] }[k] || ['above'];
 }
 export function drawViz(ctx, L, tm, o, phase) {
   ctx.save();
@@ -135,6 +139,7 @@ export function drawViz(ctx, L, tm, o, phase) {
       case 'block': phase === 'below' ? blockBase(ctx, L, tm, o) : blockPlates(ctx, L, tm, o); break;
       case 'datapin': dataPin(ctx, L, tm, o); break;
       case 'hexbadges': hexBadges(ctx, L, tm, o); break;
+      case 'kgraph': kGraph(ctx, L, tm, o); break;
       case 'flowlines': flowLines(ctx, L, tm, o); break;
       case 'beams': beams(ctx, L, tm, o); break;
       case 'mesh': mesh(ctx, L, tm, o); break;
@@ -1081,6 +1086,167 @@ export function drawCodeText(ctx, L, tm, o) {
       if (!far && r() < 0.25) { ctx.globalAlpha *= 0.35; ctx.fillRect(x + ctx.measureText(txt).width + 20 * unit, y - 3 * unit, (60 + r() * 220) * unit, 6 * unit); ctx.globalAlpha /= 0.35; }
     }
     ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ================================================================= knowledge graph
+const KG_COL = { person: '#29a8e0', bus: '#22c3d6', car: '#22c3d6', repair: '#ff7a1a', alert: '#e8202a', building: '#8a7bff', doc: '#7b8794', phone: '#3ddc84', place: '#ffb020' };
+const KG_TYPES = Object.keys(KG_COL);
+function kgIcon(ctx, type, x, y, r) {
+  ctx.save(); ctx.translate(x, y); ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = r * 0.14; ctx.lineCap = 'round';
+  const s = r * 0.5;
+  if (type === 'person') { ctx.beginPath(); ctx.arc(0, -s * 0.45, s * 0.42, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.ellipse(0, s * 0.62, s * 0.78, s * 0.52, 0, Math.PI, 0); ctx.fill(); }
+  else if (type === 'bus' || type === 'car') {
+    rr(ctx, -s * 0.8, -s * 0.85, s * 1.6, s * 1.45, s * 0.3); ctx.fill();
+    ctx.fillStyle = KG_COL[type]; ctx.fillRect(-s * 0.55, -s * 0.6, s * 1.1, s * 0.5);
+    ctx.beginPath(); ctx.arc(-s * 0.42, s * 0.3, s * 0.14, 0, Math.PI * 2); ctx.arc(s * 0.42, s * 0.3, s * 0.14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillRect(-s * 0.6, s * 0.6, s * 0.25, s * 0.25); ctx.fillRect(s * 0.35, s * 0.6, s * 0.25, s * 0.25);
+  } else if (type === 'repair') {
+    for (const a of [Math.PI / 4, -Math.PI / 4]) { ctx.save(); ctx.rotate(a); ctx.lineWidth = s * 0.3; ctx.beginPath(); ctx.moveTo(0, -s * 0.75); ctx.lineTo(0, s * 0.75); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -s * 0.75, s * 0.28, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  } else if (type === 'alert') {
+    ctx.beginPath(); ctx.moveTo(0, -s * 0.85); ctx.lineTo(s * 0.9, s * 0.7); ctx.lineTo(-s * 0.9, s * 0.7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = KG_COL.alert; ctx.fillRect(-s * 0.08, -s * 0.35, s * 0.16, s * 0.6); ctx.fillRect(-s * 0.08, s * 0.38, s * 0.16, s * 0.16);
+  } else if (type === 'building') { ctx.fillRect(-s * 0.6, -s * 0.8, s * 1.2, s * 1.6); ctx.fillStyle = KG_COL.building; for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) ctx.fillRect(-s * 0.4 + j * s * 0.5, -s * 0.6 + i * s * 0.45, s * 0.3, s * 0.25); }
+  else if (type === 'doc') { ctx.fillRect(-s * 0.55, -s * 0.8, s * 1.1, s * 1.6); ctx.fillStyle = KG_COL.doc; for (let i = 0; i < 3; i++) ctx.fillRect(-s * 0.35, -s * 0.45 + i * s * 0.38, s * 0.7, s * 0.12); }
+  else if (type === 'phone') { rr(ctx, -s * 0.42, -s * 0.85, s * 0.84, s * 1.7, s * 0.18); ctx.fill(); ctx.fillStyle = KG_COL.phone; ctx.fillRect(-s * 0.3, -s * 0.6, s * 0.6, s * 1.05); }
+  else if (type === 'place') { ctx.beginPath(); ctx.arc(0, -s * 0.25, s * 0.55, Math.PI, 0); ctx.lineTo(0, s * 0.9); ctx.closePath(); ctx.fill(); ctx.fillStyle = KG_COL.place; ctx.beginPath(); ctx.arc(0, -s * 0.25, s * 0.22, 0, Math.PI * 2); ctx.fill(); }
+  else { ctx.beginPath(); ctx.arc(0, 0, s * 0.4, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
+function kgParse(txt) {
+  const nodes = [], by = new Map();
+  for (const line of String(txt || '').split('\n')) {
+    const [name, type, link] = line.split('|').map((x) => x.trim());
+    if (!name) continue;
+    const n = { name, type: KG_TYPES.includes((type || '').toLowerCase()) ? type.toLowerCase() : (type || 'generic').toLowerCase(), link: link || '', kids: [] };
+    nodes.push(n); by.set(name.toLowerCase(), n);
+  }
+  nodes.forEach((n, i) => { if (!i) return; n.parent = by.get(n.link.toLowerCase()) || nodes[0]; if (n.parent === n) n.parent = nodes[0]; n.parent.kids.push(n); });
+  return nodes;
+}
+function kgLayout(nodes, cx, cy, R) {
+  if (!nodes.length) return;
+  const root = nodes[0];
+  root.x = cx; root.y = cy; root.depth = 0;
+  const place = (n, a0, a1, depth) => {
+    const k = n.kids.length;
+    n.kids.forEach((c, i) => {
+      const a = k === 1 && depth > 0 ? (a0 + a1) / 2 : a0 + ((i + 0.5) / k) * (a1 - a0);
+      const rad = R * (depth === 0 ? 1 : 0.55) * (depth === 0 && k > 9 ? (i % 2 ? 1.18 : 0.82) : 1);
+      c.x = n.x + Math.cos(a) * rad; c.y = n.y + Math.sin(a) * rad * 0.82; c.depth = depth + 1;
+      const span = depth === 0 ? Math.min(Math.PI * 0.9, (Math.PI * 2) / Math.max(1, k) * 1.4) : (a1 - a0) / Math.max(1, k);
+      place(c, a - span / 2, a + span / 2, depth + 1);
+    });
+  };
+  place(root, -Math.PI / 2, Math.PI * 1.5, 0);
+}
+function kGraph(ctx, L, tm, o) {
+  const s = L.style, fr = o.frame, t = o.time || 0;
+  if (!fr) return;
+  const unit = o.unit * (+s.size || 1);
+  const col = s.color || '#29c6e0';
+  const u = prog(L, tm);
+  const lay = s.layout || 'panel';
+  const R0 = lay === 'panel' ? { x: fr.x, y: fr.y + fr.h * 0.44, w: fr.w, h: fr.h * 0.56 } : { ...fr };
+  ctx.globalAlpha *= tm.alpha * (L.anim === 'fade' ? ease(u) : 1);
+  // panel background + search bar
+  if (lay !== 'overlay') {
+    ctx.save();
+    ctx.fillStyle = '#000'; ctx.fillRect(R0.x, R0.y, R0.w, 44 * o.unit);
+    ctx.fillStyle = 'rgba(0,14,18,0.78)'; ctx.fillRect(R0.x, R0.y + 44 * o.unit, R0.w, R0.h - 44 * o.unit);
+    ctx.fillStyle = '#5b5f63'; ctx.fillRect(R0.x + 10 * o.unit, R0.y + 10 * o.unit, 190 * o.unit, 25 * o.unit);
+    const q = String(s.search || '');
+    ctx.fillStyle = '#fff'; ctx.font = `500 ${13 * o.unit}px ${UI}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText(q.slice(0, Math.ceil(q.length * clamp(u * 3, 0, 1))), R0.x + 16 * o.unit, R0.y + 23 * o.unit);
+    ctx.strokeStyle = '#b8bec4'; ctx.lineWidth = 1.6 * o.unit; const tx = R0.x + 220 * o.unit, ty = R0.y + 15 * o.unit;
+    ctx.strokeRect(tx, ty + 3 * o.unit, 11 * o.unit, 13 * o.unit); ctx.beginPath(); ctx.moveTo(tx - 2 * o.unit, ty + 2 * o.unit); ctx.lineTo(tx + 13 * o.unit, ty + 2 * o.unit); ctx.stroke();
+    ctx.restore();
+  }
+  const R = lay === 'overlay' ? R0 : { x: R0.x, y: R0.y + 44 * o.unit, w: R0.w, h: R0.h - 44 * o.unit };
+  const panelW = s.panel !== false ? Math.min(220 * o.unit, R.w * 0.22) : 0;
+  ctx.save(); ctx.beginPath(); ctx.rect(R.x, R.y, R.w, R.h); ctx.clip();
+  // background network cloud
+  const nCloud = clamp(Math.round(+s.cloud || 0), 0, 400);
+  const seed = hashStr(L.id);
+  if (nCloud) {
+    const r = rng(seed);
+    const cloudK = tm.edit ? 0.25 : clamp(u * 3, 0, 1) * (1 - 0.75 * clamp((u - 0.3) / 0.25, 0, 1));
+    const pts = [];
+    const hubs = Array.from({ length: 9 }, () => [R.x + (0.05 + r() * 0.75) * (R.w - panelW), R.y + (0.1 + r() * 0.8) * R.h]);
+    for (let i = 0; i < nCloud; i++) { const hb = hubs[i % hubs.length]; pts.push([hb[0] + (r() - 0.5) * 140 * unit * (0.3 + r()), hb[1] + (r() - 0.5) * 110 * unit * (0.3 + r()), KG_TYPES[Math.floor(r() * 5)], r()]); }
+    ctx.save(); ctx.globalAlpha *= cloudK;
+    ctx.strokeStyle = 'rgba(200,210,220,0.35)'; ctx.lineWidth = 0.8 * unit;
+    pts.forEach((p, i) => { if (i % 2) return; const q = pts[(i * 7 + 3) % pts.length]; ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); });
+    pts.forEach((p, i) => {
+      const k = tm.edit ? 1 : backOut(clamp((u * 4 - p[3]) / 0.5, 0, 1));
+      if (k <= 0) return;
+      const rr2 = 11 * unit * k;
+      ctx.fillStyle = '#4b5258'; ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1 * unit;
+      ctx.beginPath(); ctx.arc(p[0], p[1], rr2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      kgIcon(ctx, p[2], p[0], p[1], rr2 * 0.95);
+    });
+    ctx.restore();
+  }
+  // focus graph
+  const nodes = kgParse(s.data);
+  if (nodes.length) {
+    const gu = nCloud && !tm.edit ? clamp((u - 0.35) / 0.65, 0, 1) : u;
+    const cx = R.x + (R.w - panelW) / 2, cy = R.y + R.h / 2;
+    kgLayout(nodes, cx, cy, Math.min((R.w - panelW) * 0.3, R.h * (nodes.some((n) => n.depth > 1 || (n.parent && n.parent !== nodes[0])) ? 0.27 : 0.36)));
+    const appear = (n, i) => (tm.edit || L.anim === 'none' ? 1 : clamp((gu * 1.4 - (n.depth ? 0.12 + (i / nodes.length) * 0.75 : 0)) / 0.25, 0, 1));
+    const ks = nodes.map(appear);
+    const fl = (n, i) => [n.x + Math.sin(t * 0.8 + i) * 2.5 * unit, n.y + Math.cos(t * 0.7 + i * 1.3) * 2.5 * unit];
+    ctx.strokeStyle = 'rgba(230,240,245,0.75)'; ctx.lineWidth = 1 * unit;
+    nodes.forEach((n, i) => {
+      if (!n.parent || ks[i] <= 0) return;
+      const a = fl(n.parent, nodes.indexOf(n.parent)), b = fl(n, i), k = Math.min(1, ks[i] * 1.5);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k); ctx.stroke();
+    });
+    nodes.forEach((n, i) => {
+      const k = ks[i];
+      if (k <= 0) return;
+      const [x, y] = fl(n, i);
+      const rr2 = (i ? 15 : 17) * unit * backOut(k);
+      const c = KG_COL[n.type] || '#7b8794';
+      ctx.save();
+      ctx.shadowColor = hexA(c, 0.8); ctx.shadowBlur = (i ? 6 : 16) * unit;
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, rr2, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      if (!i) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * unit; ctx.stroke(); ctx.strokeStyle = hexA(c, 0.5 * (1 - ((t * 0.8) % 1))); ctx.beginPath(); ctx.arc(x, y, rr2 * (1.2 + ((t * 0.8) % 1) * 0.8), 0, Math.PI * 2); ctx.stroke(); }
+      kgIcon(ctx, n.type, x, y, rr2);
+      ctx.fillStyle = '#ffffff'; ctx.font = `500 ${9.5 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 3 * unit; ctx.globalAlpha *= clamp(k * 2 - 1, 0, 1);
+      ctx.fillText(n.name.toUpperCase(), x, y + rr2 + 4 * unit);
+      ctx.restore();
+    });
+    // details panel
+    if (panelW) {
+      const pk = tm.edit ? 1 : easeOut((gu - 0.15) / 0.4);
+      const px = R.x + R.w - panelW * pk;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.92)'; ctx.fillRect(px, R.y, panelW, R.h);
+      const root = nodes[0], c = KG_COL[root.type] || col;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+      ctx.font = `800 ${14 * o.unit}px ${UI}`; ctx.fillText(root.name.toUpperCase(), px + panelW / 2, R.y + 22 * o.unit, panelW - 16 * o.unit);
+      ctx.font = `500 ${10 * o.unit}px ${UI}`; ctx.fillText(root.type.replace(/^./, (m) => m.toUpperCase()), px + panelW / 2, R.y + 38 * o.unit);
+      const ir = 20 * o.unit;
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(px + panelW / 2, R.y + 72 * o.unit, ir, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * o.unit; ctx.stroke();
+      kgIcon(ctx, root.type, px + panelW / 2, R.y + 72 * o.unit, ir);
+      ctx.font = `500 ${10 * o.unit}px ${UI}`; ctx.textAlign = 'left';
+      ctx.fillStyle = col; ctx.fillText('Properties', px + 12 * o.unit, R.y + 110 * o.unit);
+      ctx.fillStyle = '#fff'; ctx.fillText('Relationships', px + 80 * o.unit, R.y + 110 * o.unit);
+      ctx.fillText('Docs', px + 160 * o.unit, R.y + 110 * o.unit, panelW - 165 * o.unit);
+      String(s.props || '').split('\n').filter(Boolean).slice(0, 5).forEach((line, i) => {
+        const [k2, ...v] = line.split(':');
+        const yy = R.y + 124 * o.unit + i * 46 * o.unit;
+        if (yy + 40 * o.unit > R.y + R.h) return;
+        ctx.fillStyle = '#2a2d31'; ctx.fillRect(px + 8 * o.unit, yy, panelW - 16 * o.unit, 40 * o.unit);
+        ctx.fillStyle = '#fff'; ctx.font = `800 ${9.5 * o.unit}px ${UI}`; ctx.fillText(k2.trim().toUpperCase(), px + 14 * o.unit, yy + 12 * o.unit);
+        ctx.font = `500 ${10 * o.unit}px ${UI}`; ctx.fillText(v.join(':').trim(), px + 14 * o.unit, yy + 28 * o.unit, panelW - 28 * o.unit);
+      });
+      ctx.restore();
+    }
   }
   ctx.restore();
 }

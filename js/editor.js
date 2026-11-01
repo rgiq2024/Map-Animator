@@ -1665,8 +1665,9 @@ export function createEditor() {
     }
     if (b.dataset.variant) {
       L.style.variant = b.dataset.variant;
-      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock', tactical: 'Tactical HUD', radar: 'Radar scope', thermal: 'Thermal camera', scanner: 'Terrain scanner', mission: 'Mission briefing', geoint: 'GEOINT drone feed', satscan: 'Satellite scan HUD', c2: 'Command & control wall', ops: 'Operations dashboard', sigint: 'Signals intercept' }[b.dataset.variant];
+      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock', tactical: 'Tactical HUD', radar: 'Radar scope', thermal: 'Thermal camera', scanner: 'Terrain scanner', mission: 'Mission briefing', geoint: 'GEOINT drone feed', analytics: 'Real-time analytics', satscan: 'Satellite scan HUD', c2: 'Command & control wall', ops: 'Operations dashboard', sigint: 'Signals intercept' }[b.dataset.variant];
       if (b.dataset.variant === 'geoint') { Object.assign(L.style, { color: '#ffffff', label: 'GEOINT · EO/IR', tint: b.dataset.tint || 'blue', scan: true }); L.duration = 1.5; }
+      if (b.dataset.variant === 'analytics') { Object.assign(L.style, { color: '#38e1ff', label: 'REAL-TIME ANALYTICS', sub: 'NEW YORK CITY BUSES', filter: 'ALL LINES', callout: true, heat: true, scroll: true }); L.anim = 'fade'; L.duration = 2.5; }
       if (b.dataset.variant === 'satscan') { Object.assign(L.style, { color: '#ffffff', label: 'NAC / WOEID', sub: 'NAVSTAR', right: 'SPREAD SPECTRUM', text: 'INTERVAL IDENTIFIER\nCALIBRATION\nCCT SOURCE\nGAIN CHANGE' }); L.duration = 2; }
       if (b.dataset.variant === 'c2') { Object.assign(L.style, { color: '#38d0ff', label: 'COMMAND & CONTROL · OPS CENTER', panels: true, lights: true, clock: '20:45' }); L.anim = 'boot'; L.duration = 3; }
       if (b.dataset.variant === 'ops') { Object.assign(L.style, { color: '#38d0ff', label: 'OPERATIONS DASHBOARD', status: 'THREAT LEVEL: ELEVATED', clock: '20:45' }); L.duration = 2; }

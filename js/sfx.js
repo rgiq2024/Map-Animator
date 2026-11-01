@@ -5,7 +5,7 @@ import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 
 import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -534,6 +534,7 @@ export function buildEvents(project, models) {
         if (a) push(t0, a, { dur: D, vol: vol * 0.8 });
       } else if (L.kind === 'hud') {
         push(t0, 'hudboot', { vol });
+        if (s.variant === 'analytics') { for (let k = 0; k < 5; k++) push(t0 + 0.2 + k * 0.18 * D, 'click', { vol }); push(t0 + D * 0.3, 'ping', { freq: 900, vol: vol * 0.6 }); push(t0 + D * 0.5, 'datalink', { vol: vol * 0.6 }); }
         if (s.variant === 'satscan') { push(t0 + 0.3, 'datalink', { vol: vol * 0.7 }); for (let k = 0; k < 4; k++) push(t0 + D * 0.5 + k * 0.5, 'beep', { freq: 1700, vol: vol * 0.4 }); }
         if (s.variant === 'geoint') { push(t0 + 0.35, 'servo', { dur: 0.8, vol }); push(t0 + 1.3, 'datalink', { dur: 0.8, vol: vol * 0.8 }); push(t0 + 2.4, 'comms', { dur: 2.2, vol: vol * 0.7 }); }
         if (s.variant === 'c2') { for (let k = 0; k < 8; k++) push(t0 + k * (D * 0.7 / 8) + 0.05, 'click', { vol }); push(t0 + D * 0.75, 'teletype', { dur: 1.6, vol: vol * 0.7 }); push(t0 + D + 0.4, 'datalink', { vol: vol * 0.7 }); push(t0 + D + 1.8, 'comms', { dur: 2.4, vol: vol * 0.6 }); }
@@ -570,6 +571,11 @@ export function buildEvents(project, models) {
         push(t0, 'datalink', { dur: D, vol: vol * 0.5 }); for (let k = 0; k < 5; k++) push(t0 + (k / 5) * D, 'ping', { freq: 1600 + k * 140, vol: vol * 0.25 });
       } else if (L.kind === 'viewshed') {
         push(t0, 'radar', { dur: D + 0.5, period: Math.max(0.8, D), vol: vol * 0.7 });
+      } else if (L.kind === 'kgraph') {
+        push(t0, 'datalink', { dur: 0.8, vol: vol * 0.6 });
+        const n = String(s.data || '').split('\n').filter((x) => x.trim()).length;
+        const g0 = (+s.cloud || 0) > 0 ? t0 + D * 0.35 : t0;
+        for (let k = 0; k < Math.min(n, 16); k++) push(g0 + (0.12 + (k / Math.max(1, n)) * 0.75) * (t0 + D - g0) / 1.4, 'click', { vol: vol * 0.8 });
       } else if (L.kind === 'fmv') {
         push(t0, 'drone', { dur: D, vol: vol * 0.7 }); push(t0 + 0.2, 'servo', { vol: vol * 0.8 }); push(t0 + 0.8, 'datalink', { vol: vol * 0.6 });
       } else if (L.kind === 'effect' && s.look === 'hologram') {

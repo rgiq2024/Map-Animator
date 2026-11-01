@@ -188,7 +188,7 @@ export function drawMorseText(ctx, L, tm, o) {
 
 // ================================================================= variants
 export const MIL_HUD = {
-  geoint: 'GEOINT drone feed (blue)', satscan: 'Satellite scan (crosshair, rulers, checklist)', c2: 'Command & control video wall', ops: 'Operations dashboard', sigint: 'Signals intercept (SIGINT)',
+  geoint: 'GEOINT drone feed (blue)', analytics: 'Real-time analytics dashboard (KPIs, heat grid, chips)', satscan: 'Satellite scan (crosshair, rulers, checklist)', c2: 'Command & control video wall', ops: 'Operations dashboard', sigint: 'Signals intercept (SIGINT)',
 };
 const TINTS = {
   blue: 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(1.9) contrast(1.35) brightness(0.92)',
@@ -207,6 +207,7 @@ export function drawMilHUD(ctx, L, tm, o) {
   if (v !== 'sigint') { ctx.beginPath(); ctx.rect(o.frame.x, o.frame.y, o.frame.w, o.frame.h); ctx.clip(); }
   if (v === 'geoint') geoint(ctx, L, tm, o);
   else if (v === 'satscan') satscan(ctx, L, tm, o);
+  else if (v === 'analytics') analytics(ctx, L, tm, o);
   else if (v === 'c2') c2wall(ctx, L, tm, o);
   else if (v === 'ops') opsBoard(ctx, L, tm, o);
   else if (v === 'sigint') sigint(ctx, L, tm, o);
@@ -771,4 +772,164 @@ function satscan(ctx, L, tm, o) {
     if (done && (i !== active || Math.sin(t * 8) > 0)) ctx.fillRect(x + w * 0.074 + 1.5 * unit, yy - bs + 1.5 * unit, bs - 3 * unit, bs - 3 * unit);
     ctx.fillText(typ(it.toUpperCase(), 4 + i), x + w * 0.074 + 16 * unit, yy);
   });
+}
+
+// ---------------------------------------------------------------- real-time analytics dashboard
+const splitBar = (txt) => String(txt || '').split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((p) => p[0]);
+function countUp(raw, k) {
+  const m = String(raw).match(/^([^\d-]*)(-?[\d,]*\.?\d+)(.*)$/);
+  if (!m || k >= 1) return raw;
+  const v = parseFloat(m[2].replace(/,/g, '')), dp = (m[2].split('.')[1] || '').length;
+  const cur = v * easeOut(k);
+  return `${m[1]}${m[2].includes(',') ? cur.toLocaleString('en', { maximumFractionDigits: dp, minimumFractionDigits: dp }) : cur.toFixed(dp)}${m[3]}`;
+}
+function busIcon(ctx, x, y, s) {
+  ctx.save(); ctx.translate(x, y);
+  rr(ctx, -s, -s * 0.9, s * 2, s * 1.6, s * 0.35); ctx.fill();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillRect(-s * 0.7, -s * 0.6, s * 1.4, s * 0.6);
+  ctx.beginPath(); ctx.arc(-s * 0.5, s * 0.35, s * 0.18, 0, Math.PI * 2); ctx.arc(s * 0.5, s * 0.35, s * 0.18, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function analytics(ctx, L, tm, o) {
+  const { frame, unit } = o;
+  const { x, y, w, h } = frame;
+  const s = L.style, t = o.time ?? 0;
+  const col = s.color || '#38e1ff';
+  const tau = tm.edit ? 99 : tm.tau;
+  const D = Math.max(0.5, +L.duration || 2.5);
+  const u = clamp(tau / D, 0, 1);
+  const seed = hashStr(L.id);
+  ctx.globalAlpha *= tm.alpha;
+  ctx.textBaseline = 'alphabetic';
+  const fadeIn = (k) => clamp(u * 2.2 - k, 0, 1);
+  // title + selector
+  ctx.save(); ctx.globalAlpha *= fadeIn(0);
+  ctx.fillStyle = '#ffffff'; ctx.font = `400 ${22 * unit}px ${UI}`; ctx.textAlign = 'left';
+  ctx.fillText((s.label || 'REAL-TIME ANALYTICS').toUpperCase(), x + 16 * unit, y + 32 * unit);
+  ctx.font = `400 ${11 * unit}px ${UI}`; ctx.fillStyle = '#cfe9f2';
+  ctx.letterSpacing = `${4 * unit}px`;
+  ctx.fillText((s.sub || 'NEW YORK CITY BUSES').toUpperCase(), x + 16 * unit, y + 52 * unit);
+  ctx.letterSpacing = '0px';
+  ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(x + 12 * unit, y + 64 * unit, 210 * unit, 26 * unit);
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + 26 * unit, y + 77 * unit, 7 * unit, 0, Math.PI * 2); ctx.fill();
+  ctx.font = `600 ${10 * unit}px ${UI}`; ctx.fillText((s.filter || 'ALL LINES').toUpperCase(), x + 40 * unit, y + 81 * unit);
+  ctx.beginPath(); ctx.moveTo(x + 200 * unit, y + 74 * unit); ctx.lineTo(x + 210 * unit, y + 74 * unit); ctx.lineTo(x + 205 * unit, y + 80 * unit); ctx.fill();
+  // weather icons top right
+  ctx.fillStyle = col; ctx.font = `400 ${20 * unit}px ${UI}`; ctx.textAlign = 'right';
+  ctx.fillText('☀  ☁  ❄', x + w - 16 * unit, y + 34 * unit);
+  ctx.restore();
+  // callout on the first point layer (or upper middle)
+  const pt = scenePts(o, L)[0];
+  const [qx, qy] = pt ? o.proj(pt.ll) : [x + w * 0.5, y + h * 0.36];
+  const cu = clamp((tau - D * 0.2) / 0.8, 0, 1);
+  if (s.callout !== false && cu > 0) {
+    const [ttl, num, place, lines] = (s.calloutText || 'MAX INCIDENTS | 4,844 | Midtown Center | LINES: M1, M2, M3, M4, M5').split('|').map((q) => q.trim());
+    const R = 80 * unit * easeOut(cu);
+    ctx.save();
+    ctx.fillStyle = 'rgba(120,0,10,0.35)'; ctx.strokeStyle = '#ff2a3a'; ctx.lineWidth = 2 * unit;
+    ctx.beginPath(); ctx.arc(qx, qy + R * 0.55, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha *= 0.5 + 0.5 * Math.sin(t * 4);
+    ctx.beginPath(); ctx.arc(qx, qy + R * 0.55, R * (1 + 0.08 * ((t * 1.5) % 1)), 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha *= cu;
+    ctx.fillStyle = '#ff2a3a'; ctx.shadowColor = '#ff2a3a'; ctx.shadowBlur = 14 * unit;
+    ctx.beginPath(); ctx.arc(qx, qy, 15 * unit, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(qx - 6 * unit, qy + 4 * unit); ctx.quadraticCurveTo(qx - 6 * unit, qy - 8 * unit, qx, qy - 8 * unit); ctx.quadraticCurveTo(qx + 6 * unit, qy - 8 * unit, qx + 6 * unit, qy + 4 * unit); ctx.closePath(); ctx.fill();
+    ctx.fillRect(qx - 1.5 * unit, qy + 5 * unit, 3 * unit, 2.5 * unit);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1 * unit; ctx.beginPath(); ctx.moveTo(qx, qy + 15 * unit); ctx.lineTo(qx, qy + 42 * unit); ctx.stroke();
+    const lx = qx - 125 * unit, ly = qy - 70 * unit;
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 4 * unit;
+    ctx.font = `600 ${11 * unit}px ${UI}`; ctx.fillText(ttl || '', lx, ly);
+    ctx.font = `300 ${30 * unit}px ${UI}`; ctx.fillText(countUp(num || '', cu), lx, ly + 32 * unit);
+    ctx.font = `500 ${10.5 * unit}px ${UI}`; ctx.fillText(place || '', lx, ly + 48 * unit); ctx.fillText(lines || '', lx, ly + 61 * unit);
+    ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(lx - 14 * unit, ly + 22 * unit, 4 * unit, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // KPI band
+  const bandY = y + h * 0.725, bandH = h * 0.18, chipY = bandY + bandH, chipH = h - (chipY - y);
+  ctx.save(); ctx.globalAlpha *= fadeIn(0.3);
+  const g = ctx.createLinearGradient(0, bandY - 30 * unit, 0, bandY + 20 * unit);
+  g.addColorStop(0, 'rgba(0,10,14,0)'); g.addColorStop(1, 'rgba(0,10,14,0.82)');
+  ctx.fillStyle = g; ctx.fillRect(x, bandY - 30 * unit, w, bandH + 30 * unit);
+  ctx.fillStyle = 'rgba(0,6,9,0.92)'; ctx.fillRect(x, chipY, w, chipH);
+  // side buttons
+  const by = bandY - 52 * unit;
+  ctx.strokeStyle = hexA(col, 0.6); ctx.lineWidth = 1 * unit;
+  ctx.fillStyle = 'rgba(10,30,36,0.85)';
+  rr(ctx, x + 12 * unit, by, 38 * unit, 38 * unit, 4 * unit); ctx.fill();
+  rr(ctx, x + 58 * unit, by, 126 * unit, 38 * unit, 4 * unit); ctx.fill(); ctx.stroke();
+  rr(ctx, x + 192 * unit, by, 38 * unit, 38 * unit, 4 * unit); ctx.fill();
+  ctx.strokeStyle = '#d7f6ff'; ctx.lineWidth = 1.6 * unit;
+  ctx.beginPath(); ctx.arc(x + 31 * unit, by + 19 * unit, 9 * unit, 0, Math.PI * 2); ctx.moveTo(x + 31 * unit, by + 13 * unit); ctx.lineTo(x + 31 * unit, by + 19 * unit); ctx.lineTo(x + 36 * unit, by + 22 * unit); ctx.stroke();
+  ctx.strokeRect(x + 66 * unit, by + 11 * unit, 16 * unit, 16 * unit);
+  ctx.fillStyle = col; ctx.font = `600 ${9.5 * unit}px ${UI}`; ctx.textAlign = 'left';
+  const btn = (s.button || 'HISTORIC CRASH DATA').toUpperCase().split(' ');
+  ctx.fillText(btn.slice(0, Math.ceil(btn.length / 2)).join(' '), x + 90 * unit, by + 17 * unit); ctx.fillText(btn.slice(Math.ceil(btn.length / 2)).join(' '), x + 90 * unit, by + 29 * unit);
+  ctx.fillStyle = '#d7f6ff';
+  for (const [dx, dy] of [[-5, 0], [5, -6], [5, 6]]) { ctx.beginPath(); ctx.arc(x + 211 * unit + dx * unit, by + 19 * unit + dy * unit, 3 * unit, 0, Math.PI * 2); ctx.fill(); }
+  ctx.beginPath(); ctx.moveTo(x + 206 * unit, by + 19 * unit); ctx.lineTo(x + 216 * unit, by + 13 * unit); ctx.moveTo(x + 206 * unit, by + 19 * unit); ctx.lineTo(x + 216 * unit, by + 25 * unit); ctx.strokeStyle = '#d7f6ff'; ctx.stroke();
+  ctx.fillStyle = '#cfe9f2'; ctx.font = `400 ${9 * unit}px ${UI}`; ctx.textAlign = 'right';
+  ctx.fillText((s.credit || 'DATA: OPEN DATA · *GRAPH DATA FOR REPRESENTATIVE PURPOSES').toUpperCase(), x + w - 12 * unit, bandY - 8 * unit);
+  // KPIs
+  const kp = splitBar(s.kpis || 'Crashes | 752K | #ff2020 | 2016 - 2022\nInjuries | 183K | #ff8a1e\nFatalities | 1,014 | #ff2020\nPeak day and time | SAT : 2 PM | #ff2020');
+  const heat = s.heat !== false;
+  const kw = (heat ? w * 0.66 : w) / Math.max(1, kp.length);
+  kp.forEach(([lab, val, c, sub], i) => {
+    const k = clamp(u * 2 - 0.4 - i * 0.12, 0, 1);
+    if (k <= 0) return;
+    const cx = x + kw * (i + 0.5);
+    ctx.globalAlpha = tm.alpha * k;
+    ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff'; ctx.font = `500 ${12 * unit}px ${UI}`;
+    ctx.fillText((lab || '').toUpperCase(), cx, bandY + 22 * unit);
+    ctx.fillStyle = c || '#ff2020'; ctx.shadowColor = c || '#ff2020'; ctx.shadowBlur = 8 * unit;
+    ctx.font = `300 ${Math.min(44 * unit, kw * 0.24)}px "Orbitron","Rajdhani",${UI}`;
+    const vv = /\d/.test(val || '') && !/:/.test(val) ? countUp(val, k * 1.02) : (val || '').slice(0, Math.ceil((val || '').length * k));
+    ctx.fillText(vv, cx, bandY + bandH * 0.62, kw * 0.9);
+    ctx.shadowBlur = 0;
+    if (sub) { ctx.fillStyle = '#ffffff'; ctx.font = `400 ${10 * unit}px ${UI}`; ctx.fillText(sub, cx, bandY + bandH * 0.86); }
+    if (i) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x + kw * i, bandY + 14 * unit, 1, bandH * 0.75); }
+  });
+  ctx.globalAlpha = tm.alpha * fadeIn(0.3);
+  // day × hour heat grid
+  if (heat) {
+    const gx0 = x + w * 0.665, gw = w * 0.23, gh = bandH * 0.86, gy0 = bandY + 8 * unit;
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const lw = 26 * unit, cw = (gw - lw) / 24, ch = (gh - 12 * unit) / 7;
+    ctx.font = `600 ${7 * unit}px ${UI}`;
+    days.forEach((d, r) => {
+      ctx.fillStyle = 'rgba(160,170,180,0.35)'; ctx.fillRect(gx0, gy0 + r * ch, lw - 2 * unit, ch - 1);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(d, gx0 + lw / 2, gy0 + r * ch + ch * 0.75);
+      for (let c = 0; c < 24; c++) {
+        const rr2 = rng(seed + r * 31 + c);
+        const peak = Math.exp(-(((c - 14) / 6) ** 2)) * (r === 6 ? 1 : 0.75) + rr2() * 0.25;
+        const k = clamp(u * 2.4 - 0.6 - (c / 24) * 0.8, 0, 1);
+        ctx.fillStyle = `rgba(${150 + 105 * peak | 0},${20 * (1 - peak) | 0},${20 * (1 - peak) | 0},${(0.25 + 0.75 * peak) * k})`;
+        ctx.fillRect(gx0 + lw + c * cw, gy0 + r * ch, cw - 1, ch - 1);
+      }
+    });
+    ctx.fillStyle = '#fff'; ctx.font = `600 ${6.5 * unit}px ${UI}`;
+    for (let c = 0; c < 24; c++) { ctx.fillStyle = 'rgba(160,170,180,0.35)'; ctx.fillRect(gx0 + lw + c * cw, gy0 + 7 * ch + 1, cw - 1, 9 * unit); ctx.fillStyle = '#fff'; ctx.fillText(c % 3 === 0 && c ? String(c) : '•', gx0 + lw + c * cw + cw / 2, gy0 + 7 * ch + 8 * unit); }
+  }
+  // chips row (scrolls slowly)
+  const chips = splitBar(s.chips || 'M103 | 5887 | orange\nM103 | 5836 | orange\nM21 | 9742 | orange\nM42 | 9720 | orange\nM1 | 9465 | red\nM100 | 8556 | red\nM101 | 5876 | red\nM102 | 6111 | red\nM102 | 5817 | red\nM103 | 6113 | red\nM116 | 9596 | red\nM110 | 9755 | red');
+  const cwid = 108 * unit, off = s.scroll === false ? 0 : (t * 18 * unit) % (cwid * chips.length);
+  ctx.save(); ctx.beginPath(); ctx.rect(x, chipY, w, chipH); ctx.clip();
+  for (let rep = 0; rep < 3; rep++) chips.forEach(([line, id, kind], i) => {
+    const cx = x + 30 * unit + (rep * chips.length + i) * cwid - off;
+    if (cx > x + w || cx < x - cwid) return;
+    const k = clamp(u * 3 - 1 - i * 0.05, 0, 1);
+    const red = (kind || '').startsWith('r');
+    const cc = red ? '#e3001b' : kind?.startsWith('#') ? kind : '#e8780c';
+    ctx.globalAlpha = tm.alpha * k;
+    const cy = chipY + chipH * 0.3;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1 * unit; ctx.beginPath(); ctx.arc(cx, cy, 5 * unit, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = red ? '#ff2a2a' : '#ff9a1e'; ctx.font = `500 ${12 * unit}px ${UI}`; ctx.textAlign = 'left'; ctx.fillText(line, cx + 11 * unit, cy + 4 * unit);
+    ctx.fillStyle = cc; ctx.fillRect(cx, chipY + chipH * 0.5, 66 * unit, 20 * unit);
+    ctx.fillStyle = '#fff'; busIcon(ctx, cx + 12 * unit, chipY + chipH * 0.5 + 10 * unit, 5 * unit);
+    ctx.font = `600 ${11 * unit}px ${UI}`; ctx.fillText(id || '', cx + 22 * unit, chipY + chipH * 0.5 + 14.5 * unit);
+  });
+  ctx.restore();
+  ctx.restore();
 }
