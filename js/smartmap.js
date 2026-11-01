@@ -28,6 +28,7 @@ export const SM_MODES = {
   reach: 'Drive-time areas around the sites',
   halo: 'Glowing halos with hatching (e.g. projected revenue)',
   heat: 'Heat map',
+  dots: 'Neon dots in two colours (below / above the middle value)',
   circles: 'Circles sized by value',
 };
 const RAMPS = {
@@ -57,7 +58,7 @@ export const SM_DEFAULTS = {
   infocard: { anim: 'rise', duration: 2.5, style: { title: 'New store location', line1: '12 Market Street', line2: 'Your City', badge: 'NOW OPEN', bars: 'Foot traffic: 71 | #4f8cff\nIncome match: 60 | #ff8a3d\nDrive access: 76 | #43b062', chart: true, media: '', tilt: 0.35, width: 300, height: 120, accent: '#43b062' } },
 };
 export const SM_FORMS = {
-  smartmap: [['style.mode', 'Show', 'select', SM_MODES], ['style.ramp', 'Colours', 'select', RAMP_NAMES], ['style.opacity', 'Opacity', 'range', [0.1, 1, 0.01]], ['style.cellKm', 'Cell size (km)', 'range', [0.3, 60, 0.1], (L) => L.style.mode === 'cells'], ['style.spreadKm', 'How far each value spreads (km)', 'range', [0.5, 200, 0.5], (L) => ['cells', 'glow', 'heat'].includes(L.style.mode)], ['style.reachKm', 'Drive-time reach (km)', 'range', [0.5, 120, 0.5], (L) => ['reach', 'halo'].includes(L.style.mode)], ['style.size', 'Symbol size', 'range', [0.3, 4, 0.05], (L) => ['rings', 'circles', 'halo', 'glow'].includes(L.style.mode)], ['style.wipeDir', 'Wipe from (°)', 'range', [0, 359, 1], (L) => L.anim === 'wipe'], ['style.glow', 'Glow', 'switch'], ['style.sparkle', 'Fine detail sparkle', 'switch', null, (L) => L.style.mode === 'cells'], ['style.clip', 'Only inside the region', 'switch'], ['style.seed', 'Shuffle', 'number', 1]],
+  smartmap: [['style.mode', 'Show', 'select', SM_MODES], ['style.ramp', 'Colours', 'select', RAMP_NAMES], ['style.opacity', 'Opacity', 'range', [0.1, 1, 0.01]], ['style.cellKm', 'Cell size (km)', 'range', [0.3, 60, 0.1], (L) => L.style.mode === 'cells'], ['style.spreadKm', 'How far each value spreads (km)', 'range', [0.5, 200, 0.5], (L) => ['cells', 'glow', 'heat'].includes(L.style.mode)], ['style.reachKm', 'Drive-time reach (km)', 'range', [0.5, 120, 0.5], (L) => ['reach', 'halo'].includes(L.style.mode)], ['style.size', 'Symbol size', 'range', [0.3, 4, 0.05], (L) => ['rings', 'circles', 'halo', 'glow', 'dots'].includes(L.style.mode)], ['style.colorLo', 'Colour (lower values)', 'color', null, (L) => L.style.mode === 'dots'], ['style.colorHi', 'Colour (higher values)', 'color', null, (L) => L.style.mode === 'dots'], ['style.wipeDir', 'Wipe from (°)', 'range', [0, 359, 1], (L) => L.anim === 'wipe'], ['style.glow', 'Glow', 'switch'], ['style.sparkle', 'Fine detail sparkle', 'switch', null, (L) => L.style.mode === 'cells'], ['style.clip', 'Only inside the region', 'switch'], ['style.seed', 'Shuffle', 'number', 1]],
   legend: [['style.items', 'Entries — “Label | colour | appears at (s)”, one per line', 'textarea'], ['style.icon', 'Symbol', 'select', { ring: 'Ring', dot: 'Dot', square: 'Square' }], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]], ['style.position', 'Position', 'select', POS]],
   infocard: [['style.title', 'Title', 'text'], ['style.line1', 'Line 1 (address)', 'text'], ['style.line2', 'Line 2', 'text'], ['style.badge', 'Badge (empty = none)', 'text'], ['style.bars', 'Bars — “Label: percent | colour”, one per line', 'textarea'], ['style.chart', 'Rising chart', 'switch'], ['style.media', 'Picture (optional — a building sketch is drawn otherwise)', 'image'], ['style.accent', 'Accent colour', 'color'], ['style.tilt', 'Tilt (3D)', 'range', [0, 0.7, 0.01]], ['style.width', 'Width (px)', 'range', [180, 520, 1]], ['style.height', 'Height above the place (px)', 'range', [20, 300, 1]]],
 };
@@ -259,6 +260,23 @@ function paint(g, L, tm, o, u) {
       g.globalCompositeOperation = 'source-over';
     }
     return;
+  }
+  if (mode === 'dots') {
+    const vals = data.map((d) => +d[2] || 0).sort((a, b) => a - b);
+    const med = vals[Math.floor(vals.length / 2)] || 0;
+    g.globalCompositeOperation = 'lighter';
+    data.forEach((d, i) => {
+      const k = order(i) * grow;
+      if (k <= 0) return;
+      const p = proj([d[0], d[1]]);
+      const hi = (+d[2] || 0) >= med;
+      const col = hi ? (s.colorHi || '#ff8a2a') : (s.colorLo || '#3dff7a');
+      const R = 7 * unit * (+s.size || 1) * Math.min(1, k * 1.3) * (1 + 0.08 * Math.sin((o.time || 0) * 3 + i));
+      const gr = g.createRadialGradient(p[0], p[1], 0, p[0], p[1], R);
+      gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.28, hexA(col, 0.95)); gr.addColorStop(0.6, hexA(col, 0.35)); gr.addColorStop(1, hexA(col, 0));
+      g.fillStyle = gr; g.fillRect(p[0] - R, p[1] - R, R * 2, R * 2);
+    });
+    g.globalCompositeOperation = 'source-over';
   }
   if (mode === 'circles') {
     data.forEach((d, i) => {

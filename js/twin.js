@@ -20,6 +20,7 @@ export const TWIN_LOOKS = {
   hologram: { name: 'Hologram (cyan glass)', bld: '#1fb6ff', top: '#9ff0ff', front: '#ffffff', edge: '#4fe0ff', road: '#38e1ff', opacity: 0.55 },
   blueprint: { name: 'Blueprint (outlines)', bld: '#2a6fdb', top: '#6fa8ff', front: '#ffffff', edge: '#8ec5ff', road: '#5fb0ff', opacity: 0.28 },
   gold: { name: 'Night gold', bld: '#d9a441', top: '#ffd77a', front: '#ffffff', edge: '#ffcf66', road: '#ffb547', opacity: 0.85 },
+  magenta: { name: 'Magenta towers (tall = pink)', bld: '#f2f0f4', top: '#e8246f', front: '#ffffff', edge: '#ff8fbd', road: '#ff5a3d', opacity: 0.97 },
   heat: { name: 'Height colours (data)', bld: 'height', top: '#ffffff', front: '#ffffff', edge: '#ffffff', road: '#ffffff', opacity: 0.92 },
 };
 const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', ...CUSTOM_POS };

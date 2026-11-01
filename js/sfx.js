@@ -5,7 +5,7 @@ import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 
 import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv']);
 export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -534,6 +534,7 @@ export function buildEvents(project, models) {
         if (a) push(t0, a, { dur: D, vol: vol * 0.8 });
       } else if (L.kind === 'hud') {
         push(t0, 'hudboot', { vol });
+        if (s.variant === 'satscan') { push(t0 + 0.3, 'datalink', { vol: vol * 0.7 }); for (let k = 0; k < 4; k++) push(t0 + D * 0.5 + k * 0.5, 'beep', { freq: 1700, vol: vol * 0.4 }); }
         if (s.variant === 'geoint') { push(t0 + 0.35, 'servo', { dur: 0.8, vol }); push(t0 + 1.3, 'datalink', { dur: 0.8, vol: vol * 0.8 }); push(t0 + 2.4, 'comms', { dur: 2.2, vol: vol * 0.7 }); }
         if (s.variant === 'c2') { for (let k = 0; k < 8; k++) push(t0 + k * (D * 0.7 / 8) + 0.05, 'click', { vol }); push(t0 + D * 0.75, 'teletype', { dur: 1.6, vol: vol * 0.7 }); push(t0 + D + 0.4, 'datalink', { vol: vol * 0.7 }); push(t0 + D + 1.8, 'comms', { dur: 2.4, vol: vol * 0.6 }); }
         if (s.variant === 'ops') { for (let k = 0; k < 6; k++) push(t0 + k * 0.12 * D + 0.05, 'click', { vol }); push(t0 + D * 0.8, 'datalink', { vol: vol * 0.7 }); }
@@ -548,8 +549,34 @@ export function buildEvents(project, models) {
         push(t0, 'acquire', { dur: lt, vol: vol * 0.8 });
         push(t0 + lt, 'lock', { vol });
         push(t0 + lt + 0.05, 'lockon', { dur: 1.1, vol: vol * 0.8 });
+      } else if (L.kind === 'spectral') {
+        push(t0, 'whoosh', { dur: 1, vol: vol * 0.7 }); push(t0 + D * 0.6, 'datalink', { vol: vol * 0.7 });
+      } else if (L.kind === 'splitgrid') {
+        for (let k = 0; k < 4; k++) push(t0 + k * 0.18 * D, 'swoosh', { vol: vol * 0.6 });
+      } else if (L.kind === 'block') {
+        push(t0, 'sub', { vol: vol * 0.5 });
+        const n = String(s.plates || '').split('\n').filter((x) => x.trim()).length;
+        for (let k = 0; k < n; k++) push(t0 + (0.25 + k * 0.18) * D, 'swoosh', { vol: vol * 0.7 });
+      } else if (L.kind === 'datapin') {
+        push(t0, 'ping', { freq: 1500, vol: vol * 0.5 });
+      } else if (L.kind === 'hexbadges') {
+        const n = String(s.items || '').split('\n').filter((x) => x.trim()).length;
+        for (let k = 0; k < n; k++) push(t0 + k * 0.12 * D, 'click', { vol });
+      } else if (L.kind === 'flowlines') {
+        push(t0, 'wind', { dur: D + 1, vol: vol * 0.4 });
+      } else if (L.kind === 'beams') {
+        push(t0, 'riser', { dur: Math.min(2, D), vol: vol * 0.6 }); push(t0 + D * 0.5, 'whoosh', { dur: 1.2, vol: vol * 0.7 });
+      } else if (L.kind === 'mesh') {
+        push(t0, 'datalink', { dur: D, vol: vol * 0.5 }); for (let k = 0; k < 5; k++) push(t0 + (k / 5) * D, 'ping', { freq: 1600 + k * 140, vol: vol * 0.25 });
+      } else if (L.kind === 'viewshed') {
+        push(t0, 'radar', { dur: D + 0.5, period: Math.max(0.8, D), vol: vol * 0.7 });
+      } else if (L.kind === 'fmv') {
+        push(t0, 'drone', { dur: D, vol: vol * 0.7 }); push(t0 + 0.2, 'servo', { vol: vol * 0.8 }); push(t0 + 0.8, 'datalink', { vol: vol * 0.6 });
+      } else if (L.kind === 'effect' && s.look === 'hologram') {
+        push(t0, 'glitch', { dur: 0.6, vol: vol * 0.8 }); push(t0, 'hudboot', { vol: vol * 0.5 });
       } else if (L.kind === 'hudtext') {
-        if (s.look === 'morse') push(t0 + MORSE_DELAY, 'morse', { text: s.text || 'SOS', wpm: s.wpm || 15, freq: 700, vol });
+        if (s.look === 'code') push(t0, 'type', { n: 60, dur: Math.max(1, D * 2), vol: vol * 0.5 });
+        else if (s.look === 'morse') push(t0 + MORSE_DELAY, 'morse', { text: s.text || 'SOS', wpm: s.wpm || 15, freq: 700, vol });
         else if (s.look === 'alert') for (let k = 0; k < 4; k++) push(t0 + k * 0.45, 'beep', { freq: 880, vol: vol * 0.6 });
         else if (s.look === 'terminal' || s.look === 'telemetry') push(t0, 'type', { n: (s.text || '').length, dur: Math.max(0.5, D), vol: vol * 0.7 });
         else if (s.look === 'stamp') push(t0 + 0.12, 'braam', { vol: vol * 0.5 });

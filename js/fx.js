@@ -15,6 +15,7 @@ import { drawNews, NEWS_LOOKS } from './news.js';
 import { EFFECT_LOOKS, drawVideoLayer } from './screenfx.js';
 import { SM_KINDS, SM_ANIMS, SM_DEFAULTS, SM_FORMS, SM_SET, smPhases, drawSmartMap, drawLegend, drawInfoCard } from './smartmap.js';
 import { imageFor as smImage } from './geoimage.js';
+import { VZ_KINDS, VZ_ANIMS, VZ_DEFAULTS, VZ_FORMS, VZ_SET, VZ_SCREEN, vzPhases, drawViz } from './vizfx.js';
 import { TWIN_KINDS, TWIN_ANIMS, TWIN_DEFAULTS, TWIN_FORMS, TWIN_SET, twinPhases, drawTwin, drawSensor } from './twin.js';
 import { HZ_KINDS, HZ_ANIMS, HZ_DEFAULTS, HZ_FORMS, HZ_SET, hzPhases, drawHazard } from './hazards.js';
 import { drawPeople, CROWD_BEHAVIOURS, CROWD_LOOKS } from './people.js';
@@ -43,6 +44,7 @@ function hexA(hex, a) {
 // ---------------------------------------------------------------- catalogue (merged into LAYER_KINDS)
 export const FX_KINDS = {
   ...SM_KINDS,
+  ...VZ_KINDS,
   ...TWIN_KINDS,
   crowd: { name: 'People / crowd', icon: '🧍', geom: 'point', desc: 'Animated people: a crowd, a protest march, people walking, gathering or running away' },
   ...HZ_KINDS,
@@ -81,6 +83,7 @@ export const FX_KINDS = {
 };
 export const FX_ANIMS = {
   ...SM_ANIMS,
+  ...VZ_ANIMS,
   ...TWIN_ANIMS,
   crowd: { none: 'Already there', appear: 'Appear one by one' },
   ...HZ_ANIMS,
@@ -115,6 +118,7 @@ export const FX_ANIMS = {
 };
 export const FX_DEFAULTS = {
   ...SM_DEFAULTS,
+  ...VZ_DEFAULTS,
   ...TWIN_DEFAULTS,
   crowd: { anim: 'none', duration: 1.5, style: { behaviour: 'crowd', look: 'people', count: 150, radius: 40, width: 14, speed: 1, size: 1, exaggerate: 3, flagColor: '#e53935', view: 'auto', seed: 0 } },
   ...HZ_DEFAULTS,
@@ -156,6 +160,7 @@ const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': '
 /** Form fields for the layer editor: [path, label, type, options]. */
 export const FX_FORMS = {
   ...SM_FORMS,
+  ...VZ_FORMS,
   ...TWIN_FORMS,
   crowd: [['style.behaviour', 'What they do', 'select', CROWD_BEHAVIOURS], ['style.look', 'Who', 'select', CROWD_LOOKS], ['style.count', 'How many people', 'range', [5, 800, 5]], ['style.radius', 'Spread (m around the point)', 'range', [5, 600, 1], (L) => L.geom?.type === 'Point'], ['style.width', 'Width of the march (m)', 'range', [2, 120, 1], (L) => L.geom?.type === 'LineString'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.exaggerate', 'Make people bigger (so they show)', 'range', [1, 10, 0.1]], ['style.flagColor', 'Flag colour', 'color', null, (L) => L.style.look === 'protest'], ['style.view', 'Seen from', 'select', { auto: 'Automatic (side when tilted)', side: 'Always from the side', top: 'Always from above' }], ['style.seed', 'Shuffle', 'number', 1]],
   ...HZ_FORMS,
@@ -175,6 +180,9 @@ export const FX_FORMS = {
   hud: [['style.variant', 'Style', 'select', { drone: 'Drone camera', satellite: 'Satellite feed', target: 'Target lock', minimal: 'Minimal frame', ...HUD_PLUS, ...MIL_HUD }], ['style.color', 'Colour', 'color'], ['style.label', 'Label', 'text'],
     ['style.text', 'Briefing lines', 'textarea', null, (L) => L.style.variant === 'mission'],
     ['style.tint', 'Map colour', 'select', GEOINT_TINTS, (L) => L.style.variant === 'geoint'],
+    ['style.sub', 'Second line', 'text', null, (L) => L.style.variant === 'satscan'],
+    ['style.right', 'Top-right title', 'text', null, (L) => L.style.variant === 'satscan'],
+    ['style.text', 'Checklist (one per line)', 'textarea', null, (L) => L.style.variant === 'satscan'],
     ['style.text', 'Intercepted message (sent in Morse)', 'text', null, (L) => L.style.variant === 'sigint'],
     ['style.freq', 'Frequency (MHz)', 'text', null, (L) => L.style.variant === 'sigint'],
     ['style.wpm', 'Morse speed (words per minute)', 'range', [5, 30, 1], (L) => L.style.variant === 'sigint'],
@@ -197,7 +205,7 @@ export const FX_FORMS = {
     ['style.coords', 'Show coordinates', 'switch', null, (L) => !['radar', 'mission', 'scanner', 'c2', 'ops', 'sigint'].includes(L.style.variant)],
     ['style.rec', 'REC and timecode', 'switch', null, (L) => !HUD_PLUS[L.style.variant] && !MIL_HUD[L.style.variant]],
     ['style.scan', 'Scan lines', 'switch', null, (L) => !HUD_PLUS[L.style.variant] && !['c2', 'ops', 'sigint'].includes(L.style.variant)]],
-  hudtext: [['style.look', 'Style', 'select', HUDTEXT_STYLES], ['style.text', 'Text (one line each; “Label: value” for telemetry)', 'textarea', null, (L) => L.style.look !== 'coords'], ['style.tickerStyle', 'Ticker style', 'select', { classic: 'Classic (dark)', red: 'Red news band', navy: 'Navy and gold', white: 'White bar', twoline: 'Two lines (headline + crawl)', flip: 'One headline at a time (rolls up)', finance: 'Stock ticker (▲▼ colours)', sports: 'Sports scores', flash: 'Breaking flash (blinking tag)' }, (L) => L.style.look === 'ticker'], ['style.headline', 'Headline (upper line)', 'text', null, (L) => L.style.look === 'ticker' && L.style.tickerStyle === 'twoline'], ['style.label', 'Tag (empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.speed', 'Scroll speed', 'range', [0.1, 4, 0.05], (L) => L.style.look === 'ticker'], ['style.dir', 'Scrolls', 'select', { left: 'Right to left', right: 'Left to right' }, (L) => L.style.look === 'ticker'], ['style.sep', 'Separator', 'select', { '•': '•', '|': '|', '◆': '◆', '■': '■', '—': '—', '★': '★' }, (L) => L.style.look === 'ticker'], ['style.bg', 'Bar colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.tagBg', 'Tag colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.textColor', 'Text colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.upper', 'CAPITALS', 'switch', null, (L) => L.style.look === 'ticker'], ['style.bold', 'Bold', 'switch', null, (L) => L.style.look === 'ticker'], ['style.clock', 'Clock (e.g. 20:45, empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.angle', 'Angle (°)', 'range', [-30, 30, 1], (L) => L.style.look === 'stamp'], ['style.live', 'Numbers tick live', 'switch', null, (L) => L.style.look === 'telemetry'], ['style.wpm', 'Morse speed (words per minute)', 'range', [5, 30, 1], (L) => L.style.look === 'morse'], ['style.label', 'Header', 'text', null, (L) => L.style.look === 'morse'], ['style.wave', 'Signal wave', 'switch', null, (L) => L.style.look === 'morse'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour (empty = automatic)', 'color'], ['style.size', 'Size', 'range', [0.5, 3, 0.05]], ['style.font', 'Font', 'font']],
+  hudtext: [['style.look', 'Style', 'select', HUDTEXT_STYLES], ['style.text', 'Text (one line each; “Label: value” for telemetry)', 'textarea', null, (L) => L.style.look !== 'coords'], ['style.tickerStyle', 'Ticker style', 'select', { classic: 'Classic (dark)', red: 'Red news band', navy: 'Navy and gold', white: 'White bar', twoline: 'Two lines (headline + crawl)', flip: 'One headline at a time (rolls up)', finance: 'Stock ticker (▲▼ colours)', sports: 'Sports scores', flash: 'Breaking flash (blinking tag)' }, (L) => L.style.look === 'ticker'], ['style.headline', 'Headline (upper line)', 'text', null, (L) => L.style.look === 'ticker' && L.style.tickerStyle === 'twoline'], ['style.label', 'Tag (empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.speed', 'Scroll speed', 'range', [0.1, 4, 0.05], (L) => L.style.look === 'ticker'], ['style.dir', 'Scrolls', 'select', { left: 'Right to left', right: 'Left to right' }, (L) => L.style.look === 'ticker'], ['style.sep', 'Separator', 'select', { '•': '•', '|': '|', '◆': '◆', '■': '■', '—': '—', '★': '★' }, (L) => L.style.look === 'ticker'], ['style.bg', 'Bar colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.tagBg', 'Tag colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.textColor', 'Text colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.upper', 'CAPITALS', 'switch', null, (L) => L.style.look === 'ticker'], ['style.bold', 'Bold', 'switch', null, (L) => L.style.look === 'ticker'], ['style.clock', 'Clock (e.g. 20:45, empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.angle', 'Angle (°)', 'range', [-30, 30, 1], (L) => L.style.look === 'stamp'], ['style.live', 'Numbers tick live', 'switch', null, (L) => L.style.look === 'telemetry'], ['style.wpm', 'Morse speed (words per minute)', 'range', [5, 30, 1], (L) => L.style.look === 'morse'], ['style.speed', 'Scroll speed', 'range', [0.1, 4, 0.05], (L) => L.style.look === 'code'], ['style.bg', 'Darken behind (0–1)', 'range', [0, 1, 0.01], (L) => L.style.look === 'code'], ['style.label', 'Header', 'text', null, (L) => L.style.look === 'morse'], ['style.wave', 'Signal wave', 'switch', null, (L) => L.style.look === 'morse'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour (empty = automatic)', 'color'], ['style.size', 'Size', 'range', [0.5, 3, 0.05]], ['style.font', 'Font', 'font']],
   target: [['style.look', 'Marker', 'select', TARGET_STYLES], ['style.color', 'Colour while acquiring', 'color'], ['style.lockColor', 'Colour when locked', 'color'], ['style.size', 'Size', 'range', [0.3, 4, 0.05]], ['style.label', 'Label', 'text'], ['style.lockText', 'Text when locked', 'text'], ['style.sub', 'Extra line', 'text'], ['style.showCoords', 'Show coordinates', 'switch']],
   image: [['style.media', 'Image', 'image'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', multiply: 'Multiply (scans, old maps)', screen: 'Screen (dark backgrounds)' }], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
   compare: [['style.media', 'Before image', 'image'], ['style.media2', 'After image', 'image'], ['style.mode', 'Effect', 'select', { swipe: 'Swipe across', pingpong: 'Swipe back and forth', split: 'Slide to split screen', fade: 'Cross-fade' }], ['style.dir', 'Swipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.style.mode !== 'fade'], ['style.cycles', 'Times back and forth', 'number', 1, (L) => L.style.mode === 'pingpong'], ['style.labels', 'BEFORE / AFTER tags', 'switch'], ['style.labelA', 'Before tag', 'text', null, (L) => L.style.labels !== false], ['style.labelB', 'After tag', 'text', null, (L) => L.style.labels !== false], ['style.lineColor', 'Line colour', 'color'], ['style.editSplit', 'Preview split while editing', 'range', [0, 1, 0.01]], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
@@ -216,7 +224,7 @@ export const FX_FORMS = {
   trees: [['style.type', 'Trees', 'select', TREE_TYPES], ['style.density', 'Trees per hectare', 'range', [2, 200, 1], (L) => L.geom?.type === 'Polygon'], ['style.spacing', 'Spacing (m)', 'range', [4, 60, 1], (L) => L.geom?.type === 'LineString'], ['style.bothSides', 'Both sides of the line', 'switch', null, (L) => L.geom?.type === 'LineString'], ['style.height', 'Tree height (m)', 'range', [3, 40, 1]], ['style.exaggerate', 'Exaggerate size', 'range', [1, 8, 0.1]], ['style.view', 'Look', 'select', { auto: 'Side view when tilted, from above when flat', side: 'Always side view' }], ['style.seed', 'Shuffle', 'number', 1], ['style.leaves', 'Leaves falling from the trees', 'switch'], ['style.leafSpeed', 'Leaf fall speed', 'range', [0.2, 3, 0.05], (L) => L.style.leaves]],
   timeseries: [['style.frames', 'Dates', 'frames'], ['style.per', 'Seconds per date', 'number', 0.1], ['style.fade', 'Cross-fade (s)', 'number', 0.1], ['style.editFrame', 'Preview date while editing', 'range', [0, 30, 1]], ['style.label', 'Year label', 'select', { show: 'Show', none: 'Hide' }], ['style.position', 'Label position', 'select', POS, (L) => L.style.label !== 'none'], ['style.labelSize', 'Label size', 'range', [0.4, 2.5, 0.05], (L) => L.style.label !== 'none'], ['style.labelColor', 'Label colour', 'color', null, (L) => L.style.label !== 'none'], ['style.accent', 'Accent colour', 'color', null, (L) => L.style.label !== 'none'], ['style.bar', 'Timeline bar under the year', 'switch', null, (L) => L.style.label !== 'none'], ['style.labelBox', 'Dark box behind', 'switch', null, (L) => L.style.label !== 'none'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
 };
-export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext', 'title', 'news', 'effect', 'video']);
+export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext', 'title', 'news', 'effect', 'video', ...VZ_SCREEN]);
 export const FX_BELOW = new Set(['capture']);
 
 // ---------------------------------------------------------------- geometry helpers
@@ -1256,6 +1264,7 @@ function drawCollision(ctx, L, tm, o, phase) {
 /** Draw an FX layer. phase: 'below' | 'above' | 'captions'. */
 export function drawFX(ctx, L, tm, o, phase) {
   const { proj, unit, frame } = o;
+  if (VZ_SET.has(L.kind)) { if (phase !== 'captions' || frame) drawViz(ctx, L, tm, o, phase); return; }
   switch (L.kind) {
     case 'satellite': if (phase !== 'captions') drawSatellite(ctx, L, tm, proj, unit, phase, linesOf(L.geom)); break;
     case 'iss': if (phase !== 'captions' && L.geom) drawSatellite(ctx, L, tm, proj, unit, phase, issTrack(L)); break;
@@ -1325,6 +1334,7 @@ export function fxPhases(kind) {
   if (HZ_SET.has(kind)) return hzPhases(kind);
   if (TWIN_SET.has(kind)) return twinPhases(kind);
   if (SM_SET.has(kind)) return smPhases(kind);
+  if (VZ_SET.has(kind)) return vzPhases(kind);
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];
   if (kind === 'forecast') return ['captions'];

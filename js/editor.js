@@ -1621,7 +1621,7 @@ export function createEditor() {
       if (ts === 'flash') Object.assign(L.style, { position: 'top', label: 'BREAKING' });
     }
     if (kind === 'video' && b.dataset.key) Object.assign(L.style, { key: b.dataset.key, fit: 'pip', width: 0.42, position: 'bottom-right', border: 0, radius: 0, shadow: false });
-    if (kind === 'effect') { L.name = EFFECT_LOOKS[lk] || 'Effect'; if (lk === 'flash') { L.duration = 0.8; L.hold = 0.01; } if (lk === 'shake') { L.duration = 1.5; L.hold = 0.01; } if (lk === 'focus') { L.duration = 2; L.hold = 0.01; } if (lk === 'glitch') { L.duration = 1; L.hold = 0.5; } }
+    if (kind === 'effect') { L.name = EFFECT_LOOKS[lk] || 'Effect'; if (lk === 'flash') { L.duration = 0.8; L.hold = 0.01; } if (lk === 'shake') { L.duration = 1.5; L.hold = 0.01; } if (lk === 'focus') { L.duration = 2; L.hold = 0.01; } if (lk === 'glitch') { L.duration = 1; L.hold = 0.5; } if (lk === 'hologram') { L.duration = 1; L.hold = 5; } }
     if (kind === 'video') L.name = 'Video';
     addLayer(L);
     if (L.style.font) loadFonts(scene()).then(repaint);
@@ -1656,15 +1656,18 @@ export function createEditor() {
         stamp: ['Stamp', 'CLASSIFIED', 'top-right'],
         ticker: ['News ticker', 'Satellite imagery confirms new construction\nRescue teams reach the flooded district\nMore updates to follow', 'bottom'],
         morse: ['Morse code', 'SOS DE ALPHA ONE', 'bottom-left'],
+        code: ['Code screen', '', 'full'],
       }[b.dataset.look];
       if (T) { [L.name, L.style.text, L.style.position] = T; }
+      if (b.dataset.look === 'code') { Object.assign(L.style, { color: '#a46bff', speed: 1, bg: 0.88, size: 1 }); L.anim = 'fade'; L.duration = 0.6; L.hold = 5; }
       if (b.dataset.look === 'morse') { Object.assign(L.style, { color: '#ffb020', wpm: 15, label: 'MORSE · CW', wave: true }); L.anim = 'none'; L.duration = +(morseTimeline(L.style.text, 15).total + MORSE_DELAY + 0.3).toFixed(2); L.hold = 3; }
       if (b.dataset.look === 'stamp') L.anim = 'fade';
     }
     if (b.dataset.variant) {
       L.style.variant = b.dataset.variant;
-      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock', tactical: 'Tactical HUD', radar: 'Radar scope', thermal: 'Thermal camera', scanner: 'Terrain scanner', mission: 'Mission briefing', geoint: 'GEOINT drone feed', c2: 'Command & control wall', ops: 'Operations dashboard', sigint: 'Signals intercept' }[b.dataset.variant];
+      L.name = { drone: 'Drone HUD', satellite: 'Satellite HUD', target: 'Target lock', tactical: 'Tactical HUD', radar: 'Radar scope', thermal: 'Thermal camera', scanner: 'Terrain scanner', mission: 'Mission briefing', geoint: 'GEOINT drone feed', satscan: 'Satellite scan HUD', c2: 'Command & control wall', ops: 'Operations dashboard', sigint: 'Signals intercept' }[b.dataset.variant];
       if (b.dataset.variant === 'geoint') { Object.assign(L.style, { color: '#ffffff', label: 'GEOINT · EO/IR', tint: b.dataset.tint || 'blue', scan: true }); L.duration = 1.5; }
+      if (b.dataset.variant === 'satscan') { Object.assign(L.style, { color: '#ffffff', label: 'NAC / WOEID', sub: 'NAVSTAR', right: 'SPREAD SPECTRUM', text: 'INTERVAL IDENTIFIER\nCALIBRATION\nCCT SOURCE\nGAIN CHANGE' }); L.duration = 2; }
       if (b.dataset.variant === 'c2') { Object.assign(L.style, { color: '#38d0ff', label: 'COMMAND & CONTROL · OPS CENTER', panels: true, lights: true, clock: '20:45' }); L.anim = 'boot'; L.duration = 3; }
       if (b.dataset.variant === 'ops') { Object.assign(L.style, { color: '#38d0ff', label: 'OPERATIONS DASHBOARD', status: 'THREAT LEVEL: ELEVATED', clock: '20:45' }); L.duration = 2; }
       if (b.dataset.variant === 'sigint') { Object.assign(L.style, { color: '#7CFF7C', label: 'SIGINT · INTERCEPT', text: SIGINT_DEFAULT, freq: '7.0235', wpm: 15, position: 'bottom' }); L.anim = 'fade'; L.duration = 0.6; L.hold = +(morseTimeline(SIGINT_DEFAULT, 15).total + 2.5).toFixed(1); }
@@ -1680,6 +1683,29 @@ export function createEditor() {
   };
   $('#add-info').addEventListener('click', addInfo);
   $('#add-mil')?.addEventListener('click', addInfo);
+  // showcase elements (spectral, diorama, beams, viewshed, drone video…)
+  $('#add-viz')?.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const k = b.dataset.add;
+    if (k === 'hud' || k === 'hudtext') { addInfo(e); return; }
+    if (b.dataset.ref) { $(b.dataset.ref)?.click(); return; }
+    let st = null;
+    try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
+    cancelDrawing();
+    if (!LAYER_KINDS[k]?.geom) {
+      const L = newLayer(k, null, { start: newStart() });
+      if (st) Object.assign(L.style, st);
+      if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
+      if (b.dataset.name) L.name = b.dataset.name;
+      addLayer(L);
+      return;
+    }
+    pendingStyle = st;
+    startAdd(k);
+    const tip = { block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
+    if (tip) showHint(tip);
+  });
 
   // editor form
   const fRow = (label, inner, cls = '') => `<label class="row ${cls}"><span>${label}</span>${inner}</label>`;

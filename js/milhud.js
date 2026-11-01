@@ -188,7 +188,7 @@ export function drawMorseText(ctx, L, tm, o) {
 
 // ================================================================= variants
 export const MIL_HUD = {
-  geoint: 'GEOINT drone feed (blue)', c2: 'Command & control video wall', ops: 'Operations dashboard', sigint: 'Signals intercept (SIGINT)',
+  geoint: 'GEOINT drone feed (blue)', satscan: 'Satellite scan (crosshair, rulers, checklist)', c2: 'Command & control video wall', ops: 'Operations dashboard', sigint: 'Signals intercept (SIGINT)',
 };
 const TINTS = {
   blue: 'grayscale(1) sepia(1) hue-rotate(170deg) saturate(1.9) contrast(1.35) brightness(0.92)',
@@ -206,6 +206,7 @@ export function drawMilHUD(ctx, L, tm, o) {
   ctx.save();
   if (v !== 'sigint') { ctx.beginPath(); ctx.rect(o.frame.x, o.frame.y, o.frame.w, o.frame.h); ctx.clip(); }
   if (v === 'geoint') geoint(ctx, L, tm, o);
+  else if (v === 'satscan') satscan(ctx, L, tm, o);
   else if (v === 'c2') c2wall(ctx, L, tm, o);
   else if (v === 'ops') opsBoard(ctx, L, tm, o);
   else if (v === 'sigint') sigint(ctx, L, tm, o);
@@ -698,4 +699,76 @@ function sigint(ctx, L, tm, o) {
   ctx.fillText(show, ix, R.y + R.h - 24 * unit * k, iw);
   ctx.font = `800 ${13 * unit * k}px ${MONO}`; ctx.fillStyle = col;
   ctx.fillText(curCode.replace(/\./g, '•').replace(/-/g, '—'), ix, R.y + R.h - 4 * unit * k, iw);
+}
+
+// ---------------------------------------------------------------- satellite scan
+function satscan(ctx, L, tm, o) {
+  const { frame, unit } = o;
+  const { x, y, w, h } = frame;
+  const s = L.style, t = o.time ?? 0, view = o.view || {};
+  const col = s.color || '#ffffff';
+  const tau = tm.edit ? 99 : tm.tau;
+  const D = Math.max(0.5, +L.duration || 2);
+  const u = clamp(tau / D, 0, 1);
+  ctx.globalAlpha *= tm.alpha;
+  ctx.strokeStyle = col; ctx.fillStyle = col;
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 4 * unit;
+  ctx.lineWidth = 1.3 * unit;
+  const cx = x + w * 0.5, cy = y + h * 0.5;
+  // long crosshair lines with a gap round the centre box
+  const e = easeOut(u * 1.5);
+  const bw = w * 0.1, bh = h * 0.16;
+  ctx.beginPath();
+  ctx.moveTo(cx - bw * 0.7 - (cx - bw * 0.7 - x - w * 0.07) * e, cy); ctx.lineTo(cx - bw * 0.7, cy);
+  ctx.moveTo(cx + bw * 0.7, cy); ctx.lineTo(cx + bw * 0.7 + (x + w * 0.93 - cx - bw * 0.7) * e, cy);
+  ctx.stroke();
+  ctx.save(); ctx.globalAlpha *= 0.5; ctx.beginPath(); ctx.moveTo(x, y + h * 0.22); ctx.lineTo(x + (cx - x) * 0.6 * e, y + h * 0.22 + (cy - y - h * 0.22) * 0.6 * e); ctx.stroke(); ctx.restore();
+  // centre brackets
+  ctx.lineWidth = 1.6 * unit;
+  const bb = 14 * unit;
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const px = cx + sx * bw / 2, py = cy + sy * bh / 2;
+    ctx.beginPath(); ctx.moveTo(px, py - sy * bb); ctx.lineTo(px, py); ctx.lineTo(px - sx * bb, py); ctx.stroke();
+  }
+  // side tick rulers
+  for (const rx of [x + w * 0.054, x + w * 0.943]) {
+    const n = 26, y0 = y + h * 0.07, y1 = y + h * 0.93;
+    ctx.beginPath(); ctx.moveTo(rx, y0); ctx.lineTo(rx, y0 + (y1 - y0) * e); ctx.stroke();
+    for (let i = 0; i <= n; i++) {
+      const yy = y0 + ((y1 - y0) * i) / n;
+      if (yy > y0 + (y1 - y0) * e) break;
+      const big = i % 5 === 0, d = rx < cx ? 1 : -1;
+      ctx.beginPath(); ctx.moveTo(rx, yy); ctx.lineTo(rx + d * (big ? 10 : 5) * unit, yy); ctx.stroke();
+    }
+  }
+  // texts
+  const typ = (str, k) => str.slice(0, Math.ceil(str.length * clamp(u * 2 - k * 0.15, 0, 1)));
+  ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  ctx.font = `800 ${17 * unit}px ${UI}`; ctx.fillText(typ((s.label || 'NAC / WOEID').toUpperCase(), 0), x + w * 0.074, y + h * 0.085);
+  ctx.font = `700 ${10 * unit}px ${UI}`; ctx.fillText(typ((s.sub || 'NAVSTAR').toUpperCase(), 1), x + w * 0.074, y + h * 0.105);
+  const c0 = view.center || [0, 0];
+  ctx.font = `500 ${12 * unit}px ${UI}`;
+  ctx.fillText(typ(c0[1].toFixed(7), 2), x + w * 0.074, cy - 8 * unit);
+  ctx.fillText(typ(c0[0].toFixed(7), 3), x + w * 0.074, cy + 22 * unit);
+  ctx.textAlign = 'right'; ctx.font = `800 ${13 * unit}px ${UI}`;
+  ctx.fillText(typ((s.right || 'SPREAD SPECTRUM').toUpperCase(), 1), x + w * 0.925, y + h * 0.08);
+  ctx.font = `500 ${9.5 * unit}px ${MONO}`;
+  const r = rng(hashStr(L.id) + Math.floor(t * 6));
+  for (let i = 0; i < 5; i++) ctx.fillText(typ(`${r().toFixed(2)}:${String(Math.floor(r() * 99)).padStart(2, '0')}.${String(Math.floor(r() * 99)).padStart(2, '0')}  ${String(Math.floor(r() * 99)).padStart(2, '0')}:${String(Math.floor(r() * 99)).padStart(2, '0')}`, 2 + i), x + w * 0.925, y + h * 0.105 + i * 14 * unit);
+  ctx.font = `500 ${12 * unit}px ${UI}`; ctx.fillText(typ('RECEIVE', 3), x + w * 0.925, cy - 8 * unit);
+  ctx.save(); ctx.globalAlpha *= 0.65; ctx.font = `600 ${11 * unit}px ${UI}`;
+  ctx.fillText(typ('PRI  RGB2XYZ', 4), x + w * 0.925, y + h * 0.9); ctx.fillText(typ('SEC  RGB2LAB', 5), x + w * 0.925, y + h * 0.925); ctx.restore();
+  // checklist that ticks itself off
+  const items = String(s.text && !/MISSION/.test(s.text) ? s.text : 'INTERVAL IDENTIFIER\nCALIBRATION\nCCT SOURCE\nGAIN CHANGE').split('\n').filter(Boolean).slice(0, 8);
+  ctx.textAlign = 'left'; ctx.font = `600 ${12 * unit}px ${UI}`;
+  const ly = y + h * 0.925 - (items.length - 1) * 22 * unit;
+  const active = Math.floor(t * 0.8) % items.length;
+  items.forEach((it, i) => {
+    const yy = ly + i * 22 * unit;
+    const done = tm.edit || tau > D * 0.5 + i * 0.5;
+    const bs = 8 * unit;
+    ctx.strokeRect(x + w * 0.074, yy - bs, bs, bs);
+    if (done && (i !== active || Math.sin(t * 8) > 0)) ctx.fillRect(x + w * 0.074 + 1.5 * unit, yy - bs + 1.5 * unit, bs - 3 * unit, bs - 3 * unit);
+    ctx.fillText(typ(it.toUpperCase(), 4 + i), x + w * 0.074 + 16 * unit, yy);
+  });
 }

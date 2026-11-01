@@ -2,6 +2,7 @@
 // boxes (telemetry, alert, terminal, live coordinates, stamp, ticker) and animated target markers.
 import { placeAt } from './place.js';
 import { milFilter, drawMorseText } from './milhud.js';
+import { drawCodeText } from './vizfx.js';
 
 const MONO = '"JetBrains Mono",ui-monospace,Menlo,monospace';
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
@@ -256,13 +257,14 @@ export function drawHUDPlus(ctx, L, tm, o) {
 // ================================================================= HUD text boxes (placeable)
 export const HUDTEXT_STYLES = {
   telemetry: 'Telemetry (label: value lines)', alert: 'Alert / warning banner', terminal: 'Terminal (typed lines)',
-  coords: 'Live coordinates', stamp: 'Stamp (CLASSIFIED…)', ticker: 'Ticker (scrolling)', morse: 'Morse code (dots, dashes and sound)',
+  coords: 'Live coordinates', stamp: 'Stamp (CLASSIFIED…)', ticker: 'Ticker (scrolling)', morse: 'Morse code (dots, dashes and sound)', code: 'Scrolling code (purple glow)',
 };
 export function drawHudText(ctx, L, tm, o) {
   const { frame, unit } = o;
   const s = L.style;
   const st = s.look || 'telemetry';
   if (st === 'morse') { drawMorseText(ctx, L, tm, o); return; }
+  if (st === 'code') { drawCodeText(ctx, L, tm, o); return; }
   const col = s.color || (st === 'alert' || st === 'stamp' ? '#ff3b30' : '#7CFF7C');
   const k = +s.size || 1;
   const t = o.time ?? 0;
