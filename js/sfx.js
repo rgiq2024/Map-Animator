@@ -4,9 +4,9 @@
 import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 
 import { fenceAlertTimes } from './network.js';
-export const MUSIC = { none: 'None', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
+export const MUSIC = { none: 'None', trailer: 'Epic cinematic intro trailer (braams, ostinato, taiko)', heroic: 'Epic cinematic (heroic brass & choir)', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
 export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph', 'tiles', 'vortex', 'vessel', 'photocard', 'arpanel', 'linecallout', 'detect']);
-export function defaultSound() { return { auto: true, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
+export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const noiseCache = new WeakMap();
@@ -482,6 +482,57 @@ export function scheduleMusic(ctx, out, kind, from, to, when) {
     }
     const pat = [0, 0.75, 1.5, 2, 2.5, 3, 3.25, 3.5];
     for (let bar = Math.floor(from / 4) * 4; bar < to; bar += 4) for (const o of pat) { const t = bar + o; if (t >= from && t < to) drum(ctx, bus, at(t), o === 0 || o === 2 ? 0.75 : 0.45, o === 0 ? 40 : 55); }
+  } else if (kind === 'trailer') {
+    // Epic trailer: low drone, string ostinato that builds every 16 s, taiko groove, braams on the downbeat, riser + hit into each section
+    for (let t = Math.floor(from / 8) * 8; t < to; t += 8) {
+      const s = Math.max(t, from);
+      pad(ctx, bus, at(s), Math.min(8.6, to - s + 0.6), [26, 33, 38], 0.05, 'sawtooth', 380);
+      if (t >= from - 0.01 && t < to && t % 16 === 0) SYN.braam(ctx, bus, at(t), { dur: 4, vol: 0.45 });
+    }
+    const ost = [50, 50, 53, 50, 57, 50, 53, 50, 50, 50, 53, 50, 58, 57, 53, 52];
+    const step = 0.125;
+    for (let t = Math.ceil(from / step) * step; t < to; t += step) {
+      const i = Math.round(t / step);
+      const sec = (t % 16) / 16;
+      const v = 0.018 + 0.03 * sec;
+      const n = ost[i % ost.length] + (Math.floor(t / 16) % 2 ? 0 : -2);
+      const o = osc(ctx, 'sawtooth', NOTE(n), at(t), 0.11);
+      const f = filt(ctx, 'lowpass', 900 + 2200 * sec, 2);
+      const g = env(ctx, at(t), [[0.004, v], [0.1, 0.001, 1]]);
+      o.connect(f).connect(g).connect(bus);
+    }
+    const taiko = [0, 0.75, 1, 1.5, 1.75];
+    for (let bar = Math.floor(from / 2) * 2; bar < to; bar += 2) {
+      const intensity = (bar % 16) / 16;
+      for (const o of taiko) { const t = bar + o; if (t >= from && t < to && (o === 0 || intensity > 0.3)) drum(ctx, bus, at(t), o === 0 ? 0.55 : 0.25 + 0.25 * intensity, o === 0 ? 38 : 50); }
+    }
+    for (let t = Math.floor(from / 16) * 16 + 16; t - 2 < to; t += 16) {
+      if (t - 2 >= from && t - 2 < to) SYN.riser(ctx, bus, at(t - 2), { dur: 2, vol: 0.45 });
+      if (t >= from && t < to) SYN.hit(ctx, bus, at(t), { vol: 0.5 });
+    }
+  } else if (kind === 'heroic') {
+    // Heroic: i–VI–III–VII brass chords, choir pad, timpani, cymbal swells and a simple theme
+    const chords = [[38, 45, 50, 53, 57], [34, 41, 46, 50, 53], [41, 48, 53, 57, 60], [36, 43, 48, 52, 55]];
+    for (let t = Math.floor(from / 4) * 4; t < to; t += 4) {
+      const s = Math.max(t, from), c = chords[Math.floor(t / 4) % 4], d = Math.min(4.4, to - s + 0.4);
+      // brass: sawtooth with a filter that opens on each chord
+      const f = filt(ctx, 'lowpass', 500, 1.2); f.frequency.setValueAtTime(500, at(s)); f.frequency.linearRampToValueAtTime(1900, at(s) + 0.4); f.frequency.linearRampToValueAtTime(900, at(s) + d);
+      const g = env(ctx, at(s), [[0.12, 0.05], [d - 0.3, 0.045], [d, 0.001, 1]]);
+      for (const n of c) for (const det of [-8, 8]) { const o = osc(ctx, 'sawtooth', NOTE(n), at(s), d); o.detune.value = det; o.connect(f); }
+      f.connect(g).connect(bus);
+      pad(ctx, bus, at(s), d, c.map((n) => n + 24).slice(1, 4), 0.012, 'triangle', 2600);
+      if (t >= from && t % 8 === 4) { const n = src(ctx, 'white', at(t + 2), 2); const hf = filt(ctx, 'highpass', 5000); const cg = env(ctx, at(t + 2), [[1.9, 0.12], [2, 0.001, 1]]); n.connect(hf).connect(cg).connect(bus); }
+    }
+    for (let t = Math.ceil(from); t < to; t += 1) { const b = Math.round(t) % 4; drum(ctx, bus, at(t), b === 0 ? 0.8 : b === 2 ? 0.5 : 0.28, b === 0 ? 42 : 48); if (b === 3) drum(ctx, bus, at(t + 0.5), 0.3, 48); }
+    const theme = [62, 0, 65, 64, 62, 0, 60, 62, 57, 0, 0, 0, 62, 0, 65, 67, 69, 0, 67, 65, 64, 0, 0, 0];
+    for (let t = Math.ceil(from / 0.5) * 0.5; t < to; t += 0.5) {
+      if (t < 8) continue;
+      const n = theme[Math.round(t * 2) % theme.length];
+      if (!n) continue;
+      const o = osc(ctx, 'sawtooth', NOTE(n), at(t), 0.9); const o2 = osc(ctx, 'square', NOTE(n - 12), at(t), 0.9);
+      const f = filt(ctx, 'lowpass', 1600, 1); const g = env(ctx, at(t), [[0.06, 0.03], [0.8, 0.02], [0.9, 0.001, 1]]);
+      o.connect(f); o2.connect(f); f.connect(g).connect(bus);
+    }
   } else if (kind === 'documentary') {
     const arp = [57, 60, 64, 67, 64, 60, 53, 57, 60, 65, 60, 57, 55, 59, 62, 67, 62, 59, 52, 55, 59, 64, 59, 55];
     for (let t = Math.ceil(from / 0.5) * 0.5; t < to; t += 0.5) pluck(ctx, bus, at(t), arp[Math.round(t * 2) % arp.length], 0.06);
@@ -534,6 +585,11 @@ export function buildEvents(project, models) {
         if (a) push(t0, a, { dur: D, vol: vol * 0.8 });
       } else if (L.kind === 'hud') {
         push(t0, 'hudboot', { vol });
+        if (s.variant === 'countdown') { const n = Math.max(1, Math.round(+s.from || 10)), d0 = t0 + (+s.delay || 0.5); for (let k = 0; k < n; k++) push(d0 + k, 'beep', { freq: n - k <= 3 ? 1500 : 1000, vol }); push(d0 + n - 2, 'riser', { dur: 2, vol: vol * 0.6 }); push(d0 + n, 'hit', { vol }); push(d0 + n, 'rocket', { dur: 6, vol }); }
+        if (s.variant === 'biometric') { push(t0 + 0.3, 'servo', { vol }); for (let k = 0; k < 6; k++) push(t0 + 0.6 + k * 0.3, 'beep', { freq: 1600 + k * 80, vol: vol * 0.4 }); push(t0 + D + 2, 'lock', { vol }); }
+        if (s.variant === 'scifi' || s.variant === 'livefeed') { for (let k = 0; k < 6; k++) push(t0 + k * 0.15 * D, 'click', { vol }); push(t0 + D, 'datalink', { vol: vol * 0.6 }); }
+        if (s.variant === 'holotable') push(t0 + 0.2, 'datalink', { vol: vol * 0.6 });
+        if (s.variant === 'scope') { push(t0 + 0.2, 'servo', { dur: 0.8, vol }); push(t0 + D, 'lockon', { dur: 0.6, vol: vol * 0.6 }); }
         if (s.variant === 'analytics') { for (let k = 0; k < 5; k++) push(t0 + 0.2 + k * 0.18 * D, 'click', { vol }); push(t0 + D * 0.3, 'ping', { freq: 900, vol: vol * 0.6 }); push(t0 + D * 0.5, 'datalink', { vol: vol * 0.6 }); }
         if (s.variant === 'satscan') { push(t0 + 0.3, 'datalink', { vol: vol * 0.7 }); for (let k = 0; k < 4; k++) push(t0 + D * 0.5 + k * 0.5, 'beep', { freq: 1700, vol: vol * 0.4 }); }
         if (s.variant === 'geoint') { push(t0 + 0.35, 'servo', { dur: 0.8, vol }); push(t0 + 1.3, 'datalink', { dur: 0.8, vol: vol * 0.8 }); push(t0 + 2.4, 'comms', { dur: 2.2, vol: vol * 0.7 }); }
@@ -586,6 +642,10 @@ export function buildEvents(project, models) {
         for (let k = 0; k < n; k++) push(t0 + (0.15 + k * 0.15) * D, 'swoosh', { vol: vol * 0.6 });
       } else if (L.kind === 'detect') {
         push(t0, 'datalink', { vol: vol * 0.5 }); for (let k = 0; k < 4; k++) push(t0 + 0.4 + k * 0.6, 'beep', { freq: 1900, vol: vol * 0.3 });
+      } else if (L.kind === 'title' && s.look === 'hudring') {
+        push(t0, 'glitch', { dur: 0.5, vol: vol * 0.7 }); push(t0 + D * 0.3, 'braam', { vol: vol * 0.7 }); push(t0 + D * 0.5, 'type', { n: (s.text || '').length, dur: D * 0.4, vol: vol * 0.6 });
+      } else if (L.kind === 'title' && s.look === 'namecard') {
+        push(t0, 'swoosh', { vol: vol * 0.8 }); push(t0 + D * 0.35, 'type', { n: (s.text || '').length + 8, dur: D * 0.45, vol: vol * 0.6 });
       } else if (L.kind === 'title' && s.look === 'tag') {
         push(t0, 'swoosh', { vol: vol * 0.8 }); push(t0 + 0.15, 'hit', { vol: vol * 0.4 });
       } else if (L.kind === 'kgraph') {
@@ -742,7 +802,7 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
     const fn = SYN[e.type];
     if (fn) { try { fn(ctx, sfx, when + Math.max(0, e.t - from), e.p || {}); } catch (err) { console.warn('sfx', e.type, err); } }
   }
-  scheduleMusic(ctx, mus, snd.music, from, to, when);
+  if (snd.auto) scheduleMusic(ctx, mus, snd.music, from, to, when);
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).length > 0; };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (project.sfx || []).some((c) => !c.muted); };

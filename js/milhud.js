@@ -2,6 +2,7 @@
 // a command-and-control video wall (screens that power on, KPIs, gauges, event log, stack lights),
 // an operations dashboard, a SIGINT intercept panel (waterfall + Morse) and Morse-code text.
 import { placeAt } from './place.js';
+import { HUDPACK, drawHudPack, hudpackFilter } from './hudpack.js';
 
 const MONO = '"JetBrains Mono",ui-monospace,Menlo,monospace';
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
@@ -188,6 +189,7 @@ export function drawMorseText(ctx, L, tm, o) {
 
 // ================================================================= variants
 export const MIL_HUD = {
+  ...HUDPACK,
   geoint: 'GEOINT drone feed (blue)', analytics: 'Real-time analytics dashboard (KPIs, heat grid, chips)', satscan: 'Satellite scan (crosshair, rulers, checklist)', c2: 'Command & control video wall', ops: 'Operations dashboard', sigint: 'Signals intercept (SIGINT)',
 };
 const TINTS = {
@@ -199,10 +201,11 @@ const TINTS = {
 };
 export const GEOINT_TINTS = { blue: 'Blue', green: 'Night-vision green', amber: 'Amber', grey: 'Black & white', none: 'Natural colours' };
 /** CSS filter the map gets while a GEOINT HUD is on. */
-export const milFilter = (L) => (L.style?.variant === 'geoint' ? TINTS[L.style.tint || 'blue'] ?? TINTS.blue : '');
+export const milFilter = (L) => (L.style?.variant === 'geoint' ? TINTS[L.style.tint || 'blue'] ?? TINTS.blue : hudpackFilter(L));
 
 export function drawMilHUD(ctx, L, tm, o) {
   const v = L.style.variant;
+  if (HUDPACK[v]) { drawHudPack(ctx, L, tm, o); return; }
   ctx.save();
   if (v !== 'sigint') { ctx.beginPath(); ctx.rect(o.frame.x, o.frame.y, o.frame.w, o.frame.h); ctx.clip(); }
   if (v === 'geoint') geoint(ctx, L, tm, o);
