@@ -1729,7 +1729,7 @@ export function createEditor() {
   const fSw = (b, v) => `<input type="checkbox" class="switch" data-b="${b}" ${v ? 'checked' : ''}>`;
   const fText = (b, v, ph = '') => `<input type="text" data-b="${b}" value="${esc(v || '')}" placeholder="${esc(ph)}">`;
   const fNum = (b, v, step = 0.1) => `<input type="number" data-b="${b}" step="${step}" value="${v ?? ''}">`;
-  const DASH = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted' };
+  const DASH = { solid: 'Solid', dashed: 'Dashed', dotted: 'Dotted', railway: 'Railway track' };
 
   function renderLayerEditor() {
     const box = $('#layer-editor');
@@ -1756,7 +1756,7 @@ export function createEditor() {
         h += '<p class="hint-line">Low ground floods first, using real elevation data. Turn on 3D mountains and tilt the camera for a 3D look.</p>';
       }
     } else if (L.kind === 'line') {
-      h += '<h5>Line</h5>' + fRow('Colour', fColor('style.color', s.color)) + fRow('Width', fRange('style.width', s.width, 1, 16, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Arrow at the end', fSw('style.arrow', s.arrow)) + fRow('Glow', fSw('style.glow', s.glow));
+      h += '<h5>Line</h5>' + fRow('Colour', fColor('style.color', s.color)) + fRow('Width', fRange('style.width', s.width, 1, 16, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Arrow at the end', fSw('style.arrow', s.arrow)) + fRow('Vehicle at the tip while drawing', fSel('style.head', s.head || 'none', { none: 'None', train: 'Train 🚆', car: 'Car 🚗', truck: 'Truck 🚚', plane: 'Plane ✈️', ship: 'Ship 🚢', walk: 'Walking 🚶', bike: 'Bicycle 🚲' })) + fRow('Glow', fSw('style.glow', s.glow));
     } else if (L.kind === 'point') {
       h += '<h5>Symbol</h5>' + fRow('Marker', fSel('style.marker', s.marker, MARKERS));
       if (s.marker === 'emoji') h += fRow('Emoji', fText('style.emoji', s.emoji, '📍'));

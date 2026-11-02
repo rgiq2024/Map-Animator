@@ -1,4 +1,6 @@
 // Router between the home page (#/) and the editor (#/p/<project id>).
+import { defaultBrand } from './branding.js';
+import { defaultSound } from './sfx.js';
 import { createEditor, toast } from './editor.js';
 import { createHome } from './home.js';
 import { getProject, newProject, saveProject } from './store.js';
@@ -50,6 +52,8 @@ function autoVideo() {
     onCreate: async (story) => {
       const p = newProject(story.name);
       p.scenes = story.scenes;
+      if (story.brand) p.brand = { ...defaultBrand(), ...story.brand };
+      if (story.sound) p.sound = { ...defaultSound(), ...story.sound };
       await saveProject(p);
       pendingOpts = { step: 'export' };
       location.hash = `#/p/${p.id}`;

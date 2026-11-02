@@ -9,6 +9,7 @@ import { newLayer } from './layers.js';
 import { presetGrade } from './effects.js';
 import { haversine, greatCircle, curvedLine } from './geo.js';
 import { routeVia } from './network.js';
+import { putMedia } from './store.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const D2R = Math.PI / 180;
@@ -241,6 +242,34 @@ export async function resolvePlaces(plan, progress = () => {}) {
   return g;
 }
 
+// ---------------------------------------------------------------- building blocks the user can tick
+export const BLOCKS = [
+  ['opening', 'Opening from space', 'The globe zooms down to the country while the title appears'],
+  ['explainer', 'News map with a side panel', 'Title, date and region in a panel, the place marked on a dark map'],
+  ['route', 'Route from A to B (animated)', 'Draws the line from the start to the end — road, railway track, flight or ship'],
+  ['event3d', '3D event', 'The event itself in 3D (trains colliding, flood spreading, strike…)'],
+  ['spot', 'Highlight the spot', 'Ripples, pulse rings, radar sweep or a target lock on the exact place'],
+  ['zone', 'Affected area', 'A dashed circle around the place with its size'],
+  ['callout', 'Info callout', 'Lines from the spot to boxes with facts — numbers count up'],
+  ['compare', 'Before / after satellite images', 'Upload a pre and a post image — they are placed over the spot and swiped'],
+  ['hud', 'HUD overlay', 'Drone, satellite, GEOINT or scope view over the close-up'],
+  ['weather', 'Weather / atmosphere', 'Rain, storm, snow, fog or embers over the close-up'],
+  ['lower', 'Lower third with news ticker', 'Country, place, date and a scrolling ticker on every scene'],
+  ['music', 'Music & sound', 'Cinematic sound effects and a background score'],
+  ['end', 'End card', 'Closing title with the source'],
+];
+export function defaultBlocks(plan) {
+  const ev = plan.event;
+  const rail = ev === 'traincrash' || /rail|train/i.test(plan.raw || '');
+  return {
+    opening: true, explainer: true, route: !!(plan.from && plan.to), event3d: !['journey', 'place'].includes(ev), spot: ev !== 'journey', zone: ev === 'flood' || ev === 'fire', callout: false, compare: false, hud: false, weather: false, lower: true, music: false, end: true,
+    routeStyle: rail ? 'railway' : ev === 'journey' ? ({ plane: 'flight', train: 'railway', foot: 'walk', bike: 'road' }[plan.mode] || 'road') : ev === 'shipcrash' ? 'ship' : 'road',
+    spotStyle: ev === 'quake' || ev === 'flood' ? 'ripple' : ev === 'strike' ? 'target' : 'pulse',
+    zoneKm: ev === 'flood' ? 3 : 1, callText: 'Injured: 70\nDead: 21\nTrains involved: 2', compareKm: 2, beforeId: '', afterId: '', compareMode: 'swipe',
+    hudStyle: 'drone', weatherStyle: ev === 'flood' || ev === 'cyclone' ? 'storm' : ev === 'fire' ? 'embers' : 'rain', ticker: '', music: 'trailer',
+  };
+}
+
 // ---------------------------------------------------------------- building the scenes
 const REF_W = 1000;
 const V = (ll, zoom, bearing = 0, pitch = 0) => ({ center: [r6(ll[0]), r6(ll[1])], zoomRef: +zoom.toFixed(3), bearing: +(((bearing % 360) + 540) % 360 - 180).toFixed(1), pitch: +clamp(pitch, 0, 70).toFixed(1) });
@@ -370,9 +399,20 @@ export function buildStory(plan, g, opts = {}) {
   const PLACE = (plan.place || g.place?.name || plan.title || '').toUpperCase();
   const country = g.country?.name || g.place?.country || '';
   const scenes = [];
-  const news = opts.style !== 'documentary';
+  const B = { ...defaultBlocks(plan), ...(plan.blocks || {}) };
+  // the lower third replaces the TV-news bug and headline bars (and the bug would sit under the logo strip)
+  const news = opts.style !== 'documentary' && !B.lower;
+  // the route line in the chosen style
+  const routeLine = () => {
+    if (!g.from || !g.to) return null;
+    const via = g.place && plan.event !== 'journey' ? [g.from.ll, g.place.ll, g.to.ll] : [g.from.ll, g.to.ll];
+    let coords = g.route?.coords;
+    if (B.routeStyle === 'flight') coords = greatCircle(g.from.ll, g.to.ll, 96);
+    else if (B.routeStyle === 'railway' || B.routeStyle === 'ship' || !coords) { coords = []; for (let i = 1; i < via.length; i++) coords.push(...curvedLine(via[i - 1], via[i], B.routeStyle === 'ship' ? 0.12 : 0.03, 40).slice(i > 1 ? 1 : 0)); }
+    return coords.map(([x, y]) => [r6(x), r6(y)]);
+  };
   // ---- 1. opening: from space down to the country
-  {
+  if (B.opening) {
     const D = 6 * k;
     const sc = newScene('Opening');
     Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, globe: true, atmosphere: true, clouds: true, cloudMode: 'zoom', cloudAmount: 0.7 });
@@ -386,7 +426,7 @@ export function buildStory(plan, g, opts = {}) {
     scenes.push(sc);
   }
   // ---- 2. explainer map: side panel, route, places
-  {
+  if (B.explainer || B.route) {
     const D = 9 * k;
     const sc = newScene('Map');
     darkLook(sc);
@@ -402,16 +442,18 @@ export function buildStory(plan, g, opts = {}) {
     sc.camera.mode = 'keyframes';
     sc.camera.keys = [K(0, V(c, z - 0.35), 'linear'), K(D, V(c, z - 0.05), 'linear')];
     sc.stillStart = 0; sc.stillEnd = 0.3;
-    sc.layers.push(L('title', null, 0.2, { duration: 1.2, hold: 0, style: { look: 'explainer', text: plan.title, sub: plan.subtitle, date: plan.date, lines: (plan.context?.length ? plan.context : [country]).filter(Boolean).join('\n'), font: 'Inter', color: '#ffffff', accent: '#e53935', bg: '#0a0f15', side: 'left' } }));
+    if (B.explainer) sc.layers.push(L('title', null, 0.2, { duration: 1.2, hold: 0, style: { look: 'explainer', text: plan.title, sub: plan.subtitle, date: plan.date, lines: (plan.context?.length ? plan.context : [country]).filter(Boolean).join('\n'), font: 'Inter', color: '#ffffff', accent: '#e53935', bg: '#0a0f15', side: 'left' } }));
     if (country && g.country?.ll) sc.layers.push(L('label', pt(g.country.ll), 0.6, { duration: 1.2, style: { text: country.toUpperCase(), size: 22, color: '#c3ced4', halo: '#0a0f15', weight: 500, upper: true } }));
     let t = 1.2;
-    if (g.route?.coords?.length > 1) {
-      sc.layers.push(L('line', { type: 'LineString', coordinates: g.route.coords.map(([x, y]) => [r6(x), r6(y)]) }, 1.3, { duration: 3 * Math.min(k, 1.4), name: plan.from && plan.to ? `${plan.from} – ${plan.to}` : 'Route', style: { color: '#e53935', width: 4.5, dash: 'solid', arrow: false, glow: true } }));
+    const rc = B.route ? routeLine() : null;
+    if (rc?.length > 1) {
+      const head = { railway: 'train', flight: 'plane', ship: 'ship', walk: 'walk', road: 'car' }[B.routeStyle] || 'car';
+      sc.layers.push(L('line', { type: 'LineString', coordinates: rc }, 1.3, { duration: Math.max(3, 4 * Math.min(k, 1.6)), name: plan.from && plan.to ? `${plan.from} – ${plan.to}` : 'Route', style: { color: B.routeStyle === 'railway' ? '#ffd23f' : '#e53935', width: B.routeStyle === 'railway' ? 3.5 : 4.5, dash: B.routeStyle === 'railway' ? 'railway' : B.routeStyle === 'flight' ? 'dashed' : 'solid', arrow: B.routeStyle === 'flight', glow: true, head, headSize: 1.1 } }));
       for (const [p, nm, at] of [[g.from, plan.from, 1.1], [g.to, plan.to, 1.3 + 3 * Math.min(k, 1.4)]]) if (p) sc.layers.push(L('point', pt(p.ll), at, { duration: 0.6, name: nm, style: { marker: 'ring', color: '#ffffff', size: 0.75, effect: 'none', label: String(nm).toUpperCase(), font: 'Inter' } }));
       t = 1.3 + 3 * Math.min(k, 1.4) + 0.3;
     }
     if (g.place) sc.layers.push(L('point', pt(g.place.ll), t, { duration: 0.8, name: PLACE, style: { marker: 'ring', color: '#e53935', size: 1, effect: 'pulse', label: plan.event === 'journey' ? PLACE : `${PLACE}${/crash|flood|fire|quake|strike/.test(plan.event) ? ' AREA' : ''}`, font: 'Inter' } }));
-    if (plan.event === 'journey' && g.from && g.to) {
+    if (plan.event === 'journey' && g.from && g.to && B.route && B.routeStyle === 'compare-modes') {
       const on = { car: plan.mode === 'car', bike: plan.mode === 'bike', foot: plan.mode === 'foot', train: plan.mode === 'train', plane: plan.mode === 'plane' };
       sc.layers = sc.layers.filter((x) => x.kind !== 'line');
       sc.layers.push(L('netroute', { type: 'LineString', coordinates: [g.from.ll, g.to.ll] }, 1.3, { duration: Math.max(4, D - 3), anim: 'together', style: { ...on, fromName: plan.from, toName: plan.to, title: plan.subtitle, position: 'bottom-right' } }));
@@ -419,8 +461,9 @@ export function buildStory(plan, g, opts = {}) {
     sc.transition = 'dissolve'; sc.transitionSeconds = 0.8;
     scenes.push(sc);
   }
-  // ---- 3. the event itself, close up
-  if (plan.event !== 'journey') {
+  // ---- 3. the event itself, close up (plus whatever the user ticked for the spot)
+  const closeUp = (B.event3d && plan.event !== 'journey') || B.spot || B.zone || B.callout || B.hud || B.weather;
+  if (closeUp) {
     const D = 13 * k;
     const sc = newScene('Event');
     Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: plan.event !== 'traincrash', terrain: false, globe: false, clouds: false });
@@ -430,7 +473,9 @@ export function buildStory(plan, g, opts = {}) {
     const camB = (lb + 62) % 360;
     let zEnd = 15.5, tilt = 55;
     const arrive = Math.min(D * 0.38, 5);
-    if (plan.event === 'traincrash' || plan.event === 'carcrash' || plan.event === 'shipcrash') {
+    const ev3d = B.event3d && plan.event !== 'journey';
+    if (!ev3d) { zEnd = 15.6; tilt = 50; }
+    else if (plan.event === 'traincrash' || plan.event === 'carcrash' || plan.event === 'shipcrash') {
       const half = plan.event === 'traincrash' ? 900 : 500;
       const a = dest(focus, lb + 180, half), b = dest(focus, lb, half);
       const geom = { type: 'LineString', coordinates: [a, focus.map(r6), b] };
@@ -454,7 +499,7 @@ export function buildStory(plan, g, opts = {}) {
       sc.layers.push(L('flood', circle(focus, 1400), 1.5, { anim: 'spread', duration: Math.max(4, D * 0.5) })); zEnd = 13.6; tilt = 45;
     } else if (plan.event === 'cyclone') {
       const start = dest(focus, 120, 900000), mid = dest(focus, 120, 420000), end = dest(focus, 300, 200000);
-      sc.layers.push(L('cyclone', { type: 'LineString', coordinates: [start, mid, focus.map(r6), end] }, 0.8, { duration: Math.max(6, D * 0.8), style: { name: plan.title, cats: 'TS, 1, 3, 4, 2', forecast: true } }));
+      sc.layers.push(L('cyclone', { type: 'LineString', coordinates: [start, mid, focus.map(r6), end] }, 0.8, { duration: Math.max(6, D * 0.8), style: { name: plan.title, cats: 'TS, 1, 3, 4, 2', forecast: true, legendPos: B.lower ? 'middle-right' : 'bottom-right' } }));
       zEnd = 4.6; tilt = 20;
     } else if (plan.event === 'quake') {
       sc.layers.push(L('point', pt(focus), 1.2, { duration: 1, style: { marker: 'emoji', emoji: '🌐', effect: 'ripple', size: 1.8, color: '#ff3b30', label: 'EPICENTRE' } }));
@@ -467,10 +512,26 @@ export function buildStory(plan, g, opts = {}) {
       sc.layers.push(L('strike', pt(focus), Math.max(1.5, arrive + (plan.event === 'planecrash' ? 3 : 1)), { duration: 4, style: { size: 1.4 } })); zEnd = 16.2;
     } else if (plan.event === 'servicearea') {
       sc.layers.push(L('servicearea', pt(focus), 1.2, { duration: 4, style: { mode: plan.mode === 'plane' || plan.mode === 'train' ? 'car' : plan.mode, name: plan.place } })); zEnd = 11.2; tilt = 0;
-    } else {
+    } else if (!B.spot) {
       sc.layers.push(L('point', pt(focus), 1.5, { duration: 0.8, style: { marker: 'pin', color: '#e53935', size: 1.3, effect: 'pulse', label: plan.place } }));
       sc.layers.push(L('target', pt(focus), 2.2, { duration: 1.5 }));
     }
+    // ticked extras
+    const tSpot = Math.max(1.2, arrive * 0.8);
+    if (B.spot) {
+      const st = B.spotStyle || 'pulse';
+      if (st === 'target') sc.layers.push(L('target', pt(focus), tSpot, { duration: 1.5 }));
+      else sc.layers.push(L('point', pt(focus), tSpot, { duration: 0.8, name: 'Highlight', style: { marker: st === 'radar' ? 'target' : 'ring', color: '#ff3b30', size: st === 'ripple' ? 1.8 : 1.3, effect: st, label: PLACE } }));
+    }
+    if (B.zone) {
+      const km = Math.max(0.05, +B.zoneKm || 1);
+      sc.layers.push(L('area', circle(focus, km * 1000), tSpot + 0.4, { duration: 1.2, name: 'Affected area', style: { stroke: '#ff3b30', fill: '#ff3b30', fillOpacity: 0.16, width: 2.5, dash: 'dashed', glow: true } }));
+      sc.layers.push(L('label', pt(dest(focus, 0, km * 1000 * 1.1)), tSpot + 1, { duration: 0.8, style: { text: `AFFECTED AREA · ${km} KM`, size: 15, color: '#ffffff', halo: '#7a0d0d', weight: 700, upper: true } }));
+      if (!B.event3d) zEnd = clamp(15.6 - Math.log2(km / 0.5), 9, 16.5);
+    }
+    if (B.callout) sc.layers.push(L('linecallout', pt(focus), tSpot + 1.2, { duration: 1.6, style: { items: String(B.callText || '').split('\n').filter(Boolean).slice(0, 6).join('\n') } }));
+    if (B.hud) sc.layers.push(L('hud', null, 0.2, { duration: 1.2, anim: 'boot', style: { variant: B.hudStyle || 'drone', label: B.hudStyle === 'satellite' ? 'SAT-01 LIVE' : 'UAV-01', color: B.hudStyle === 'satellite' ? '#36d1ff' : B.hudStyle === 'geoint' || B.hudStyle === 'scope' ? '#ffffff' : '#7CFF7C' } }));
+    if (B.weather) sc.layers.push(L('effect', null, 0.4, { duration: 2, hold: D, style: { look: B.weatherStyle || 'rain', amount: 1 } }));
     sc.camera.keys = [K(0, V(focus, Math.min(zEnd - 3.5, 13), lb, 0), 'ease'), K(arrive, V(focus, zEnd, camB, tilt), 'linear'), K(D, V(focus, zEnd + 0.3, camB + 28, tilt), 'linear')];
     sc.camera.tilt = tilt;
     const headAt = Math.min(D * 0.45, arrive + 1);
@@ -482,19 +543,41 @@ export function buildStory(plan, g, opts = {}) {
     sc.transition = 'dissolve'; sc.transitionSeconds = 0.8;
     scenes.push(sc);
   }
+  // ---- before / after satellite images
+  if (B.compare && B.beforeId && B.afterId) {
+    const D = 8 * Math.min(k, 1.5);
+    const sc = newScene('Before / after');
+    Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
+    const half = Math.max(0.1, +B.compareKm || 2) * 500;
+    const n = dest(focus, 0, half)[1], so = dest(focus, 180, half)[1], e = dest(focus, 90, half)[0], w2 = dest(focus, 270, half)[0];
+    const quad = [[r6(w2), r6(n)], [r6(e), r6(n)], [r6(e), r6(so)], [r6(w2), r6(so)]];
+    const fit = fitCamera([[w2, so], [e, n]], REF_W, vh, 0.04);
+    sc.camera.mode = 'keyframes';
+    sc.camera.keys = [K(0, V(focus, fit.zoom - 0.6), 'ease'), K(1.2, V(focus, fit.zoom), 'linear'), K(D, V(focus, fit.zoom + 0.15), 'linear')];
+    sc.stillStart = 0; sc.stillEnd = 0.3;
+    sc.layers.push(L('compare', { type: 'Polygon', coordinates: [[...quad, quad[0]]] }, 1, { duration: Math.max(4, D - 2), name: 'Before / after', style: { media: B.beforeId, media2: B.afterId, mode: B.compareMode || 'swipe', cycles: 2, labels: true, labelA: 'BEFORE', labelB: 'AFTER', crs: '3857' } }));
+    if (B.spot) sc.layers.push(L('point', pt(focus), 1.2, { duration: 0.8, style: { marker: 'ring', color: '#ff3b30', size: 1.2, effect: B.spotStyle === 'target' ? 'pulse' : B.spotStyle || 'pulse', label: '' } }));
+    sc.transition = 'dissolve'; sc.transitionSeconds = 0.8;
+    scenes.push(sc);
+  }
   // ---- 4. end card
-  {
+  if (B.end && scenes.length) {
     const D = 4.5 * Math.min(k, 1.6);
     const sc = newScene('End');
     darkLook(sc);
-    const last = scenes[1].camera.keys.at(-1).view;
+    const last = (scenes[1] || scenes[0]).camera.keys.at(-1).view;
     sc.camera.mode = 'keyframes';
     sc.camera.keys = [K(0, { ...last }, 'linear'), K(D, { ...last, zoomRef: last.zoomRef + 0.2 }, 'linear')];
     sc.stillStart = 0; sc.stillEnd = 0.2;
     sc.layers.push(L('title', null, 0.3, { duration: 2.2, hold: Math.max(1, D - 2.5), style: { look: 'ending', text: plan.endText || plan.title.toUpperCase(), sub: plan.source ? `Source: ${plan.source}` : plan.date || '', font: 'Archivo', dim: 0.45 } }));
     scenes.push(sc);
   }
-  return { name: plan.title, scenes };
+  if (!scenes.length) throw new Error('Tick at least one part of the video');
+  const story = { name: plan.title, scenes };
+  if (B.lower) story.brand = Object.fromEntries(Object.entries({ lower: true, country: (country || '').toUpperCase(), place: PLACE, date: (plan.date || '').toUpperCase(), ticker: B.ticker || [plan.subtitle, plan.title].filter(Boolean).join(' | ') }).filter(([, v]) => v !== ''));
+  else story.brand = { lower: false };
+  if (B.music) story.sound = { auto: true, v2: true, music: B.music || 'trailer' };
+  return story;
 }
 
 // ---------------------------------------------------------------- the dialog
@@ -528,6 +611,24 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
   document.body.append(d);
   const $ = (s) => d.querySelector(s);
   let plan = null, geo = null;
+  const files = { before: null, after: null };
+  const opt = (v, cur, t) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${t}</option>`;
+  function blocksHTML() {
+    const B = plan.blocks ||= defaultBlocks(plan);
+    const sub = {
+      route: `<label>Line style<select data-b="routeStyle">${opt('road', B.routeStyle, 'Road (red line, car)')}${opt('railway', B.routeStyle, 'Railway track (train)')}${opt('flight', B.routeStyle, 'Flight (dashed arc, plane)')}${opt('ship', B.routeStyle, 'Ship (curved, ship)')}${opt('walk', B.routeStyle, 'Walking')}</select></label>${plan.from && plan.to ? '' : '<small class="muted">Fill in “Route from” and “Route to” above, then press Find the places.</small>'}`,
+      spot: `<label>Effect<select data-b="spotStyle">${opt('ripple', B.spotStyle, 'Ripples (waves)')}${opt('pulse', B.spotStyle, 'Pulse rings')}${opt('radar', B.spotStyle, 'Radar sweep')}${opt('target', B.spotStyle, 'Target lock')}</select></label>`,
+      zone: `<label>Radius (km)<input type="number" min="0.05" step="0.05" data-b="zoneKm" value="${esc(B.zoneKm)}" /></label>`,
+      callout: `<label>Facts — one per line (“ / ” splits a box into two lines)<textarea rows="3" data-b="callText">${esc(B.callText)}</textarea></label>`,
+      compare: `<label>Before image (pre-event)<input type="file" accept="image/*" data-file="before" />${files.before ? `<small>✓ ${esc(files.before.name)}</small>` : ''}</label><label>After image (post-event)<input type="file" accept="image/*" data-file="after" />${files.after ? `<small>✓ ${esc(files.after.name)}</small>` : ''}</label><label>Area shown (km across)<input type="number" min="0.1" step="0.1" data-b="compareKm" value="${esc(B.compareKm)}" /></label><label>Effect<select data-b="compareMode">${opt('swipe', B.compareMode, 'Swipe across')}${opt('pingpong', B.compareMode, 'Swipe back and forth')}${opt('fade', B.compareMode, 'Cross-fade')}${opt('split', B.compareMode, 'Split screen')}</select></label>`,
+      hud: `<label>HUD<select data-b="hudStyle">${opt('drone', B.hudStyle, 'Drone camera')}${opt('satellite', B.hudStyle, 'Satellite feed')}${opt('geoint', B.hudStyle, 'GEOINT (blue)')}${opt('scope', B.hudStyle, 'Scope view')}${opt('tactical', B.hudStyle, 'Tactical')}${opt('livefeed', B.hudStyle, 'Live-feed scanner')}</select></label>`,
+      weather: `<label>Effect<select data-b="weatherStyle">${opt('rain', B.weatherStyle, 'Rain')}${opt('storm', B.weatherStyle, 'Thunderstorm')}${opt('snow', B.weatherStyle, 'Snow')}${opt('fog', B.weatherStyle, 'Fog')}${opt('embers', B.weatherStyle, 'Embers / smoke')}${opt('sandstorm', B.weatherStyle, 'Sandstorm')}</select></label>`,
+      lower: `<label>Ticker (separate items with |, empty = subtitle and title)<input type="text" data-b="ticker" value="${esc(B.ticker)}" /></label>`,
+      music: `<label>Score<select data-b="music">${opt('trailer', B.music, 'Epic cinematic trailer')}${opt('heroic', B.music, 'Epic cinematic (heroic)')}${opt('tension', B.music, 'Tension')}${opt('epic', B.music, 'Epic drums')}${opt('documentary', B.music, 'Documentary piano')}${opt('ambient', B.music, 'Ambient')}</select></label>`,
+    };
+    return `<div class="av-blocks"><h4>Choose what goes in the video</h4><p class="muted">Tick the parts you want — they are built in this order. Everything stays editable afterwards.</p>
+      ${BLOCKS.map(([k, t, d]) => `<div class="av-blk ${B[k] ? 'on' : ''}"><input type="checkbox" data-b="${k}" ${B[k] ? 'checked' : ''} /><div><b>${k === 'event3d' ? `${esc(t)} — ${esc(EVENTS[plan.event] || '')}` : esc(t)}</b><small>${esc(d)}</small></div>${sub[k] ? `<div class="av-sub" ${B[k] ? '' : 'hidden'}>${sub[k]}</div>` : ''}</div>`).join('')}</div>`;
+  }
   const status = (t) => { $('#av-status').textContent = t; };
   const field = (id, label, v, wide) => `<label class="${wide ? 'wide' : ''}"><span>${label}</span><input data-f="${id}" type="text" value="${esc(v)}" /></label>`;
   const ok = (p) => (p ? `<i class="av-ok" title="${esc(p.detail || '')}">✓ found</i>` : '<i class="av-no">not found</i>');
@@ -548,12 +649,7 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
         <label><span>Route to ${geo && plan.to ? ok(geo.to) : ''}</span><input data-f="to" type="text" value="${esc(plan.to)}" placeholder="optional" /></label>
         ${field('source', 'Source / credit (end card)', plan.source, true)}
       </div>
-      <ol class="av-scenes">
-        <li><b>Opening</b> — from space down to ${esc(geo?.country?.name || 'the country')}, with the title.</li>
-        <li><b>Map</b> — news-explainer panel, ${plan.from && plan.to ? `the ${esc(plan.from)}–${esc(plan.to)} route, ` : ''}the place marked.</li>
-        ${plan.event === 'journey' ? '' : `<li><b>${esc(EVENTS[plan.event])}</b> — close up at ${esc(plan.place || 'the place')} in 3D.</li>`}
-        <li><b>End card</b>${plan.source ? ` with “Source: ${esc(plan.source)}”` : ''}.</li>
-      </ol>`;
+      ${blocksHTML()}`;
   }
   const readFields = () => {
     d.querySelectorAll('[data-f]').forEach((el) => { const k = el.dataset.f; plan[k] = k === 'context' ? el.value.split(',').map((s) => s.trim()).filter(Boolean) : el.value.trim(); });
@@ -561,7 +657,7 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
   async function check() {
     const text = $('#av-text').value.trim();
     if (!text) { status('Type a sentence first'); return; }
-    if (plan && $('#av-plan').hidden === false) readFields(); else plan = parseBrief(text);
+    if (plan && $('#av-plan').hidden === false) readFields(); else { plan = parseBrief(text); plan.raw = text; plan.blocks = defaultBlocks(plan); }
     $('#av-make').disabled = true; $('#av-check').disabled = true;
     renderPlan();
     try {
@@ -586,10 +682,34 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
     if (k === 'coords') renderPlan();
     if (['place', 'from', 'to', 'context', 'coords'].includes(k)) { $('#av-make').disabled = true; status('Places changed — press “Find the places”'); }
   });
+  const onBlock = (e) => {
+    if (!plan) return;
+    const el = e.target;
+    if (el.dataset.file) {
+      if (e.type !== 'change') return;
+      files[el.dataset.file] = el.files?.[0] || null;
+      plan.blocks.compare = true;
+      renderPlan();
+      return;
+    }
+    const k = el.dataset.b;
+    if (!k) return;
+    plan.blocks ||= defaultBlocks(plan);
+    plan.blocks[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? +el.value : el.value;
+    if (el.type === 'checkbox') { const box = el.closest('.av-blk'); box.classList.toggle('on', el.checked); const sb = box.querySelector('.av-sub'); if (sb) sb.hidden = !el.checked; }
+  };
+  $('#av-plan').addEventListener('input', onBlock);
+  $('#av-plan').addEventListener('change', onBlock);
   $('#av-check').onclick = check;
   $('#av-make').onclick = async () => {
     readFields();
     try {
+      const B = plan.blocks ||= defaultBlocks(plan);
+      if (B.compare) {
+        if (!files.before || !files.after) { status('Choose both the before and the after image (or untick Before / after)'); return; }
+        status('Saving the images…');
+        for (const k of ['before', 'after']) { const id = `media_${Date.now().toString(36)}${k}`; await putMedia(id, files[k]); B[`${k}Id`] = id; }
+      }
       const story = buildStory(plan, geo, { length: +$('#av-len').value, style: $('#av-style').value, channel: $('#av-channel').value.trim() || 'NEWS', aspect });
       d.close(); d.remove();
       await onCreate?.(story, plan);

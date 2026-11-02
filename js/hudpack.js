@@ -631,6 +631,7 @@ export function drawHudTitle(ctx, L, tm, o) {
   ctx.shadowColor = hexA(red, 0.6); ctx.shadowBlur = 10 * unit;
   if ((s.look || 'hudring') === 'hudring') {
     const R = Math.min(fr.w, fr.h) * 0.42;
+    placeAt(ctx, L, fr, cx - R * 1.2, cy - R * 0.75, R * 2.4, R * 1.5);
     ctx.save();
     ctx.translate(cx, cy); ctx.rotate(-0.06); ctx.scale(1, 0.62);
     // dotted outer ring and solid inner
@@ -680,6 +681,7 @@ export function drawHudTitle(ctx, L, tm, o) {
     // name card
     const W = 420 * unit, H = 150 * unit;
     const x = cx - W * 0.6, y = cy - H / 2;
+    placeAt(ctx, L, fr, x, y - 10 * unit, W + H, H * 1.15);
     ctx.save();
     ctx.translate(cx, cy); ctx.transform(1, 0.1, -0.25, 1, 0, 0); ctx.translate(-cx, -cy);
     const k1 = easeOut(u * 1.8);

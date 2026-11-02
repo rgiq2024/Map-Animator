@@ -455,13 +455,38 @@ function drawLineLayer(ctx, L, tm, proj, unit) {
     draw.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth = w + 3 * unit;
-    ctx.setLineDash(L.anim === 'flow' ? [] : dashOf(s.dash, w));
+    ctx.setLineDash(L.anim === 'flow' || s.dash === 'railway' ? [] : dashOf(s.dash, w));
     if (s.dash !== 'dotted') ctx.stroke();
+    if (s.dash === 'railway') {
+      // sleepers across the track every few pixels
+      ctx.save(); ctx.shadowBlur = 0; ctx.setLineDash([]);
+      const gap = Math.max(5 * unit, w * 1.6), half = w * 1.5 + 2 * unit;
+      let carry = 0;
+      ctx.strokeStyle = s.color; ctx.lineWidth = Math.max(1, w * 0.4);
+      ctx.beginPath();
+      for (let i = 1; i < draw.length; i++) {
+        const [x0, y0] = draw[i - 1], [x1, y1] = draw[i];
+        const len = Math.hypot(x1 - x0, y1 - y0);
+        if (!len) continue;
+        const nx = -(y1 - y0) / len, ny = (x1 - x0) / len;
+        for (let d = gap - carry; d <= len; d += gap) { const px = x0 + ((x1 - x0) * d) / len, py = y0 + ((y1 - y0) * d) / len; ctx.moveTo(px - nx * half, py - ny * half); ctx.lineTo(px + nx * half, py + ny * half); }
+        carry = (carry + len) % gap;
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.shadowBlur = 0;
     ctx.strokeStyle = s.color;
     ctx.lineWidth = w;
     if (L.anim === 'flow' && !tm.edit) { ctx.setLineDash([w * 3, w * 2.2]); ctx.lineDashOffset = -tm.tau * 40 * unit; }
     ctx.stroke();
+    if (s.head && s.head !== 'none' && L.anim === 'draw' && (tm.u < 1 || s.headStay)) {
+      const a = draw.at(-1);
+      ctx.save(); ctx.shadowBlur = 0; ctx.setLineDash([]);
+      ctx.font = `${22 * unit * (+s.headSize || 1)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText({ train: '🚆', car: '🚗', truck: '🚚', plane: '✈️', ship: '🚢', walk: '🚶', bike: '🚲' }[s.head] || s.head, a[0], a[1]);
+      ctx.restore();
+    }
     if (s.arrow) {
       const a = draw.at(-1), b = draw[Math.max(0, draw.length - 2)];
       let k = draw.length - 2;

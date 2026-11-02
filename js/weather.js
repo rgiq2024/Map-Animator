@@ -169,11 +169,18 @@ export function drawCyclone(ctx, L, tm, o) {
   const s = L.style;
   const cs = L.geom.coordinates;
   const D = Math.max(0.1, +L.duration || 6);
-  const u = tm.edit ? clamp(+s.editAt ?? 0.6, 0, 1) : clamp(tm.tau / D, 0, 1);
+  const uRaw = tm.edit ? clamp(+s.editAt ?? 0.6, 0, 1) : clamp(tm.tau / D, 0, 1);
   const cats = String(s.cats || '').split(/[,;\s]+/).filter(Boolean);
   const catAt = (i) => catIndex(cats.length ? cats[Math.min(i, cats.length - 1)] : s.category);
-  const pos = trackAt(cs, u);
   const fcFrom = s.forecast ? clamp(+s.forecastFrom || 0.6, 0, 1) : 2;
+  // with a forecast, the storm travels to "now" (the forecast start); then the forecast track and cone grow ahead of it
+  const fcAnim = s.forecast && fcFrom < 1 && s.animForecast !== false;
+  const MOVE = 0.72;
+  const u = fcAnim ? (tm.edit ? Math.min(uRaw, fcFrom) : Math.min(uRaw / MOVE, 1) * fcFrom) : uRaw;
+  const g = !fcAnim ? 1 : tm.edit ? 1 : clamp((uRaw - MOVE) / (1 - MOVE), 0, 1);
+  const ge = 1 - (1 - g) ** 3;
+  const fcEnd = fcFrom + (1 - fcFrom) * ge;
+  const pos = trackAt(cs, u);
   const P = cs.map(proj);
   const t = o.time ?? 0;
   ctx.save();
@@ -181,17 +188,18 @@ export function drawCyclone(ctx, L, tm, o) {
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   const w = 3.2 * unit * (+s.width || 1);
   // forecast cone (from the forecast start to the end)
-  if (s.forecast && fcFrom < 1) {
+  if (s.forecast && fcFrom < 1 && fcEnd > fcFrom + 0.002) {
     const start = trackAt(cs, fcFrom);
     const pts = [];
     const n = 24;
     const kmPx = pxPerKm(proj, start.ll);
+    const kEnd = (fcEnd - fcFrom) / (1 - fcFrom);
     for (let k = 0; k <= n; k++) {
-      const uu = fcFrom + (1 - fcFrom) * (k / n);
+      const uu = fcFrom + (1 - fcFrom) * (k / n) * kEnd;
       const p = trackAt(cs, uu), q = trackAt(cs, Math.min(1, uu + 0.01));
       const a = proj(p.ll), b = proj(q.ll);
       const ang = Math.atan2(b[1] - a[1], b[0] - a[0]) || 0;
-      const r = (40 + (k / n) * (+s.coneKm || 350)) * kmPx;
+      const r = (40 + (k / n) * kEnd * (+s.coneKm || 350)) * kmPx;
       pts.push([a, ang, r]);
     }
     ctx.beginPath();
@@ -200,8 +208,18 @@ export function drawCyclone(ctx, L, tm, o) {
     ctx.arc(ea[0], ea[1], er, eang - Math.PI / 2, eang + Math.PI / 2);
     for (let k = pts.length - 1; k >= 0; k--) { const [a, ang, r] = pts[k]; ctx.lineTo(a[0] + Math.cos(ang + Math.PI / 2) * r, a[1] + Math.sin(ang + Math.PI / 2) * r); }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fill();
-    ctx.setLineDash([6 * unit, 5 * unit]); ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.5 * unit; ctx.stroke(); ctx.setLineDash([]);
+    const pulse = fcAnim && !tm.edit ? 0.05 * Math.sin(t * 2.2) : 0;
+    ctx.fillStyle = `rgba(255,255,255,${0.2 + pulse})`; ctx.fill();
+    ctx.setLineDash([6 * unit, 5 * unit]); ctx.lineDashOffset = fcAnim && !tm.edit ? -t * 14 * unit : 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5 * unit; ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+    if (fcAnim && ge > 0.95 && s.coneLabel !== false) {
+      const [ea, eang, er] = pts.at(-1);
+      ctx.save(); ctx.globalAlpha *= clamp((ge - 0.95) / 0.05, 0, 1);
+      ctx.font = `800 ${11 * unit}px ${UI}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4 * unit;
+      ctx.fillText(s.coneText || 'FORECAST CONE', ea[0] - Math.cos(eang) * er * 0.35, ea[1] - Math.sin(eang) * er * 0.35 + er * 0.25);
+      ctx.restore();
+    }
   }
   // track, coloured by category; past = solid, future = dashed
   const drawUpTo = s.reveal === false ? 1 : Math.max(u, tm.edit ? 1 : 0);
@@ -212,6 +230,7 @@ export function drawCyclone(ctx, L, tm, o) {
     let b = P[i];
     if (s.reveal !== false && i - 1 === pos.i && !tm.edit) b = proj(pos.ll);
     const fut = segU0 >= fcFrom;
+    if (fut && fcAnim) break;
     ctx.setLineDash(fut ? [8 * unit, 6 * unit] : []);
     ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = w + 2.5 * unit;
     ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
@@ -224,6 +243,7 @@ export function drawCyclone(ctx, L, tm, o) {
   const labels = String(s.labels || '').split('\n');
   cs.forEach((c, i) => {
     if (s.reveal !== false && !tm.edit && i / (cs.length - 1 || 1) > u + 1e-6) return;
+    if (fcAnim && i / (cs.length - 1 || 1) > fcFrom + 1e-6) return;
     const [x, y] = P[i];
     const ci = catAt(i);
     const r = 7 * unit * (+s.dotSize || 1);
@@ -255,6 +275,38 @@ export function drawCyclone(ctx, L, tm, o) {
     [[0.55, '#ffd23f'], [0.35, '#ff8f20'], [0.2, '#ff3b30']].forEach(([k, col]) => { ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(sx, sy, R * k, 0, Math.PI * 2); ctx.stroke(); });
     ctx.setLineDash([]);
   }
+  // forecast track: dashed, drawn out ahead of the storm with marching dashes and hollow forecast dots
+  if (fcAnim && fcEnd > fcFrom + 0.002) {
+    const N = 48;
+    ctx.save();
+    ctx.setLineDash([8 * unit, 6 * unit]); ctx.lineDashOffset = tm.edit ? 0 : -t * 18 * unit;
+    // one continuous path per category run, so the marching dashes stay continuous
+    const runs = [];
+    for (let k = 0; k <= N; k++) {
+      const q = trackAt(cs, fcFrom + (fcEnd - fcFrom) * (k / N));
+      const c = catAt(q.i), p = proj(q.ll);
+      if (!runs.length || runs.at(-1).c !== c) { const r = { c, pts: runs.length ? [runs.at(-1).pts.at(-1)] : [] }; runs.push(r); }
+      runs.at(-1).pts.push(p);
+    }
+    const path = (pts) => { ctx.beginPath(); pts.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); };
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = w + 4 * unit;
+    for (const r of runs) { path(r.pts); ctx.stroke(); }
+    ctx.setLineDash([8 * unit, 6 * unit]);
+    for (const r of runs) { ctx.strokeStyle = SSHS[r.c].col; ctx.lineWidth = w; path(r.pts); ctx.stroke(); }
+    ctx.restore();
+    cs.forEach((c, i) => {
+      const ui = i / (cs.length - 1 || 1);
+      if (ui <= fcFrom + 1e-6 || ui > fcEnd + 1e-6) return;
+      const [x, y] = P[i];
+      const ci = catAt(i);
+      const r = 7 * unit * (+s.dotSize || 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.strokeStyle = SSHS[ci].col; ctx.lineWidth = 2.4 * unit;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#111'; ctx.font = `800 ${r * 1.15}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(SSHS[ci].k, x, y + 0.5);
+    });
+  }
   if (s.symbol !== false) drawWxIcon(ctx, 'cyclone', sx, sy, (26 + 3 * ci) * unit * (+s.symbolSize || 1), south ? -t : t);
   if (s.name) {
     const lines = [s.name.toUpperCase(), `${SSHS[ci].name.toUpperCase()} · ${SSHS[ci].kmh}`];
@@ -277,9 +329,11 @@ export function drawCycloneLegend(ctx, L, tm, o) {
   const rows = SSHS.slice().reverse();
   const W = 200 * unit, H = (rows.length * 20 + 30) * unit;
   const m = 26 * unit;
-  const x = frame.x + frame.w - m - W, y = frame.y + frame.h - m - H;
+  const lp = s.legendPos || 'bottom-right';
+  const x = lp.includes('left') ? frame.x + m : frame.x + frame.w - m - W, y = lp.includes('top') ? frame.y + m : lp.includes('middle') ? frame.y + (frame.h - H) / 2 : frame.y + frame.h - m - H;
   ctx.save();
   ctx.globalAlpha *= tm.alpha;
+  placeAt(ctx, L, frame, x, y, W, H);
   ctx.fillStyle = 'rgba(10,12,16,0.8)'; ctx.fillRect(x, y, W, H);
   ctx.fillStyle = '#fff'; ctx.font = `800 ${12 * unit}px ${UI}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   ctx.fillText('SAFFIR–SIMPSON SCALE', x + 12 * unit, y + 15 * unit);
