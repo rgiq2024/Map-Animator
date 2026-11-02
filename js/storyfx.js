@@ -44,7 +44,7 @@ export const SF_DEFAULTS = {
 };
 export const SF_FORMS = {
   textcallout: [['style.look', 'Look', 'select', CALLOUT_LOOKS], ['style.title', 'Title', 'text'], ['style.text', 'Text (“ / ” makes a new line)', 'text'], ['style.number', 'Number', 'text', null, (L) => L.style.look === 'number'], ['style.icon', 'Icon (emoji)', 'text', null, (L) => L.style.look === 'pill'], ['style.color', 'Text colour', 'color'], ['style.accent', 'Accent colour', 'color'], ['style.bg', 'Box colour', 'color', null, (L) => ['box', 'bubble', 'pill'].includes(L.style.look)], ['style.dx', 'Box offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Box offset ↑↓', 'range', [-400, 400, 1]], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
-  photofx: [['style.look', 'Animation', 'select', PHOTO_LOOKS], ['style.media', 'Photo A', 'image'], ['style.media2', 'Photo B', 'image'], ['style.media3', 'Photo C', 'image'], ['style.count', 'Cards', 'range', [3, 16, 1]], ['style.colorful', 'Colour cards when there is no photo', 'switch'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.size', 'Size', 'range', [0.4, 2, 0.05]], ['style.bg', 'Background (0 = see the map, 1 = white)', 'range', [0, 1, 0.01]], ['style.title', 'Title over the photos', 'text']],
+  photofx: [['style.look', 'Animation', 'select', PHOTO_LOOKS], ['style.media', 'Photo A', 'image'], ['style.media2', 'Photo B', 'image'], ['style.media3', 'Photo C', 'image'], ['style.count', 'Cards', 'range', [3, 16, 1]], ['style.colorful', 'Colour cards when there is no photo', 'switch'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.size', 'Size', 'range', [0.3, 3, 0.05]], ['style.bg', 'Background (0 = see the map, 1 = white)', 'range', [0, 1, 0.01]], ['style.title', 'Title over the photos', 'text']],
   matchcut: [['style.phrase', 'Highlighted phrase (stays in place)', 'text'], ['style.pages', 'Pages in order — news, magazine, web, tags (one per line)', 'textarea'], ['style.text', 'Your own body text (optional — the phrase is placed in it)', 'textarea'], ['style.hold', 'Seconds per page', 'range', [0.4, 4, 0.05]], ['style.zoom', 'Zoom on the phrase', 'range', [1, 3, 0.05]], ['style.highlight', 'Highlighter colour', 'color']],
 };
 export const SF_SET = new Set(Object.keys(SF_KINDS));
@@ -176,7 +176,7 @@ function card(ctx, im, i, w, h, unit, colorful, light) {
 }
 function photoFx(ctx, L, tm, o) {
   const s = L.style, fr = o.frame, t = o.time || 0;
-  const unit = o.unit * (+s.size || 1);
+  const unit = o.unit * 1.75 * (+s.size || 1);
   const D = Math.max(0.5, +L.duration || 6);
   const tau = tm.edit ? D * 0.5 : tm.tau;
   const u = clamp(tau / D, 0, 1);
@@ -192,7 +192,7 @@ function photoFx(ctx, L, tm, o) {
   const cw = 150 * unit, ch = 105 * unit;
   const items = [];
   if (look === 'carousel') {
-    const R = Math.min(fr.w * 0.32, 420 * unit) * intro;
+    const R = Math.min(fr.w * 0.36, 420 * unit) * intro;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + tau * 0.6 * sp;
       const z = Math.cos(a);
@@ -203,20 +203,20 @@ function photoFx(ctx, L, tm, o) {
     const spread = Math.PI * 1.25 * easeIO(clamp(tau / (D * 0.5), 0, 1)) + Math.sin(tau * sp) * 0.1;
     for (let i = 0; i < n; i++) {
       const a = -spread / 2 + (i / (n - 1)) * spread;
-      items.push({ i, z: i, x: cx, y: cy + 60 * unit, rot: a, pivot: 120 * unit, sx: 1, sy: 1.2, light: (i / n) * 0.4 - 0.2 });
+      items.push({ i, z: i, x: cx, y: cy - 40 * unit, rot: a, pivot: 110 * unit, sx: 1, sy: 1.2, light: (i / n) * 0.4 - 0.2 });
     }
   } else if (look === 'helix') {
     for (let i = 0; i < n; i++) {
       const f = i / (n - 1);
       const a = f * Math.PI * 2.2 + tau * 0.9 * sp;
       const z = Math.cos(a);
-      items.push({ i, z, x: cx + Math.sin(a) * 220 * unit * intro, y: cy + (f - 0.5) * 360 * unit * intro, sx: 0.55 + 0.45 * Math.abs(Math.cos(a)), sy: 0.6, rot: a * 0.25, light: z * 0.5 });
+      items.push({ i, z, x: cx + Math.sin(a) * 220 * unit * intro, y: cy + (f - 0.5) * Math.min(fr.h * 0.62, 360 * unit) * intro, sx: 0.55 + 0.45 * Math.abs(Math.cos(a)), sy: 0.6, rot: a * 0.25, light: z * 0.5 });
     }
   } else if (look === 'orbit') {
     items.push({ i: 0, z: 0, x: cx, y: cy, sx: 1.25, sy: 1.25, round: true, light: 0 });
     for (let i = 1; i < n; i++) {
       const a = (i / (n - 1)) * Math.PI * 2 + tau * 0.5 * sp;
-      const R = 230 * unit * intro;
+      const R = Math.min(fr.h * 0.36, 230 * unit) * intro;
       items.push({ i, z: Math.sin(a), x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R * 0.95, sx: 0.55, sy: 0.55, round: true, light: Math.sin(a) * 0.3 });
     }
   } else if (look === 'shatter') {
@@ -261,7 +261,7 @@ function photoFx(ctx, L, tm, o) {
   }
   if (s.title) {
     ctx.globalAlpha = tm.alpha * clamp((tau - 0.6) / 0.6, 0, 1) * outro;
-    ctx.font = `900 ${44 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `900 ${26 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff'; ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 18 * unit;
     placeAt(ctx, L, fr, cx - 300 * unit, fr.y + fr.h * 0.82 - 30 * unit, 600 * unit, 60 * unit);
     ctx.fillText(s.title, cx, fr.y + fr.h * 0.82);
