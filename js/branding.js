@@ -14,8 +14,19 @@ export function defaultBrand() {
     lower: true,
     country: 'NEPAL', place: 'BUDHI GANDAKI RIVER', date: `${d.getDate()} - ${M[d.getMonth()]} - ${d.getFullYear()}`,
     ticker: 'Heavy rain upstream raises the level of water downstream | 5 people reported missing. | 96 people evacuated from riverside villages',
-    speed: 1, color: '#292a66', font: 'Lexend', animate: true,
+    speed: 1, color: '#292a66', font: BRAND_FONT, animate: true,
   };
+}
+
+// Antarctica Expanded (supplied with the project) for the lower third and ticker
+const BRAND_FONT = 'Antarctica Expanded';
+let fontsP = null;
+export function loadBrandFonts() {
+  if (fontsP) return fontsP;
+  if (typeof FontFace === 'undefined' || !document.fonts) return (fontsP = Promise.resolve());
+  const files = [[300, 'Light'], [400, ''], [500, 'Medium'], [600, 'SemiBold'], [700, 'Bold']];
+  fontsP = Promise.all(files.map(([wt, n]) => new FontFace(BRAND_FONT, `url(assets/fonts/Antarctica-Expanded${n}.otf)`, { weight: String(wt) }).load().then((f) => { document.fonts.add(f); }).catch(() => {})));
+  return fontsP;
 }
 
 let builtIn = null;
@@ -26,10 +37,11 @@ function headerImage(brand) {
 }
 /** Resolves when the logo strip is ready to draw (for export). */
 export function preloadBrand(brand) {
-  if (!brand?.header) return Promise.resolve();
+  loadBrandFonts();
+  if (!brand?.header) return fontsP;
   if (brand.logo) return imageFor(brand.logo)?.p || Promise.resolve();
   headerImage(brand);
-  return builtIn.complete ? Promise.resolve() : new Promise((res) => { builtIn.onload = res; builtIn.onerror = res; });
+  return Promise.all([fontsP, builtIn.complete ? null : new Promise((res) => { builtIn.onload = res; builtIn.onerror = res; })]);
 }
 
 /**
@@ -52,14 +64,15 @@ export function drawBranding(ctx, brand, frame, unit, t) {
   }
   if (brand.lower) {
     const navy = brand.color || '#292a66';
-    const F = `"${brand.font || 'Lexend'}", "Montserrat", "Inter", sans-serif`;
-    const r1 = h * 0.088, r2 = h * 0.064;
+    const F = `"${brand.font || BRAND_FONT}", "Lexend", "Montserrat", "Inter", sans-serif`;
+    const r1 = Math.round(h * 0.088), r2 = Math.round(h * 0.064);
     const slide = brand.animate === false ? 1 : easeOut(t / 0.7);
-    const top = y + h - (r1 + r2) * slide;
-    const bw = w * 0.067, bx = x + w - bw;
-    // row 1: white bar with the country tag and place name
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(x, top, w - bw, r1);
-    ctx.fillStyle = navy; ctx.fillRect(bx, top, bw, r1);
+    const top = Math.round(y + h - (r1 + r2) * slide);
+    const bw = Math.round(w * 0.067), bx = x + w - bw;
+    // one white backing under both rows (no seam between them)
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x, top, w, r1 + r2 + 2);
+    // row 1: country tag and place name
+    ctx.fillStyle = navy; ctx.fillRect(bx, top, bw, r1 + 1);
     ctx.fillStyle = '#ffffff'; ctx.fillRect(bx + bw * 0.24, top + r1 * 0.24, bw * 0.42, r1 * 0.5);
     const sq = r1 * 0.44;
     ctx.fillStyle = navy; ctx.fillRect(x + w * 0.016, top + (r1 - sq) / 2, sq, sq);
@@ -75,10 +88,8 @@ export function drawBranding(ctx, brand, frame, unit, t) {
     ctx.restore();
     // row 2: date, navy ticker band, end block
     const y2 = top + r1;
-    const dw = w * 0.155;
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y2, dw, r2);
-    ctx.fillStyle = navy; ctx.fillRect(x + dw, y2, bx - x - dw, r2);
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(bx, y2, bw, r2);
+    const dw = Math.round(w * 0.155);
+    ctx.fillStyle = navy; ctx.fillRect(x + dw, y2, bx - x - dw, r2 + 2);
     ctx.fillStyle = navy; ctx.fillRect(bx + bw * 0.24, y2 + r2 * 0.12, bw * 0.55, r2 * 0.62);
     ctx.fillStyle = '#0b0b10'; ctx.font = `400 ${r2 * 0.42}px ${F}`; ctx.textAlign = 'center';
     ctx.fillText(String(brand.date || ''), x + dw / 2, y2 + r2 * 0.58, dw * 0.92);
@@ -87,7 +98,7 @@ export function drawBranding(ctx, brand, frame, unit, t) {
     if (items.length) {
       const txt = `${items.join('  |  ')}  |  `;
       ctx.save();
-      ctx.beginPath(); ctx.rect(x + dw, y2, bx - x - dw, r2); ctx.clip();
+      ctx.beginPath(); ctx.rect(x + dw, y2, bx - x - dw, r2 + 2); ctx.clip();
       ctx.fillStyle = '#ffffff'; ctx.font = `400 ${r2 * 0.66}px ${F}`; ctx.textAlign = 'left';
       const tw = Math.max(1, ctx.measureText(txt).width);
       const off = (Math.max(0, t - 0.6) * 130 * unit * (+brand.speed || 1)) % tw;

@@ -39,7 +39,7 @@ import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
-import { defaultBrand, drawBranding, preloadBrand } from './branding.js';
+import { defaultBrand, drawBranding, preloadBrand, loadBrandFonts } from './branding.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
 import { AffectedBuildings } from './hazards.js';
 import { TwinCity } from './twin.js';
@@ -3015,6 +3015,7 @@ export function createEditor() {
     const k = { 'brand-header': 'header', 'brand-lower': 'lower', 'brand-scale': 'headerScale', 'brand-country': 'country', 'brand-place': 'place', 'brand-date': 'date', 'brand-ticker': 'ticker', 'brand-speed': 'speed', 'brand-color': 'color', 'brand-font': 'font', 'brand-animate': 'animate' }[el.id];
     if (!k) return;
     b[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+    if (k === 'font') b.fontSet = true;
     if (k === 'font') for (const wt of [400, 700]) document.fonts?.load?.(`${wt} 24px "${b.font}"`).then(() => repaint()).catch(() => {});
     $('#brand-opts').hidden = !b.lower;
     save(); repaint();
@@ -3804,6 +3805,8 @@ export function createEditor() {
       if (!project.sound?.v2) project.sound = { ...(project.sound || {}), auto: false, v2: true }; // sound is off until the user turns it on
       project.sound = { ...defaultSound(), ...(project.sound || {}) };
       project.brand = { ...defaultBrand(), ...(project.brand || {}) };
+      if (project.brand.font === 'Lexend' && !project.brand.fontSet) project.brand.font = defaultBrand().font;
+      loadBrandFonts().then(() => repaint());
       preloadBrand(project.brand).then(() => repaint());
       for (const wt of [400, 700]) document.fonts?.load?.(`${wt} 24px "${project.brand.font}"`).then(() => repaint()).catch(() => {});
       offsetCache = null; eventsCache = null;
