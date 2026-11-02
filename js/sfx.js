@@ -5,7 +5,7 @@ import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 
 import { fenceAlertTimes } from './network.js';
 export const MUSIC = { none: 'None', trailer: 'Epic cinematic intro trailer (braams, ostinato, taiko)', heroic: 'Epic cinematic (heroic brass & choir)', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
-export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph', 'tiles', 'vortex', 'vessel', 'photocard', 'arpanel', 'linecallout', 'detect', 'textcallout', 'photofx', 'matchcut']);
+export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph', 'tiles', 'vortex', 'vessel', 'photocard', 'arpanel', 'linecallout', 'detect', 'textcallout', 'photofx', 'matchcut', 'newsbox', 'zoomframe']);
 export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -650,6 +650,10 @@ export function buildEvents(project, models) {
         push(t0, 'swoosh', { vol: vol * 0.8 }); push(t0 + 0.15, 'hit', { vol: vol * 0.4 });
       } else if (L.kind === 'textcallout') {
         push(t0, 'swoosh', { vol: vol * 0.6 }); push(t0 + D * 0.35, 'type', { n: String(s.title || '').length + String(s.text || '').length, dur: D * 0.6, vol: vol * 0.5 });
+      } else if (L.kind === 'newsbox') {
+        push(t0, 'swoosh', { vol: vol * 0.6 });
+      } else if (L.kind === 'zoomframe') {
+        push(t0, 'ping', { freq: 1300, vol: vol * 0.4 }); push(t0 + D * 0.4, 'swoosh', { vol: vol * 0.6 }); push(t0 + D * 0.55, 'shutter', { vol: vol * 0.5 });
       } else if (L.kind === 'photofx') {
         push(t0, 'whoosh', { dur: 1, vol: vol * 0.6 }); if (s.look === 'stack') for (let k = 0; k < (+s.count || 8); k++) push(t0 + (k / (+s.count || 8)) * D * 0.8, 'shutter', { vol: vol * 0.5 });
       } else if (L.kind === 'matchcut') {

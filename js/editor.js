@@ -1716,7 +1716,7 @@ export function createEditor() {
     }
     pendingStyle = st;
     startAdd(k);
-    const tip = { textcallout: 'Click the place the callout points to', tiles: 'Click around the area — then press Finish', vortex: 'Click the eye of the storm', vessel: 'Click the ship’s route — then press Finish', photocard: 'Click the place the picture belongs to', linecallout: 'Click the point the callout lines come from', detect: 'Click along the road — then press Finish', block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
+    const tip = { zoomframe: 'Click the place the frame points to — then drag the frame where you want it', textcallout: 'Click the place the callout points to', tiles: 'Click around the area — then press Finish', vortex: 'Click the eye of the storm', vessel: 'Click the ship’s route — then press Finish', photocard: 'Click the place the picture belongs to', linecallout: 'Click the point the callout lines come from', detect: 'Click along the road — then press Finish', block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
     if (tip) showHint(tip);
   };
   $('#add-viz')?.addEventListener('click', vizHandler);
@@ -2270,11 +2270,12 @@ export function createEditor() {
     const f = e.target.files[0];
     e.target.value = '';
     const L = selLayer && layerById(selLayer);
-    if (!f || !L || (L.kind !== 'videofx' && L.kind !== 'video')) return;
+    if (!f || !L || (L.kind !== 'videofx' && L.kind !== 'video' && L.kind !== 'zoomframe')) return;
     if (f.size > 200e6) { toast('That clip is very large — use one under 200 MB'); return; }
     const id = `vd_${Math.random().toString(36).slice(2, 10)}`;
     await putMedia(id, f);
     pushUndo();
+    if (L.kind === 'zoomframe') { L.style.clip = id; L.style.clipName = f.name; renderLayerEditor(); commitLayers(); videoFor(id).el.addEventListener('loadeddata', () => repaint(), { once: true }); return; }
     L.style.media = id;
     L.style.name = f.name;
     L.name = f.name.replace(/\.[^.]+$/, '');

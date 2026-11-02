@@ -58,7 +58,7 @@ function mapSrc(o, x, y, w, h) {
   const mc = m.getCanvas(), r = mc.width / cw;
   return { canvas: mc, sx: ((x - ox) / sx) * r, sy: ((y - oy) / sy) * r, sw: (w / sx) * r, sh: (h / sy) * r };
 }
-function drawMapCrop(ctx, o, x, y, w, h, dx, dy, dw, dh) {
+export function drawMapCrop(ctx, o, x, y, w, h, dx, dy, dw, dh) {
   const s = mapSrc(o, x, y, w, h);
   if (!s) return false;
   try { ctx.drawImage(s.canvas, s.sx, s.sy, s.sw, s.sh, dx, dy, dw, dh); return true; } catch { return false; }
