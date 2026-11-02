@@ -504,8 +504,9 @@ export function createEditor() {
       if (!moved && Math.hypot(p[0] - p0[0], p[1] - p0[1]) < 3) return;
       moved = true;
       const cx = box.lockX ? c0[0] : c0[0] + p[0] - p0[0], cy = box.lockY ? c0[1] : c0[1] + p[1] - p0[1];
-      L.style.position = 'custom';
-      L.style.pos = { x: +clamp((cx - fr.x) / fr.w, 0, 1).toFixed(4), y: +clamp((cy - fr.y) / fr.h, 0, 1).toFixed(4) };
+      const np = { x: +clamp((cx - fr.x) / fr.w, 0, 1).toFixed(4), y: +clamp((cy - fr.y) / fr.h, 0, 1).toFixed(4) };
+      if (box.key) L.style[`pos_${box.key}`] = np;
+      else { L.style.position = 'custom'; L.style.pos = np; }
       repaint();
     };
     const up = () => {
@@ -1715,11 +1716,12 @@ export function createEditor() {
     }
     pendingStyle = st;
     startAdd(k);
-    const tip = { tiles: 'Click around the area — then press Finish', vortex: 'Click the eye of the storm', vessel: 'Click the ship’s route — then press Finish', photocard: 'Click the place the picture belongs to', linecallout: 'Click the point the callout lines come from', detect: 'Click along the road — then press Finish', block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
+    const tip = { textcallout: 'Click the place the callout points to', tiles: 'Click around the area — then press Finish', vortex: 'Click the eye of the storm', vessel: 'Click the ship’s route — then press Finish', photocard: 'Click the place the picture belongs to', linecallout: 'Click the point the callout lines come from', detect: 'Click along the road — then press Finish', block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
     if (tip) showHint(tip);
   };
   $('#add-viz')?.addEventListener('click', vizHandler);
   $('#add-hudpack')?.addEventListener('click', vizHandler);
+  $('#add-story')?.addEventListener('click', vizHandler);
 
   // editor form
   const fRow = (label, inner, cls = '') => `<label class="row ${cls}"><span>${label}</span>${inner}</label>`;

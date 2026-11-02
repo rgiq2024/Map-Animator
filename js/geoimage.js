@@ -259,7 +259,7 @@ export function compareState(L, tm) {
   if (m === 'split') return 0.5 * ease(u / 0.6);
   return ease(u);
 }
-export function drawCompareLayer(ctx, L, tm, proj, unit, frame) {
+export function drawCompareLayer(ctx, L, tm, proj, unit, frame, part = 'all') {
   const q = quadOf(L);
   if (!q) return;
   const s = L.style;
@@ -268,6 +268,7 @@ export function drawCompareLayer(ctx, L, tm, proj, unit, frame) {
   if (!A?.ready || !B?.ready) { if (tm.edit) placeholder(ctx, q, proj, unit, !s.media ? 'Choose the BEFORE image' : !s.media2 ? 'Choose the AFTER image' : 'Loading…'); if (A?.ready) drawQuad(ctx, A, q, proj, { crs: s.crs, alpha }); return; }
   const k = compareState(L, tm);
   const mode = s.mode || 'swipe';
+  if (part === 'labels') { drawCompareTags(ctx, L, s, k, mode, alpha, unit, frame); return; }
   const pts = drawQuad(ctx, A, q, proj, { crs: s.crs, alpha });
   if (!pts) return;
   if (mode === 'fade') {
@@ -302,32 +303,33 @@ export function drawCompareLayer(ctx, L, tm, proj, unit, frame) {
       ctx.restore();
     }
   }
-  if (s.labels !== false) {
-    // BEFORE / AFTER tags on the video frame
-    const tag = (text, x, y, align, a) => {
-      if (a <= 0.02) return;
-      ctx.save();
-      ctx.globalAlpha *= a * alpha;
-      ctx.font = `800 ${15 * unit}px Inter, system-ui, sans-serif`;
-      const w = ctx.measureText(text).width + 22 * unit, h = 30 * unit;
-      const bx = align === 'right' ? x - w : x;
-      ctx.fillStyle = 'rgba(10,12,16,.78)'; ctx.fillRect(bx, y, w, h);
-      ctx.fillStyle = s.lineColor || '#fff'; ctx.fillRect(bx, y, 4 * unit, h);
-      ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 12 * unit, y + h / 2 + 1);
-      ctx.restore();
-    };
-    if (frame) {
-      const m = 24 * unit;
-      const y = frame.y + frame.h - m - 30 * unit;
-      if (mode === 'fade') {
-        tag(s.labelA || 'BEFORE', frame.x + m, y, 'left', 1 - k);
-        tag(s.labelB || 'AFTER', frame.x + m, y, 'left', k);
-      } else {
-        const rev = s.dir === 'rl' || s.dir === 'bt';
-        tag(s.labelA || 'BEFORE', rev ? frame.x + frame.w - m : frame.x + m, y, rev ? 'right' : 'left', 1);
-        tag(s.labelB || 'AFTER', rev ? frame.x + m : frame.x + frame.w - m, y, rev ? 'left' : 'right', clamp(k * 4, 0, 1));
-      }
-    }
+}
+
+/** BEFORE / AFTER tags (screen, each one draggable; default just above a lower third). */
+function drawCompareTags(ctx, L, s, k, mode, alpha, unit, frame) {
+  if (s.labels === false || !frame) return;
+  const tag = (text, x, y, align, a, key) => {
+    if (a <= 0.02) return;
+    ctx.save();
+    ctx.globalAlpha *= a * alpha;
+    ctx.font = `800 ${15 * unit * (+s.labelSize || 1)}px Inter, system-ui, sans-serif`;
+    const w = ctx.measureText(text).width + 22 * unit, h = 30 * unit * (+s.labelSize || 1);
+    const bx = align === 'right' ? x - w : x;
+    placeAt(ctx, L, frame, bx, y, w, h, { key });
+    ctx.fillStyle = 'rgba(10,12,16,.82)'; ctx.fillRect(bx, y, w, h);
+    ctx.fillStyle = s.lineColor || '#fff'; ctx.fillRect(bx, y, 4 * unit, h);
+    ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + 12 * unit, y + h / 2 + 1);
+    ctx.restore();
+  };
+  const m = 24 * unit;
+  const y = frame.y + frame.h * (s.labelY != null ? +s.labelY : 0.76) - 15 * unit;
+  if (mode === 'fade') {
+    tag(s.labelA || 'BEFORE', frame.x + m, y, 'left', 1 - k, 'A');
+    tag(s.labelB || 'AFTER', frame.x + m, y, 'left', k, 'B');
+  } else {
+    const rev = s.dir === 'rl' || s.dir === 'bt';
+    tag(s.labelA || 'BEFORE', rev ? frame.x + frame.w - m : frame.x + m, y, rev ? 'right' : 'left', 1, 'A');
+    tag(s.labelB || 'AFTER', rev ? frame.x + m : frame.x + frame.w - m, y, rev ? 'left' : 'right', clamp(k * 4, 0, 1), 'B');
   }
 }
 

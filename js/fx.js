@@ -15,6 +15,7 @@ import { drawNews, NEWS_LOOKS } from './news.js';
 import { EFFECT_LOOKS, drawVideoLayer } from './screenfx.js';
 import { SM_KINDS, SM_ANIMS, SM_DEFAULTS, SM_FORMS, SM_SET, smPhases, drawSmartMap, drawLegend, drawInfoCard } from './smartmap.js';
 import { imageFor as smImage } from './geoimage.js';
+import { SF_KINDS, SF_ANIMS, SF_DEFAULTS, SF_FORMS, SF_SET, SF_SCREEN, sfPhases, drawStoryFx } from './storyfx.js';
 import { VZ_KINDS, VZ_ANIMS, VZ_DEFAULTS, VZ_FORMS, VZ_SET, VZ_SCREEN, vzPhases, drawViz } from './vizfx.js';
 import { TWIN_KINDS, TWIN_ANIMS, TWIN_DEFAULTS, TWIN_FORMS, TWIN_SET, twinPhases, drawTwin, drawSensor } from './twin.js';
 import { HZ_KINDS, HZ_ANIMS, HZ_DEFAULTS, HZ_FORMS, HZ_SET, hzPhases, drawHazard } from './hazards.js';
@@ -45,6 +46,7 @@ function hexA(hex, a) {
 export const FX_KINDS = {
   ...SM_KINDS,
   ...VZ_KINDS,
+  ...SF_KINDS,
   ...TWIN_KINDS,
   crowd: { name: 'People / crowd', icon: '🧍', geom: 'point', desc: 'Animated people: a crowd, a protest march, people walking, gathering or running away' },
   ...HZ_KINDS,
@@ -84,6 +86,7 @@ export const FX_KINDS = {
 export const FX_ANIMS = {
   ...SM_ANIMS,
   ...VZ_ANIMS,
+  ...SF_ANIMS,
   ...TWIN_ANIMS,
   crowd: { none: 'Already there', appear: 'Appear one by one' },
   ...HZ_ANIMS,
@@ -119,6 +122,7 @@ export const FX_ANIMS = {
 export const FX_DEFAULTS = {
   ...SM_DEFAULTS,
   ...VZ_DEFAULTS,
+  ...SF_DEFAULTS,
   ...TWIN_DEFAULTS,
   crowd: { anim: 'none', duration: 1.5, style: { behaviour: 'crowd', look: 'people', count: 150, radius: 40, width: 14, speed: 1, size: 1, exaggerate: 3, flagColor: '#e53935', view: 'auto', seed: 0 } },
   ...HZ_DEFAULTS,
@@ -161,6 +165,7 @@ const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': '
 export const FX_FORMS = {
   ...SM_FORMS,
   ...VZ_FORMS,
+  ...SF_FORMS,
   ...TWIN_FORMS,
   crowd: [['style.behaviour', 'What they do', 'select', CROWD_BEHAVIOURS], ['style.look', 'Who', 'select', CROWD_LOOKS], ['style.count', 'How many people', 'range', [5, 800, 5]], ['style.radius', 'Spread (m around the point)', 'range', [5, 600, 1], (L) => L.geom?.type === 'Point'], ['style.width', 'Width of the march (m)', 'range', [2, 120, 1], (L) => L.geom?.type === 'LineString'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.exaggerate', 'Make people bigger (so they show)', 'range', [1, 10, 0.1]], ['style.flagColor', 'Flag colour', 'color', null, (L) => L.style.look === 'protest'], ['style.view', 'Seen from', 'select', { auto: 'Automatic (side when tilted)', side: 'Always from the side', top: 'Always from above' }], ['style.seed', 'Shuffle', 'number', 1]],
   ...HZ_FORMS,
@@ -228,7 +233,7 @@ export const FX_FORMS = {
   hudtext: [['style.look', 'Style', 'select', HUDTEXT_STYLES], ['style.text', 'Text (one line each; “Label: value” for telemetry)', 'textarea', null, (L) => L.style.look !== 'coords'], ['style.tickerStyle', 'Ticker style', 'select', { classic: 'Classic (dark)', red: 'Red news band', navy: 'Navy and gold', white: 'White bar', twoline: 'Two lines (headline + crawl)', flip: 'One headline at a time (rolls up)', finance: 'Stock ticker (▲▼ colours)', sports: 'Sports scores', flash: 'Breaking flash (blinking tag)' }, (L) => L.style.look === 'ticker'], ['style.headline', 'Headline (upper line)', 'text', null, (L) => L.style.look === 'ticker' && L.style.tickerStyle === 'twoline'], ['style.label', 'Tag (empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.speed', 'Scroll speed', 'range', [0.1, 4, 0.05], (L) => L.style.look === 'ticker'], ['style.dir', 'Scrolls', 'select', { left: 'Right to left', right: 'Left to right' }, (L) => L.style.look === 'ticker'], ['style.sep', 'Separator', 'select', { '•': '•', '|': '|', '◆': '◆', '■': '■', '—': '—', '★': '★' }, (L) => L.style.look === 'ticker'], ['style.bg', 'Bar colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.tagBg', 'Tag colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.textColor', 'Text colour', 'color', null, (L) => L.style.look === 'ticker'], ['style.upper', 'CAPITALS', 'switch', null, (L) => L.style.look === 'ticker'], ['style.bold', 'Bold', 'switch', null, (L) => L.style.look === 'ticker'], ['style.clock', 'Clock (e.g. 20:45, empty = none)', 'text', null, (L) => L.style.look === 'ticker'], ['style.angle', 'Angle (°)', 'range', [-30, 30, 1], (L) => L.style.look === 'stamp'], ['style.live', 'Numbers tick live', 'switch', null, (L) => L.style.look === 'telemetry'], ['style.wpm', 'Morse speed (words per minute)', 'range', [5, 30, 1], (L) => L.style.look === 'morse'], ['style.speed', 'Scroll speed', 'range', [0.1, 4, 0.05], (L) => L.style.look === 'code'], ['style.bg', 'Darken behind (0–1)', 'range', [0, 1, 0.01], (L) => L.style.look === 'code'], ['style.label', 'Header', 'text', null, (L) => L.style.look === 'morse'], ['style.wave', 'Signal wave', 'switch', null, (L) => L.style.look === 'morse'], ['style.position', 'Position', 'select', { ...POS, top: 'Top', bottom: 'Bottom' }], ['style.color', 'Colour (empty = automatic)', 'color'], ['style.size', 'Size', 'range', [0.5, 3, 0.05]], ['style.font', 'Font', 'font']],
   target: [['style.look', 'Marker', 'select', TARGET_STYLES], ['style.color', 'Colour while acquiring', 'color'], ['style.lockColor', 'Colour when locked', 'color'], ['style.size', 'Size', 'range', [0.3, 4, 0.05]], ['style.label', 'Label', 'text'], ['style.lockText', 'Text when locked', 'text'], ['style.sub', 'Extra line', 'text'], ['style.showCoords', 'Show coordinates', 'switch']],
   image: [['style.media', 'Image', 'image'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', multiply: 'Multiply (scans, old maps)', screen: 'Screen (dark backgrounds)' }], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
-  compare: [['style.media', 'Before image', 'image'], ['style.media2', 'After image', 'image'], ['style.mode', 'Effect', 'select', { swipe: 'Swipe across', pingpong: 'Swipe back and forth', split: 'Slide to split screen', fade: 'Cross-fade' }], ['style.dir', 'Swipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.style.mode !== 'fade'], ['style.cycles', 'Times back and forth', 'number', 1, (L) => L.style.mode === 'pingpong'], ['style.labels', 'BEFORE / AFTER tags', 'switch'], ['style.labelA', 'Before tag', 'text', null, (L) => L.style.labels !== false], ['style.labelB', 'After tag', 'text', null, (L) => L.style.labels !== false], ['style.lineColor', 'Line colour', 'color'], ['style.editSplit', 'Preview split while editing', 'range', [0, 1, 0.01]], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
+  compare: [['style.media', 'Before image', 'image'], ['style.media2', 'After image', 'image'], ['style.mode', 'Effect', 'select', { swipe: 'Swipe across', pingpong: 'Swipe back and forth', split: 'Slide to split screen', fade: 'Cross-fade' }], ['style.dir', 'Swipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.style.mode !== 'fade'], ['style.cycles', 'Times back and forth', 'number', 1, (L) => L.style.mode === 'pingpong'], ['style.labels', 'BEFORE / AFTER tags', 'switch'], ['style.labelA', 'Before tag', 'text', null, (L) => L.style.labels !== false], ['style.labelB', 'After tag', 'text', null, (L) => L.style.labels !== false], ['style.labelY', 'Tag height (0 top – 1 bottom; or drag each tag)', 'range', [0.05, 0.95, 0.01], (L) => L.style.labels !== false], ['style.labelSize', 'Tag size', 'range', [0.6, 2.5, 0.05], (L) => L.style.labels !== false], ['style.lineColor', 'Line colour', 'color'], ['style.editSplit', 'Preview split while editing', 'range', [0, 1, 0.01]], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
   title: [['style.look', 'Style', 'select', TITLE_LOOKS], ['style.tagStyle', 'Tag style', 'select', { spaced: 'Letter-spaced in a box', bold: 'Bold capitals in boxes' }, (L) => L.style.look === 'tag'], ['style.tagAlign', 'Tag position', 'select', { left: 'Left', center: 'Centre', right: 'Right' }, (L) => L.style.look === 'tag'], ['style.tagY', 'Tag height (0 top – 1 bottom)', 'range', [0.05, 0.95, 0.01], (L) => L.style.look === 'tag'], ['style.media', 'Picture (name card)', 'image', null, (L) => L.style.look === 'namecard'], ['style.text', 'Title (for tags: “|” starts a new box)', 'text', null, (L) => L.style.look !== 'credits'], ['style.sub', 'Second line (for tags: white boxes, “|” between)', 'text', null, (L) => L.style.look !== 'credits'], ['style.lines', 'Credits (“Role: Name” per line, plain lines are headings)', 'textarea', null, (L) => L.style.look === 'credits'], ['style.date', 'Date line', 'text', null, (L) => L.style.look === 'explainer'], ['style.lines', 'Location lines (one per line)', 'textarea', null, (L) => L.style.look === 'explainer'], ['style.bg', 'Panel colour', 'color', null, (L) => L.style.look === 'explainer'], ['style.side', 'Panel side', 'select', { left: 'Left', right: 'Right' }, (L) => L.style.look === 'explainer'], ['style.font', 'Font', 'font'], ['style.color', 'Colour', 'color'], ['style.accent', 'Accent colour', 'color'], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]], ['style.dim', 'Darken the picture', 'range', [0, 1, 0.05]], ['style.flare', 'Light sweep', 'switch', null, (L) => L.style.look === 'cinematic'], ['style.position', 'Position', 'select', { center: 'Default', ...CUSTOM_POS }, (L) => L.style.look !== 'credits']],
   news: [['style.look', 'Style', 'select', NEWS_LOOKS], ['style.channel', 'Channel name', 'text'], ['style.media', 'Logo image (optional)', 'image'], ['style.text', 'Headline', 'text', null, (L) => ['breaking', 'headline'].includes(L.style.look)], ['style.sub', 'Second line', 'text', null, (L) => ['breaking', 'headline'].includes(L.style.look)], ['style.tag', 'Banner text', 'text', null, (L) => L.style.look === 'breaking'], ['style.location', 'Location', 'text', null, (L) => L.style.look === 'live'], ['style.live', 'LIVE under the logo', 'switch', null, (L) => L.style.look === 'bug'], ['style.showClock', 'Clock', 'switch', null, (L) => L.style.look !== 'bug'], ['style.clock', 'Clock starts at', 'text', null, (L) => L.style.look !== 'bug' && L.style.showClock], ['style.color', 'Channel colour', 'color'], ['style.bg', 'Bar colour', 'color', null, (L) => L.style.look !== 'bug'], ['style.textColor', 'Text colour', 'color', null, (L) => L.style.look !== 'bug'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]], ['style.opacity', 'Opacity', 'range', [0.2, 1, 0.01], (L) => L.style.look === 'bug'], ['style.font', 'Font', 'font'], ['style.position', 'Position', 'select', { '': 'Default', 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', ...CUSTOM_POS }]],
   effect: [['style.look', 'Effect', 'select', EFFECT_LOOKS], ['style.amount', 'Strength', 'range', [0.05, 2, 0.05]], ['style.color', 'Colour', 'color', null, (L) => ['flash', 'lightleak', 'crosses'].includes(L.style.look)], ['style.sunX', 'Sun across (0–1)', 'range', [0, 1, 0.01], (L) => L.style.look === 'lensflare'], ['style.sunY', 'Sun down (0–1)', 'range', [0, 1, 0.01], (L) => L.style.look === 'lensflare'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05], (L) => ['rain', 'snow', 'shake', 'storm', 'hail', 'blizzard', 'leaves', 'petals', 'embers', 'ash', 'sandstorm', 'lightning', 'mist'].includes(L.style.look)], ['style.wind', 'Wind (← left · right →)', 'range', [-1.5, 1.5, 0.05], (L) => ['storm', 'hail', 'blizzard', 'leaves', 'petals', 'embers', 'ash', 'sandstorm'].includes(L.style.look)], ['style.size', 'Particle size', 'range', [0.4, 3, 0.05], (L) => ['storm', 'hail', 'blizzard', 'leaves', 'petals', 'embers', 'ash'].includes(L.style.look)], ['style.leafColor', 'Leaves', 'select', { autumn: 'Autumn colours', green: 'Green', mixed: 'Mixed' }, (L) => L.style.look === 'leaves'], ['style.side', 'Sun from', 'select', { left: 'Top left', right: 'Top right' }, (L) => L.style.look === 'sunrays'], ['style.label', 'Corner text', 'text', null, (L) => L.style.look === 'vhs'], ['style.stamp', 'Date stamp', 'text', null, (L) => L.style.look === 'vhs']],
@@ -244,7 +249,7 @@ export const FX_FORMS = {
   trees: [['style.type', 'Trees', 'select', TREE_TYPES], ['style.density', 'Trees per hectare', 'range', [2, 200, 1], (L) => L.geom?.type === 'Polygon'], ['style.spacing', 'Spacing (m)', 'range', [4, 60, 1], (L) => L.geom?.type === 'LineString'], ['style.bothSides', 'Both sides of the line', 'switch', null, (L) => L.geom?.type === 'LineString'], ['style.height', 'Tree height (m)', 'range', [3, 40, 1]], ['style.exaggerate', 'Exaggerate size', 'range', [1, 8, 0.1]], ['style.view', 'Look', 'select', { auto: 'Side view when tilted, from above when flat', side: 'Always side view' }], ['style.seed', 'Shuffle', 'number', 1], ['style.leaves', 'Leaves falling from the trees', 'switch'], ['style.leafSpeed', 'Leaf fall speed', 'range', [0.2, 3, 0.05], (L) => L.style.leaves]],
   timeseries: [['style.frames', 'Dates', 'frames'], ['style.per', 'Seconds per date', 'number', 0.1], ['style.fade', 'Cross-fade (s)', 'number', 0.1], ['style.editFrame', 'Preview date while editing', 'range', [0, 30, 1]], ['style.label', 'Year label', 'select', { show: 'Show', none: 'Hide' }], ['style.position', 'Label position', 'select', POS, (L) => L.style.label !== 'none'], ['style.labelSize', 'Label size', 'range', [0.4, 2.5, 0.05], (L) => L.style.label !== 'none'], ['style.labelColor', 'Label colour', 'color', null, (L) => L.style.label !== 'none'], ['style.accent', 'Accent colour', 'color', null, (L) => L.style.label !== 'none'], ['style.bar', 'Timeline bar under the year', 'switch', null, (L) => L.style.label !== 'none'], ['style.labelBox', 'Dark box behind', 'switch', null, (L) => L.style.label !== 'none'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
 };
-export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext', 'title', 'news', 'effect', 'video', ...VZ_SCREEN]);
+export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext', 'title', 'news', 'effect', 'video', ...VZ_SCREEN, ...SF_SCREEN]);
 export const FX_BELOW = new Set(['capture']);
 
 // ---------------------------------------------------------------- geometry helpers
@@ -1285,6 +1290,7 @@ function drawCollision(ctx, L, tm, o, phase) {
 export function drawFX(ctx, L, tm, o, phase) {
   const { proj, unit, frame } = o;
   if (VZ_SET.has(L.kind)) { if (phase !== 'captions' || frame) drawViz(ctx, L, tm, o, phase); return; }
+  if (SF_SET.has(L.kind)) { drawStoryFx(ctx, L, tm, o, phase); return; }
   switch (L.kind) {
     case 'satellite': if (phase !== 'captions') drawSatellite(ctx, L, tm, proj, unit, phase, linesOf(L.geom)); break;
     case 'iss': if (phase !== 'captions' && L.geom) drawSatellite(ctx, L, tm, proj, unit, phase, issTrack(L)); break;
@@ -1301,7 +1307,7 @@ export function drawFX(ctx, L, tm, o, phase) {
     case 'hudtext': if (phase === 'captions' && frame) drawHudText(ctx, L, tm, o); break;
     case 'target': if (phase === 'above') drawTarget(ctx, L, tm, proj, unit); break;
     case 'image': if (phase === 'below') drawImageLayer(ctx, L, tm, proj, unit, true); break;
-    case 'compare': if (phase === 'below') drawCompareLayer(ctx, L, tm, proj, unit, frame); break;
+    case 'compare': if (phase === 'below') drawCompareLayer(ctx, L, tm, proj, unit, frame, 'image'); else if (phase === 'captions' && frame) drawCompareLayer(ctx, L, tm, proj, unit, frame, 'labels'); break;
     case 'trees': if (phase === 'above') drawTrees(ctx, L, tm, o); break;
     case 'collision': drawCollision(ctx, L, tm, o, phase); break;
     case 'city3d': break; // 3D only
@@ -1355,6 +1361,7 @@ export function fxPhases(kind) {
   if (TWIN_SET.has(kind)) return twinPhases(kind);
   if (SM_SET.has(kind)) return smPhases(kind);
   if (VZ_SET.has(kind)) return vzPhases(kind);
+  if (SF_SET.has(kind)) return sfPhases(kind);
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];
   if (kind === 'forecast') return ['captions'];
@@ -1363,7 +1370,8 @@ export function fxPhases(kind) {
   if (kind === 'front') return ['below'];
   if (kind === 'collision') return ['below', 'above'];
   if (kind === 'city3d') return [];
-  if (kind === 'image' || kind === 'compare') return ['below'];
+  if (kind === 'compare') return ['below', 'captions'];
+  if (kind === 'image') return ['below'];
   if (kind === 'timeseries') return ['below', 'captions'];
   if (kind === 'model3d') return [];
   if (kind === 'capture') return ['below'];
