@@ -140,9 +140,11 @@ export async function projectFileJSON(p) {
   for (const sc of p.scenes || []) for (const L of sc.layers || []) {
     if ((L.kind === 'videofx' || L.kind === 'video') && L.style?.media) ids.add(L.style.media);
     if ((L.kind === 'image' || L.kind === 'compare') && L.style) { if (L.style.media) ids.add(L.style.media); if (L.style.media2) ids.add(L.style.media2); }
+    for (const k of ['media', 'media2', 'media3']) if (typeof L.style?.[k] === 'string' && L.style[k]) ids.add(L.style[k]);
     if (L.kind === 'timeseries') for (const f of L.style?.frames || []) if (f.media) ids.add(f.media);
     if (L.kind === 'model3d' && String(L.style?.source || '').startsWith('media:')) ids.add(L.style.source.slice(6));
   }
+  if (p.brand?.logo) ids.add(p.brand.logo);
   for (const id of ids) {
     const b = await getMedia(id);
     if (b) media[id] = await blobToDataURL(b);

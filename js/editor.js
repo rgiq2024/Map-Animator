@@ -39,6 +39,7 @@ import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
+import { defaultBrand, drawBranding, preloadBrand } from './branding.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
 import { AffectedBuildings } from './hazards.js';
 import { TwinCity } from './twin.js';
@@ -294,6 +295,7 @@ export function createEditor() {
     drawLetterbox(octx, fr, scene().look, t, unit);
     hits.boxes = [];
     renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: hits.boxes });
+    drawBranding(octx, project.brand, fr, unit, t - (model.trimIn || 0));
     {
       const mc = map.getCanvas();
       const k = mc.width / stage.clientWidth;
@@ -2998,8 +3000,42 @@ export function createEditor() {
     toast('Transition clip added — it plays over the cut to the next scene', 3600);
   });
 
+  // ---- logo & lower third
+  function renderBrandSettings() {
+    const b = project.brand ||= defaultBrand();
+    $('#brand-header').checked = !!b.header; $('#brand-lower').checked = !!b.lower;
+    $('#brand-scale').value = b.headerScale || 1;
+    for (const k of ['country', 'place', 'date', 'ticker', 'speed', 'color', 'font']) $(`#brand-${k}`).value = b[k] ?? '';
+    $('#brand-animate').checked = b.animate !== false;
+    $('#brand-opts').hidden = !b.lower;
+    $('#brand-logo-name').textContent = b.logo ? `Using ${b.logoName || 'your logo strip'}` : 'Default logo strip. A wide PNG with transparency works best (e.g. 5000 × 1000).';
+  }
+  $('#brand-box').addEventListener('input', (e) => {
+    const el = e.target; const b = project.brand ||= defaultBrand();
+    const k = { 'brand-header': 'header', 'brand-lower': 'lower', 'brand-scale': 'headerScale', 'brand-country': 'country', 'brand-place': 'place', 'brand-date': 'date', 'brand-ticker': 'ticker', 'brand-speed': 'speed', 'brand-color': 'color', 'brand-font': 'font', 'brand-animate': 'animate' }[el.id];
+    if (!k) return;
+    b[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+    if (k === 'font') for (const wt of [400, 700]) document.fonts?.load?.(`${wt} 24px "${b.font}"`).then(() => repaint()).catch(() => {});
+    $('#brand-opts').hidden = !b.lower;
+    save(); repaint();
+  });
+  $('#brand-logo-btn').onclick = () => $('#file-brand').click();
+  $('#brand-logo-reset').onclick = () => { const b = project.brand ||= defaultBrand(); b.logo = ''; b.logoName = ''; b.header = true; renderBrandSettings(); save(); preloadBrand(b).then(repaint); };
+  $('#file-brand').addEventListener('change', async (e) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    const id = `media_${Date.now().toString(36)}`;
+    await putMedia(id, f);
+    const b = project.brand ||= defaultBrand();
+    b.logo = id; b.logoName = f.name; b.header = true;
+    renderBrandSettings(); save();
+    await preloadBrand(b); repaint();
+    toast('Logo strip updated', 2400);
+  });
+
   // ---- sound
   function renderSoundSettings() {
+    renderBrandSettings();
     const snd = project.sound ||= defaultSound();
     $('#snd-music').innerHTML = Object.entries(MUSIC).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
     $('#snd-auto').checked = !!snd.auto;
@@ -3597,7 +3633,7 @@ export function createEditor() {
       const blob = await renderStill({
         map, width, height,
         beforeFrame: (s2, m, tt) => seekScene(s2, tt, layerTiming),
-        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); affected.sync(s2); twin.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
+        prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); affected.sync(s2); twin.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); await preloadBrand(project.brand); await document.fonts?.load?.(`400 24px "${project.brand?.font || 'Lexend'}"`).catch(() => {}); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); jumpCam(c, sc, tt); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2, tt) => mapFilterAt(s2, tt),
         background: spaceBg,
@@ -3611,6 +3647,7 @@ export function createEditor() {
           drawVignette(ctx, full, +s2.camera.lens?.vignette || 0);
           drawLetterbox(ctx, full, s2.look, tt, unit);
           renderCaptions(ctx, { map, model: m, scene: s2, time: tt, px, unit, frame: full, exact: true });
+          drawBranding(ctx, project.brand, full, unit, tt - (m.trimIn || 0));
           drawScreenEffects(ctx, s2, { frame: full, unit, time: tt, src: { canvas: mc, sx: 0, sy: 0, sw: mc.width, sh: mc.height } }, layerTiming);
           if (project.credits) drawAttribution(ctx, themeAttribution(s2.look), unit, width, height);
         },
@@ -3704,6 +3741,7 @@ export function createEditor() {
           drawVignette(ctx, full, +sc.camera.lens?.vignette || 0);
           drawLetterbox(ctx, full, sc.look, t, unit);
           renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full, exact: true });
+          drawBranding(ctx, project.brand, full, unit, t - (m.trimIn || 0));
           drawScreenEffects(ctx, sc, { frame: full, unit, time: t, src: { canvas: mc, sx: 0, sy: 0, sw: mc.width, sh: mc.height } }, layerTiming);
           if (project.credits) drawAttribution(ctx, themeAttribution(sc.look), unit, width, height);
         },
@@ -3765,6 +3803,9 @@ export function createEditor() {
       project.models ||= [];
       if (!project.sound?.v2) project.sound = { ...(project.sound || {}), auto: false, v2: true }; // sound is off until the user turns it on
       project.sound = { ...defaultSound(), ...(project.sound || {}) };
+      project.brand = { ...defaultBrand(), ...(project.brand || {}) };
+      preloadBrand(project.brand).then(() => repaint());
+      for (const wt of [400, 700]) document.fonts?.load?.(`${wt} 24px "${project.brand.font}"`).then(() => repaint()).catch(() => {});
       offsetCache = null; eventsCache = null;
       models?.clear();
       selLayer = null; drawing = null; pickOrigin = null;
