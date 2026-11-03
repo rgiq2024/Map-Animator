@@ -44,20 +44,20 @@ export const SF_ANIMS = {
 export const CALLOUT_LOOKS = { leader: 'Leader line with underline', box: 'Box with accent bar', bubble: 'Speech bubble', number: 'Numbered marker', bracket: 'Bracket title', pill: 'Pill with icon' };
 export const PHOTO_LOOKS = { carousel: 'Carousel ring (3D spin)', fan: 'Fan of cards', helix: 'Helix twist', orbit: 'Orbit round a centre', shatter: 'Shatter → assemble', stack: 'Polaroid stack' };
 export const NEWSBOX_LOOKS = { banner: 'Year tab + banner (title & subtitle)', card: 'Card with globe header', date: 'Digital date stamp', source: 'Source credit' };
-export const MATCH_PAGES = { news: 'Newspaper', magazine: 'Magazine', web: 'Web article', tags: 'Tag strip' };
+export const MATCH_PAGES = { news: 'Newspaper', magazine: 'Magazine', web: 'Web article', tags: 'Tag strip', image: 'Your picture 1', image2: 'Your picture 2', image3: 'Your picture 3' };
 export const SF_DEFAULTS = {
   textcallout: { anim: 'draw', duration: 1.2, style: { look: 'leader', title: 'Accident site', text: 'Two trains collided at 18:42', color: '#ffffff', accent: '#ff3b30', number: '1', icon: '📍', dx: 140, dy: -90, size: 1, bg: '#0d1117' } },
   photofx: { anim: 'play', duration: 6, style: { look: 'carousel', media: '', media2: '', media3: '', count: 8, speed: 1, size: 1, title: '', bg: 0, colorful: true } },
   newsbox: { anim: 'wipe', duration: 1.2, hold: 4, style: { look: 'banner', tab: '2026', title: 'Satellite imagery shows', sub: 'Conditions before the flash flood', text: '', color: '#14108a', color2: '#1d1aa6', textColor: '#ffffff', width: 560, size: 1, position: '' } },
   zoomframe: { anim: 'open', duration: 1.6, style: { caption: 'Security forces deployment', media: '', clip: '', dx: 260, dy: -150, width: 300, aspect: 0.82, size: 1, zoom: 3, color: '#ffffff', loop: true } },
-  matchcut: { anim: 'play', duration: 8, style: { phrase: 'match cut', pages: 'news\nmagazine\nweb\ntags', hold: 1.6, highlight: '#ffe14d', text: '', zoom: 1.6, paper: true } },
+  matchcut: { anim: 'play', duration: 8, style: { phrase: 'match cut', pages: 'news\nmagazine\nweb\ntags', hold: 1.6, highlight: '#ffe14d', text: '', zoom: 1.6, paper: true, masthead: 'The Daily Edit', headline: '', byline: 'Editorial desk · 4 min read', tags: 'RHYTHM | FRAGMENT | CHANNEL', media: '', media2: '', media3: '', hlX: 0.3, hlY: 0.45, hlW: 0.25, hlH: 0.06, hl2X: 0.3, hl2Y: 0.45, hl2W: 0.25, hl2H: 0.06, hl3X: 0.3, hl3Y: 0.45, hl3W: 0.25, hl3H: 0.06 } },
 };
 export const SF_FORMS = {
   textcallout: [['style.look', 'Look', 'select', CALLOUT_LOOKS], ['style.title', 'Title', 'text'], ['style.text', 'Text (“ / ” makes a new line)', 'text'], ['style.number', 'Number', 'text', null, (L) => L.style.look === 'number'], ['style.icon', 'Icon (emoji)', 'text', null, (L) => L.style.look === 'pill'], ['style.color', 'Text colour', 'color'], ['style.accent', 'Accent colour', 'color'], ['style.bg', 'Box colour', 'color', null, (L) => ['box', 'bubble', 'pill'].includes(L.style.look)], ['style.dx', 'Box offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Box offset ↑↓', 'range', [-400, 400, 1]], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
   photofx: [['style.look', 'Animation', 'select', PHOTO_LOOKS], ['style.media', 'Photo A', 'image'], ['style.media2', 'Photo B', 'image'], ['style.media3', 'Photo C', 'image'], ['style.count', 'Cards', 'range', [3, 16, 1]], ['style.colorful', 'Colour cards when there is no photo', 'switch'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.size', 'Size', 'range', [0.3, 3, 0.05]], ['style.bg', 'Background (0 = see the map, 1 = white)', 'range', [0, 1, 0.01]], ['style.title', 'Title over the photos', 'text']],
   newsbox: [['style.look', 'Look', 'select', NEWSBOX_LOOKS], ['style.tab', 'Tab text (year)', 'text', null, (L) => L.style.look === 'banner'], ['style.title', 'Title / text', 'text'], ['style.sub', 'Subtitle', 'text', null, (L) => L.style.look === 'banner'], ['style.text', 'Body text (“ / ” starts a new line)', 'textarea', null, (L) => L.style.look === 'card'], ['style.width', 'Card width', 'range', [300, 1000, 5], (L) => L.style.look === 'card'], ['style.color', 'Colour', 'color', null, (L) => ['banner', 'card'].includes(L.style.look)], ['style.color2', 'Gradient to', 'color', null, (L) => L.style.look === 'banner'], ['style.textColor', 'Text colour', 'color', null, (L) => ['date', 'source'].includes(L.style.look)], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]], ['style.position', 'Position (or drag it)', 'select', { '': 'Default', 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', center: 'Centre' }]],
   zoomframe: [['style.caption', 'Caption', 'text'], ['style.media', 'Photo in the frame', 'image'], ['style.clip', 'Video in the frame', 'video'], ['style.zoom', 'Zoom on the map (when there is no photo / video)', 'range', [1.2, 8, 0.1]], ['style.width', 'Frame width', 'range', [120, 700, 1]], ['style.aspect', 'Frame height ÷ width', 'range', [0.4, 1.5, 0.01]], ['style.dx', 'Frame offset ←→ (or drag it)', 'range', [-700, 700, 1]], ['style.dy', 'Frame offset ↑↓', 'range', [-500, 500, 1]], ['style.color', 'Colour', 'color'], ['style.loop', 'Loop the video', 'switch']],
-  matchcut: [['style.phrase', 'Highlighted phrase (stays in place)', 'text'], ['style.pages', 'Pages in order — news, magazine, web, tags (one per line)', 'textarea'], ['style.text', 'Your own body text (optional — the phrase is placed in it)', 'textarea'], ['style.hold', 'Seconds per page', 'range', [0.4, 4, 0.05]], ['style.zoom', 'Zoom on the phrase', 'range', [1, 3, 0.05]], ['style.highlight', 'Highlighter colour', 'color']],
+  matchcut: [['style.phrase', 'Highlighted phrase (stays in place)', 'text'], ['style.pages', 'Pages in order — news, magazine, web, tags, image, image2, image3 (one per line)', 'textarea'], ['style.text', 'Your own text (paste the article — if it contains the phrase, that part is highlighted)', 'textarea'], ['style.headline', 'Headline over the text', 'text'], ['style.masthead', 'Newspaper name', 'text'], ['style.byline', 'Web byline', 'text'], ['style.tags', 'Magazine / tag-strip words (separate with |)', 'text'], ['style.media', 'Picture 1 (newspaper cutting, screenshot…)', 'image'], ['style.hlX', 'Picture 1: highlight from left', 'range', [0, 1, 0.005], (L) => /\bimage\b/.test(L.style.pages || '')], ['style.hlY', 'Picture 1: highlight from top', 'range', [0, 1, 0.005], (L) => /\bimage\b/.test(L.style.pages || '')], ['style.hlW', 'Picture 1: highlight width', 'range', [0.02, 1, 0.005], (L) => /\bimage\b/.test(L.style.pages || '')], ['style.hlH', 'Picture 1: highlight height', 'range', [0.01, 0.5, 0.005], (L) => /\bimage\b/.test(L.style.pages || '')], ['style.media2', 'Picture 2', 'image'], ['style.hl2X', 'Picture 2: highlight from left', 'range', [0, 1, 0.005], (L) => /image2/.test(L.style.pages || '')], ['style.hl2Y', 'Picture 2: highlight from top', 'range', [0, 1, 0.005], (L) => /image2/.test(L.style.pages || '')], ['style.hl2W', 'Picture 2: highlight width', 'range', [0.02, 1, 0.005], (L) => /image2/.test(L.style.pages || '')], ['style.hl2H', 'Picture 2: highlight height', 'range', [0.01, 0.5, 0.005], (L) => /image2/.test(L.style.pages || '')], ['style.media3', 'Picture 3', 'image'], ['style.hl3X', 'Picture 3: highlight from left', 'range', [0, 1, 0.005], (L) => /image3/.test(L.style.pages || '')], ['style.hl3Y', 'Picture 3: highlight from top', 'range', [0, 1, 0.005], (L) => /image3/.test(L.style.pages || '')], ['style.hl3W', 'Picture 3: highlight width', 'range', [0.02, 1, 0.005], (L) => /image3/.test(L.style.pages || '')], ['style.hl3H', 'Picture 3: highlight height', 'range', [0.01, 0.5, 0.005], (L) => /image3/.test(L.style.pages || '')], ['style.hold', 'Seconds per page', 'range', [0.4, 4, 0.05]], ['style.zoom', 'Zoom on the phrase', 'range', [1, 3, 0.05]], ['style.highlight', 'Highlighter colour', 'color']],
 };
 export const SF_SET = new Set(Object.keys(SF_KINDS));
 export const SF_SCREEN = new Set(['photofx', 'matchcut', 'newsbox']);
@@ -303,6 +303,7 @@ function matchCut(ctx, L, tm, o) {
   const phrase = String(s.phrase || 'match cut');
   const cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2;
   ctx.globalAlpha *= tm.alpha;
+  if (kind.startsWith('image')) { imagePage(ctx, L, tm, o, kind, lu, idx, pages.length, per, tau); return; }
   // page background
   const bg = { news: '#ecebe6', magazine: '#f6f1e9', web: '#ffffff', tags: '#f3f3f3' }[kind];
   ctx.fillStyle = bg; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
@@ -321,9 +322,13 @@ function matchCut(ctx, L, tm, o) {
   const own = String(s.text || '').trim();
   const body = own || FILLER;
   const words = body.split(/\s+/);
-  const insertAt = Math.min(words.length, 18 + idx * 7);
-  const pw = phrase.split(/\s+/);
-  const all = [...words.slice(0, insertAt), ...pw.map((w, i) => (i === 0 ? `\u0001${w}` : `\u0002${w}`)), ...words.slice(insertAt)];
+  const pw = phrase.split(/\s+/).filter(Boolean);
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  let at = -1;
+  if (own) for (let i = 0; i + pw.length <= words.length && at < 0; i++) if (pw.every((p2, j) => norm(words[i + j]) === norm(p2) || (j === pw.length - 1 && norm(words[i + j]).startsWith(norm(p2))))) at = i;
+  let all;
+  if (at >= 0) all = words.map((w, i) => (i === at ? `\u0001${w}` : i > at && i < at + pw.length ? `\u0002${w}` : w));
+  else { const insertAt = Math.min(words.length, 18 + idx * 7); all = [...words.slice(0, insertAt), ...pw.map((w, i) => (i === 0 ? `\u0001${w}` : `\u0002${w}`)), ...words.slice(insertAt)]; }
   const lh = { news: 34, magazine: 42, web: 31, tags: 38 }[kind] * unit;
   const lines = wrap(ctx, all.map((w) => w.replace(/[\u0001\u0002]/, '')), colW);
   // find the phrase position
@@ -346,19 +351,22 @@ function matchCut(ctx, L, tm, o) {
   ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   const top = -lh * 2.6;
   if (kind === 'news') {
-    ctx.fillStyle = '#1a1a1a'; ctx.font = `900 ${46 * unit}px ${SERIF}`; ctx.fillText('The Daily Edit', 0, top - 60 * unit);
+    ctx.fillStyle = '#1a1a1a'; ctx.font = `900 ${46 * unit}px ${SERIF}`; ctx.fillText(s.masthead ?? 'The Daily Edit', 0, top - 60 * unit - (s.headline ? 60 * unit : 0));
+    if (s.headline) { ctx.font = `800 ${30 * unit}px ${SERIF}`; ctx.fillText(s.headline, 0, top - 52 * unit, colW); }
     ctx.fillRect(0, top - 30 * unit, colW, 2 * unit); ctx.fillRect(0, top - 24 * unit, colW, 1 * unit);
   } else if (kind === 'magazine') {
     ctx.fillStyle = '#d6336c'; ctx.fillRect(-20 * unit, top - 74 * unit, colW + 40 * unit, 34 * unit);
-    ctx.fillStyle = '#fff'; ctx.font = `800 ${18 * unit}px ${UI}`; ctx.fillText('RHYTHM   ·   FRAGMENT   ·   CHANNEL', 0, top - 57 * unit);
+    ctx.fillStyle = '#fff'; ctx.font = `800 ${18 * unit}px ${UI}`; ctx.fillText(String(s.tags || 'RHYTHM | FRAGMENT | CHANNEL').split('|').map((x) => x.trim().toUpperCase()).join('   ·   '), 0, top - 57 * unit, colW + 20 * unit);
+    if (s.headline) { ctx.fillStyle = '#111'; ctx.font = `900 ${34 * unit}px ${UI}`; ctx.fillText(s.headline, 0, top - 4 * unit, colW); }
   } else if (kind === 'web') {
     ctx.fillStyle = '#e8ebef'; rr(ctx, -30 * unit, top - 110 * unit, colW + 60 * unit, 60 * unit, 10 * unit); ctx.fill();
     ctx.fillStyle = '#9aa3ad'; ctx.beginPath(); ctx.arc(-6 * unit, top - 80 * unit, 14 * unit, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#4a5260'; ctx.font = `600 ${13 * unit}px ${UI}`; ctx.fillText('Editorial desk · 4 min read', 18 * unit, top - 86 * unit);
+    ctx.fillStyle = '#4a5260'; ctx.font = `600 ${13 * unit}px ${UI}`; ctx.fillText(s.byline ?? 'Editorial desk · 4 min read', 18 * unit, top - 86 * unit);
+    if (s.headline) { ctx.fillStyle = '#111'; ctx.font = `800 ${28 * unit}px ${UI}`; ctx.fillText(s.headline, -30 * unit, top - 20 * unit, colW + 60 * unit); }
     ctx.fillStyle = '#2d7ff9'; rr(ctx, colW - 110 * unit, top - 96 * unit, 120 * unit, 30 * unit, 15 * unit); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText('Add topic +', colW - 92 * unit, top - 81 * unit);
   } else {
-    ['RHYTHM', 'FRAGMENT', 'CHANNEL'].forEach((tg, i) => { ctx.fillStyle = ['#2b2b2b', '#6b4bb3', '#c23b7a'][i]; ctx.save(); ctx.translate(i * 210 * unit, top - 70 * unit); ctx.transform(1, 0, -0.25, 1, 0, 0); ctx.fillRect(0, 0, 200 * unit, 40 * unit); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = `800 ${16 * unit}px ${UI}`; ctx.fillText(tg, i * 210 * unit + 18 * unit, top - 50 * unit); });
+    String(s.tags || 'RHYTHM | FRAGMENT | CHANNEL').split('|').map((x) => x.trim().toUpperCase()).filter(Boolean).slice(0, 4).forEach((tg, i) => { ctx.fillStyle = ['#2b2b2b', '#6b4bb3', '#c23b7a'][i]; ctx.save(); ctx.translate(i * 210 * unit, top - 70 * unit); ctx.transform(1, 0, -0.25, 1, 0, 0); ctx.fillRect(0, 0, 200 * unit, 40 * unit); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = `800 ${16 * unit}px ${UI}`; ctx.fillText(tg, i * 210 * unit + 18 * unit, top - 50 * unit); });
   }
   // highlight behind the phrase (sweeps across)
   const sweep = tm.edit ? 1 : easeOut(clamp((lu - 0.1) / 0.45, 0, 1));
@@ -386,6 +394,44 @@ function matchCut(ctx, L, tm, o) {
   ctx.restore();
   // the cut: a quick flash and a slight blur on the frame boundary
   const toCut = idx < pages.length - 1 ? per - (tau - idx * per) : 99;
+  if (!tm.edit && (lu < 0.06 || toCut < 0.05)) { ctx.fillStyle = `rgba(255,255,255,${lu < 0.06 ? 0.35 * (1 - lu / 0.06) : 0.2})`; ctx.fillRect(fr.x, fr.y, fr.w, fr.h); }
+}
+
+function imagePage(ctx, L, tm, o, kind, lu, idx, n, per, tau) {
+  const s = L.style, fr = o.frame, unit = o.unit;
+  const key = kind === 'image' ? '' : kind.slice(5);
+  const im = imageFor(s[`media${key}`]);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+  if (!im?.bmp) {
+    ctx.fillStyle = '#6b7280'; ctx.font = `600 ${18 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`Add picture ${key || '1'} in the layer settings`, fr.x + fr.w / 2, fr.y + fr.h / 2);
+    return;
+  }
+  const iw = im.bmp.width, ih = im.bmp.height;
+  const num = (v, d) => (v === '' || v == null || !isFinite(+v) ? d : +v);
+  const hx = clamp(num(s[`hl${key}X`], 0.3), 0, 1), hy = clamp(num(s[`hl${key}Y`], 0.45), 0, 1), hw = clamp(num(s[`hl${key}W`], 0.25), 0.01, 1), hh = clamp(num(s[`hl${key}H`], 0.06), 0.005, 1);
+  // the picture is scaled so the highlight fills about 40 % of the frame width (× zoom), centred
+  const base = Math.max(fr.w / iw, fr.h / ih) * 0.95;
+  const want = (fr.w * 0.42) / (hw * iw);
+  const zEnd = Math.max(base, Math.min(want, base * 6)) * (0.85 + 0.15 * ((+s.zoom || 1.6) / 1.6));
+  const scale = zEnd * (tm.edit ? 1 : 0.86 + 0.14 * ease(lu));
+  const cxImg = (hx + hw / 2) * iw, cyImg = (hy + hh / 2) * ih;
+  const ox = fr.x + fr.w / 2 - cxImg * scale, oy = fr.y + fr.h / 2 - cyImg * scale;
+  ctx.save();
+  ctx.translate(ox, oy); ctx.scale(scale, scale);
+  ctx.drawImage(im.bmp, 0, 0);
+  // highlighter marker sweeping across the region (multiply keeps the print readable)
+  const sweep = tm.edit ? 1 : easeOut(clamp((lu - 0.15) / 0.45, 0, 1));
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = hexA(s.highlight || '#ffe14d', 0.85);
+  const pad = hh * ih * 0.12;
+  ctx.fillRect(hx * iw - pad, hy * ih - pad, (hw * iw + pad * 2) * sweep, hh * ih + pad * 2);
+  ctx.restore();
+  // soft vignette for focus
+  const vg = ctx.createRadialGradient(fr.x + fr.w / 2, fr.y + fr.h / 2, fr.h * 0.25, fr.x + fr.w / 2, fr.y + fr.h / 2, fr.w * 0.7);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.28)');
+  ctx.fillStyle = vg; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+  const toCut = idx < n - 1 ? per - (tau - idx * per) : 99;
   if (!tm.edit && (lu < 0.06 || toCut < 0.05)) { ctx.fillStyle = `rgba(255,255,255,${lu < 0.06 ? 0.35 * (1 - lu / 0.06) : 0.2})`; ctx.fillRect(fr.x, fr.y, fr.w, fr.h); }
 }
 

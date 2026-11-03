@@ -50,7 +50,101 @@ export async function pickCodec(width, height, fps, seconds = 0) {
   return null;
 }
 
-export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through', slide: 'Slide in', push: 'Push', whip: 'Whip pan', iris: 'Circle reveal', flash: 'Flash', blur: 'Blur dissolve', glitch: 'Glitch', spin: 'Spin zoom', bars: 'Venetian blinds', pixelate: 'Pixelate', filmburn: 'Film burn', lightleak: 'Light leak flash', ink: 'Ink bleed', luma: 'Noise dissolve', zoomblur: 'Zoom blur', slideup: 'Slide up', doors: 'Doors open', stinger: 'Your video (stinger)' };
+const NEW_TR = ['cube', 'pageturn', 'newsspin', 'shatter', 'mosaic', 'checker', 'diagonal', 'clock', 'diamond', 'split', 'slidedown', 'slideright', 'zoomin', 'rgbsplit', 'lightsweep', 'stripes', 'flipcard'];
+const hash01 = (a, b) => { const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return x - Math.floor(x); };
+let rgbTmp = null;
+/** The newer scene transitions. snap = last frame of the old scene, cur = the new scene, e = 0 → 1. */
+export function drawNewTransition(ctx, tr, snap, cur, e, W, H, frame) {
+  const clipDraw = (path, img) => { ctx.save(); ctx.beginPath(); path(); ctx.clip(); ctx.drawImage(img, 0, 0); ctx.restore(); };
+  if (tr === 'cube') {
+    // old face turns away to the left, new face turns in from the right
+    const a = e * Math.PI / 2, wOld = W * Math.cos(a), wNew = W * Math.sin(a);
+    ctx.save(); ctx.globalAlpha = 1; ctx.drawImage(snap, 0, 0, W, H, 0, H * 0.04 * Math.sin(a * 2), Math.max(1, wOld), H * (1 - 0.08 * Math.sin(a * 2)));
+    ctx.fillStyle = `rgba(0,0,0,${0.5 * e})`; ctx.fillRect(0, 0, wOld, H);
+    ctx.drawImage(cur, 0, 0, W, H, wOld, H * 0.04 * Math.sin(a * 2), Math.max(1, wNew), H * (1 - 0.08 * Math.sin(a * 2)));
+    ctx.fillStyle = `rgba(0,0,0,${0.5 * (1 - e)})`; ctx.fillRect(wOld, 0, wNew, H);
+    ctx.restore();
+  } else if (tr === 'pageturn') {
+    ctx.drawImage(cur, 0, 0);
+    const x = W * (1 - e) * 1.25;
+    clipDraw(() => { ctx.moveTo(0, 0); ctx.lineTo(x, 0); ctx.lineTo(x - W * 0.25, H); ctx.lineTo(0, H); ctx.closePath(); }, snap);
+    const g = ctx.createLinearGradient(x - W * 0.25, 0, x + W * 0.05, 0);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.7, 'rgba(0,0,0,0.35)'); g.addColorStop(0.85, 'rgba(255,255,255,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x - W * 0.08, 0); ctx.lineTo(x + W * 0.06, 0); ctx.lineTo(x - W * 0.19, H); ctx.lineTo(x - W * 0.33, H); ctx.closePath(); ctx.fill();
+  } else if (tr === 'newsspin') {
+    // classic newspaper spin: the old frame spins away, the new one spins in
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    const out = e < 0.5, k = out ? 1 - e * 2 : (e - 0.5) * 2;
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate((out ? 1 : -1) * (1 - k) * Math.PI * 2); ctx.scale(Math.max(0.01, k), Math.max(0.01, k));
+    ctx.drawImage(out ? snap : cur, -W / 2, -H / 2); ctx.restore();
+  } else if (tr === 'shatter' || tr === 'mosaic' || tr === 'checker') {
+    ctx.drawImage(cur, 0, 0);
+    const nx = tr === 'checker' ? 8 : 12, ny = tr === 'checker' ? 5 : 7, tw = W / nx, th = H / ny;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+      const r = hash01(i, j);
+      const start = tr === 'checker' ? ((i + j) % 2) * 0.4 : r * 0.6;
+      const k = Math.max(0, Math.min(1, (e - start) / 0.4));
+      if (k >= 1) continue;
+      ctx.save();
+      const cx = i * tw + tw / 2, cy = j * th + th / 2;
+      if (tr === 'shatter') { ctx.translate(cx + (cx - W / 2) * k * 1.2, cy + (cy - H / 2) * k * 1.2 + k * k * H * 0.3); ctx.rotate((r - 0.5) * 3 * k); ctx.globalAlpha = 1 - k; }
+      else { ctx.translate(cx, cy); ctx.scale(1 - k, tr === 'mosaic' ? 1 : 1 - k); }
+      ctx.drawImage(snap, i * tw, j * th, tw + 1, th + 1, -tw / 2, -th / 2, tw + 1, th + 1);
+      ctx.restore();
+    }
+  } else if (tr === 'diagonal') {
+    ctx.drawImage(snap, 0, 0);
+    const d = (W + H) * e;
+    clipDraw(() => { ctx.moveTo(0, 0); ctx.lineTo(d, 0); ctx.lineTo(d - H, H); ctx.lineTo(0, H); ctx.closePath(); }, cur);
+  } else if (tr === 'clock') {
+    ctx.drawImage(snap, 0, 0);
+    clipDraw(() => { ctx.moveTo(W / 2, H / 2); ctx.arc(W / 2, H / 2, Math.hypot(W, H), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * e); ctx.closePath(); }, cur);
+  } else if (tr === 'diamond') {
+    ctx.drawImage(snap, 0, 0);
+    const r = (W + H) * 0.55 * e;
+    clipDraw(() => { ctx.moveTo(W / 2, H / 2 - r); ctx.lineTo(W / 2 + r, H / 2); ctx.lineTo(W / 2, H / 2 + r); ctx.lineTo(W / 2 - r, H / 2); ctx.closePath(); }, cur);
+  } else if (tr === 'split') {
+    ctx.drawImage(cur, 0, 0);
+    ctx.drawImage(snap, 0, 0, W, H / 2, 0, -H / 2 * e, W, H / 2);
+    ctx.drawImage(snap, 0, H / 2, W, H / 2, 0, H / 2 + H / 2 * e, W, H / 2);
+  } else if (tr === 'slidedown') { ctx.drawImage(snap, 0, H * e); ctx.drawImage(cur, 0, -H * (1 - e)); }
+  else if (tr === 'slideright') { ctx.drawImage(snap, W * e, 0); ctx.drawImage(cur, -W * (1 - e), 0); }
+  else if (tr === 'zoomin') {
+    ctx.drawImage(snap, 0, 0);
+    const k = 0.05 + 0.95 * e;
+    ctx.save(); ctx.globalAlpha = Math.min(1, e * 2); ctx.translate(W / 2, H / 2); ctx.scale(k, k); ctx.drawImage(cur, -W / 2, -H / 2); ctx.restore();
+  } else if (tr === 'rgbsplit') {
+    const img = e < 0.5 ? snap : cur, peak = 1 - Math.abs(e - 0.5) * 2, off = peak * W * 0.03;
+    rgbTmp ||= document.createElement('canvas'); rgbTmp.width = W; rgbTmp.height = H;
+    const t = rgbTmp.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [dx, col] of [[-off, 'rgb(255,0,0)'], [off, 'rgb(0,90,255)']]) {
+      t.globalCompositeOperation = 'source-over'; t.clearRect(0, 0, W, H); t.drawImage(img, 0, 0);
+      t.globalCompositeOperation = 'multiply'; t.fillStyle = col; t.fillRect(0, 0, W, H);
+      t.globalCompositeOperation = 'destination-in'; t.drawImage(img, 0, 0);
+      ctx.globalAlpha = 0.6 * peak; ctx.drawImage(rgbTmp, dx, 0);
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    if (peak > 0.6) for (let k = 0; k < 8; k++) { const y = hash01(k, frame) * H, h = H * 0.02; ctx.drawImage(img, 0, y, W, h, (hash01(frame, k) - 0.5) * W * 0.08, y, W, h); }
+  } else if (tr === 'lightsweep') {
+    ctx.drawImage(e < 0.5 ? snap : cur, 0, 0);
+    const x = -W * 0.3 + e * W * 1.6;
+    const g = ctx.createLinearGradient(x - W * 0.25, 0, x + W * 0.25, 0);
+    const peak = 1 - Math.abs(e - 0.5) * 2;
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, `rgba(255,255,255,${0.95 * peak + 0.2})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.translate(x, H / 2); ctx.rotate(-0.25); ctx.translate(-x, -H / 2); ctx.fillStyle = g; ctx.fillRect(x - W * 0.25, -H, W * 0.5, H * 3); ctx.restore();
+  } else if (tr === 'stripes') {
+    ctx.drawImage(snap, 0, 0);
+    const n = 9, sw = (W + H) / n;
+    clipDraw(() => { for (let k = 0; k < n; k++) { const kk = Math.max(0, Math.min(1, e * 1.6 - k * 0.07)); const x0 = k * sw - H; ctx.moveTo(x0, H); ctx.lineTo(x0 + H, 0); ctx.lineTo(x0 + H + sw * kk, 0); ctx.lineTo(x0 + sw * kk, H); ctx.closePath(); } }, cur);
+  } else if (tr === 'flipcard') {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    const a = e * Math.PI, sx = Math.abs(Math.cos(a));
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(Math.max(0.01, sx), 1 - 0.1 * Math.sin(a)); ctx.drawImage(e < 0.5 ? snap : cur, -W / 2, -H / 2); ctx.restore();
+  }
+}
+export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through', slide: 'Slide in', push: 'Push', whip: 'Whip pan', iris: 'Circle reveal', flash: 'Flash', blur: 'Blur dissolve', glitch: 'Glitch', spin: 'Spin zoom', bars: 'Venetian blinds', pixelate: 'Pixelate', filmburn: 'Film burn', lightleak: 'Light leak flash', ink: 'Ink bleed', luma: 'Noise dissolve', zoomblur: 'Zoom blur', slideup: 'Slide up', doors: 'Doors open', cube: '3D cube turn', pageturn: 'Page turn', newsspin: 'Newspaper spin', shatter: 'Shatter', mosaic: 'Tile mosaic', checker: 'Checkerboard', diagonal: 'Diagonal wipe', clock: 'Clock wipe', diamond: 'Diamond reveal', split: 'Split open', slidedown: 'Slide down', slideright: 'Slide from left', zoomin: 'Zoom in (new scene grows)', rgbsplit: 'RGB split', lightsweep: 'Light sweep', stripes: 'Diagonal stripes', flipcard: 'Card flip', stinger: 'Your video (stinger)' };
 
 /**
  * @param o.scenes array of scenes
@@ -170,7 +264,7 @@ async function forEachFrame(o, ctx, emit, canvas) {
       if (haveSnap && tau < prevD) {
         const u = tau / prevD;
         const e = 0.5 - 0.5 * Math.cos(Math.PI * u);
-        if (['slide', 'push', 'whip', 'iris', 'flash', 'blur', 'glitch', 'spin', 'bars', 'pixelate', 'filmburn', 'lightleak', 'ink', 'luma', 'zoomblur', 'slideup', 'doors', 'stinger'].includes(prevTr)) {
+        if (['slide', 'push', 'whip', 'iris', 'flash', 'blur', 'glitch', 'spin', 'bars', 'pixelate', 'filmburn', 'lightleak', 'ink', 'luma', 'zoomblur', 'slideup', 'doors', 'stinger', ...NEW_TR].includes(prevTr)) {
           cur ||= Object.assign(document.createElement('canvas'), { width, height });
           const cc = cur.getContext('2d');
           cc.clearRect(0, 0, width, height); cc.drawImage(canvas, 0, 0);
@@ -256,6 +350,7 @@ async function forEachFrame(o, ctx, emit, canvas) {
               ctx.globalCompositeOperation = 'source-over';
             }
           }
+          if (NEW_TR.includes(prevTr)) drawNewTransition(ctx, prevTr, snap, cur, e, width, height, i);
           if (prevTr === 'bars') { ctx.drawImage(snap, 0, 0); const n = 10, bh = height / n; ctx.beginPath(); for (let k = 0; k < n; k++) ctx.rect(0, k * bh, width, bh * e); ctx.clip(); ctx.drawImage(cur, 0, 0); }
           if (prevTr === 'glitch') {
             ctx.drawImage(e < 0.5 ? snap : cur, 0, 0);
