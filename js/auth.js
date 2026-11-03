@@ -241,9 +241,11 @@ async function openPassword() {
 // ---------------------------------------------------------------- start
 async function start() {
   css();
-  const user = await restore();
+  let user = null, problem = '';
+  try { user = await restore(); } catch (e) { problem = fbMode() ? 'Could not reach the sign-in service (Firebase). Check your internet connection and reload.' : e.message || 'Could not check the login'; }
   if (user) { unlock(user); return; }
   const g = gate();
+  if (problem) $('#lg-err', g).textContent = problem;
   const form = $('form', g);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
