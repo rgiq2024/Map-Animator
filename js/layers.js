@@ -222,7 +222,7 @@ export function layerTiming(L, t) {
   if (L.hold > 0) {
     const end = L.start + d + L.hold;
     if (t > end) return { visible: false, u: 1, alpha: 0, tau: t - L.start };
-    alpha = clamp((end - t) / 0.4, 0, 1);
+    alpha = clamp((end - t) / Math.max(0.01, L.fadeOut ?? 0.4), 0, 1);
   }
   return { visible: true, u, alpha, tau: t - L.start };
 }

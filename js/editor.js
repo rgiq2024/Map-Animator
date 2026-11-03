@@ -1742,8 +1742,14 @@ export function createEditor() {
     const s = L.style;
     let h = `<div class="le-head">${fText('name', L.name)}<button class="icon-x" data-act="close" title="Done">✕</button></div>`;
     h += fRow('Animation', fSel('anim', L.anim, ANIMS[L.kind]));
-    h += `<div class="time3"><label>Starts at (s)${fNum('start', L.start)}</label><label>Animates for (s)${fNum('duration', L.duration)}</label><label>Then stays (s)${fNum('hold', L.hold || 0)}</label></div>`;
-    h += `<p class="hint-line">“Then stays” 0 = until the end of the scene. <button class="link strong" data-act="atPlayhead">Start at the playhead</button></p>`;
+    {
+      const untilEnd = !(L.hold > 0);
+      const hideAt = +(L.start + L.duration + (L.hold || 0)).toFixed(2);
+      h += `<h5>When it shows</h5><div class="time3"><label>Shows from (s)${fNum('start', L.start)}</label><label>Animates for (s)${fNum('duration', L.duration)}</label><label>Hides at (s)<input type="number" step="0.1" data-act-input="hideAt" value="${untilEnd ? '' : hideAt}" placeholder="end" ${untilEnd ? 'disabled' : ''}></label></div>`;
+      h += fRow('Stays until the end of the scene', `<input type="checkbox" class="switch" data-act-input="untilEnd" ${untilEnd ? 'checked' : ''}>`);
+      h += `<div class="btn-row"><button class="btn sm" data-act="atPlayhead">⇤ Show from the playhead</button><button class="btn sm" data-act="hideAtPlayhead">⇥ Hide at the playhead</button><button class="btn sm" data-act="splitLayer" title="Cut this layer in two at the playhead">✂ Split at the playhead</button></div>`;
+      h += `<p class="hint-line">Shown ${L.start.toFixed(1)} s → ${untilEnd ? 'end of the scene' : `${hideAt.toFixed(1)} s (fades out)`}. Split makes two copies: edit the second one (e.g. new text) and it takes over at the cut.</p>`;
+    }
     h += `<div class="btn-row speed-row"><span class="muted small">Speed</span><button class="btn sm" data-act="speed" data-k="2">½× slower</button><button class="btn sm" data-act="speed" data-k="1.25">Slower</button><button class="btn sm" data-act="speed" data-k="0.8">Faster</button><button class="btn sm" data-act="speed" data-k="0.5">2× faster</button></div>`;
     if (L.kind === 'boundary' || L.kind === 'area') {
       h += '<h5>Outline</h5>' + fRow('Colour', fColor('style.stroke', s.stroke)) + fRow('Width', fRange('style.width', s.width, 0, 14, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Glow', fSw('style.glow', s.glow));
@@ -1896,6 +1902,23 @@ export function createEditor() {
     repaint();
     save();
   }
+  $('#layer-editor').addEventListener('change', (e) => {
+    const k = e.target.dataset?.actInput;
+    if (!k) return;
+    const L = selLayer && layerById(selLayer);
+    if (!L) return;
+    pushUndo();
+    if (k === 'untilEnd') {
+      if (e.target.checked) { L.hold = 0; L.fadeOut = undefined; }
+      else L.hold = Math.max(0.5, +(Math.max(1, (model?.trimOut || L.start + L.duration + 3) - L.start - L.duration - 0.5)).toFixed(2));
+    }
+    if (k === 'hideAt') {
+      const at = +e.target.value;
+      if (!(at > L.start)) { toast('“Hides at” must be after “Shows from”', 3000); renderLayerEditor(); return; }
+      if (at <= L.start + L.duration) { L.duration = Math.max(0.05, +(at - L.start).toFixed(2)); L.hold = 0.01; } else L.hold = Math.max(0.01, +(at - L.start - L.duration).toFixed(2));
+    }
+    commitLayers(); renderLayerEditor(); repaint();
+  });
   $('#layer-editor').addEventListener('input', (e) => onLayerField(e, false));
   $('#layer-editor').addEventListener('change', (e) => { if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') onLayerField(e, true); });
   $('#layer-editor').addEventListener('click', (e) => {
@@ -1927,6 +1950,31 @@ export function createEditor() {
     if (a === 'up' && i < ls.length - 1) { pushUndo(); [ls[i], ls[i + 1]] = [ls[i + 1], ls[i]]; commitLayers(); }
     if (a === 'down' && i > 0) { pushUndo(); [ls[i], ls[i - 1]] = [ls[i - 1], ls[i]]; commitLayers(); }
     if (a === 'atPlayhead') { pushUndo(); L.start = +time.toFixed(2); renderLayerEditor(); commitLayers(); }
+    if (a === 'hideAtPlayhead' || a === 'splitLayer') {
+      const t = +time.toFixed(2);
+      const end = L.hold > 0 ? L.start + L.duration + L.hold : Infinity;
+      if (t <= L.start + 0.05 || t >= end - 0.05) { toast('Move the playhead to a moment while this layer is showing', 3200); return; }
+      pushUndo();
+      const setHide = (X, at) => {
+        if (at <= X.start + X.duration) { X.duration = Math.max(0.05, +(at - X.start).toFixed(2)); X.hold = 0.01; }
+        else X.hold = Math.max(0.01, +(at - X.start - X.duration).toFixed(2));
+      };
+      if (a === 'splitLayer') {
+        const B = JSON.parse(JSON.stringify(L));
+        B.id = `ly_${Math.random().toString(36).slice(2, 10)}`;
+        B.name = `${L.name} (2)`;
+        B.start = t;
+        if (ANIMS[L.kind]?.none) B.anim = 'none';
+        B.duration = Math.max(0.05, Math.min(L.duration, 0.3));
+        B.hold = end === Infinity ? 0 : Math.max(0.01, +(end - t - B.duration).toFixed(2));
+        B.fadeOut = L.fadeOut;
+        setHide(L, t); L.fadeOut = 0.01;
+        layersOf().splice(layersOf().indexOf(L) + 1, 0, B);
+        selLayer = B.id;
+        toast('Split — the second part is selected; change it and it takes over at the cut', 3600);
+      } else setHide(L, t);
+      commitLayers(); renderLayerList(); renderLayerEditor(); repaint();
+    }
     if (a === 'speed') {
       pushUndo();
       const k = +e.target.closest('[data-k]').dataset.k;
