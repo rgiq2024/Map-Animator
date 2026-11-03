@@ -259,16 +259,50 @@ export function compareState(L, tm) {
   if (m === 'split') return 0.5 * ease(u / 0.6);
   return ease(u);
 }
+function coverRect(ctx, im, R) {
+  const w = im.w || im.bmp.width, h = im.h || im.bmp.height;
+  const sc = Math.max(R.w / w, R.h / h);
+  ctx.drawImage(im.bmp, R.x + (R.w - w * sc) / 2, R.y + (R.h - h * sc) / 2, w * sc, h * sc);
+}
+/** Before / after shown over the whole video frame (no georeferencing). */
+function drawCompareScreen(ctx, L, s, A, B, k, mode, alpha, unit, frame, tm) {
+  const R = frame;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.beginPath(); ctx.rect(R.x, R.y, R.w, R.h); ctx.clip();
+  const z = 1 + 0.04 * clamp((tm.edit ? 0 : tm.tau) / Math.max(1, +L.duration || 4), 0, 1);
+  const Z = { x: R.x - R.w * (z - 1) / 2, y: R.y - R.h * (z - 1) / 2, w: R.w * z, h: R.h * z };
+  coverRect(ctx, A, Z);
+  if (mode === 'fade') { ctx.globalAlpha *= k; coverRect(ctx, B, Z); ctx.restore(); return; }
+  const dir = s.dir || 'lr';
+  const vert = dir === 'tb' || dir === 'bt', rev = dir === 'rl' || dir === 'bt';
+  const pos = rev ? 1 - k : k;
+  ctx.save(); ctx.beginPath();
+  if (vert) ctx.rect(R.x, rev ? R.y + R.h * pos : R.y, R.w, rev ? R.h * (1 - pos) : R.h * pos);
+  else ctx.rect(rev ? R.x + R.w * pos : R.x, R.y, rev ? R.w * (1 - pos) : R.w * pos, R.h);
+  ctx.clip(); coverRect(ctx, B, Z); ctx.restore();
+  if (k > 0.001 && k < 0.999 && s.line !== false) {
+    const lx = R.x + R.w * pos, ly = R.y + R.h * pos;
+    ctx.strokeStyle = s.lineColor || '#ffffff'; ctx.lineWidth = 3 * unit; ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 6 * unit;
+    ctx.beginPath(); if (vert) { ctx.moveTo(R.x, ly); ctx.lineTo(R.x + R.w, ly); } else { ctx.moveTo(lx, R.y); ctx.lineTo(lx, R.y + R.h); } ctx.stroke();
+    const mx = vert ? R.x + R.w / 2 : lx, my = vert ? ly : R.y + R.h / 2;
+    ctx.fillStyle = s.lineColor || '#ffffff'; ctx.beginPath(); ctx.arc(mx, my, 15 * unit, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = '#16181d';
+    for (const sg of [-1, 1]) { ctx.save(); ctx.translate(mx, my); ctx.rotate((vert ? Math.PI / 2 : 0) + (sg < 0 ? Math.PI : 0)); ctx.beginPath(); ctx.moveTo(4 * unit, -5 * unit); ctx.lineTo(9 * unit, 0); ctx.lineTo(4 * unit, 5 * unit); ctx.closePath(); ctx.fill(); ctx.restore(); }
+  }
+  ctx.restore();
+}
 export function drawCompareLayer(ctx, L, tm, proj, unit, frame, part = 'all') {
   const q = quadOf(L);
-  if (!q) return;
+  if (!q && !L.style.screen) return;
   const s = L.style;
   const A = imageFor(s.media), B = imageFor(s.media2);
   const alpha = (tm.edit ? tm.alpha : tm.alpha * clamp(tm.tau / 0.3, 0, 1)) * (+s.opacity || 1);
-  if (!A?.ready || !B?.ready) { if (tm.edit) placeholder(ctx, q, proj, unit, !s.media ? 'Choose the BEFORE image' : !s.media2 ? 'Choose the AFTER image' : 'Loading…'); if (A?.ready) drawQuad(ctx, A, q, proj, { crs: s.crs, alpha }); return; }
+  if (!A?.ready || !B?.ready) { if (s.screen) return; if (tm.edit) placeholder(ctx, q, proj, unit, !s.media ? 'Choose the BEFORE image' : !s.media2 ? 'Choose the AFTER image' : 'Loading…'); if (A?.ready) drawQuad(ctx, A, q, proj, { crs: s.crs, alpha }); return; }
   const k = compareState(L, tm);
   const mode = s.mode || 'swipe';
   if (part === 'labels') { drawCompareTags(ctx, L, s, k, mode, alpha, unit, frame); return; }
+  if (s.screen) { if (frame) drawCompareScreen(ctx, L, s, A, B, k, mode, alpha, unit, frame, tm); return; }
   const pts = drawQuad(ctx, A, q, proj, { crs: s.crs, alpha });
   if (!pts) return;
   if (mode === 'fade') {

@@ -222,21 +222,25 @@ function drawExplainer(ctx, s, frame, unit, tm, k) {
   const inK = easeOut(tau / 0.7);
   const x0 = right ? frame.x + frame.w - pw * inK : frame.x - pw * (1 - inK);
   const F = fam(s.font, SANS);
+  // panel box: top and height are adjustable so it can sit below a logo strip and above a lower third
+  const pTop = frame.y + frame.h * clamp(+s.panelTop || 0, 0, 0.6);
+  const pH = frame.h * clamp(+s.panelH || 1, 0.25, 1) - (pTop - frame.y) * (s.panelH ? 0 : 1);
   ctx.fillStyle = s.bg || '#0a0f15';
   ctx.globalAlpha *= 0.97;
-  ctx.fillRect(x0, frame.y, pw, frame.h);
+  ctx.fillRect(x0, pTop, pw, pH);
   ctx.globalAlpha /= 0.97;
   // soft edge into the map
   const ex = right ? x0 : x0 + pw;
   const g = ctx.createLinearGradient(ex, 0, ex + (right ? -1 : 1) * frame.w * 0.06, 0);
   g.addColorStop(0, 'rgba(10,15,21,0.55)'); g.addColorStop(1, 'rgba(10,15,21,0)');
-  ctx.fillStyle = g; ctx.fillRect(right ? ex - frame.w * 0.06 : ex, frame.y, frame.w * 0.06, frame.h);
+  ctx.fillStyle = g; ctx.fillRect(right ? ex - frame.w * 0.06 : ex, pTop, frame.w * 0.06, pH);
   const pad = pw * 0.13;
   const tx = x0 + pad, maxW = pw - pad * 1.6;
   const H = frame.h;
+  k *= clamp(+s.textScale || 1, 0.4, 2);
   const el = (i) => { const a = clamp((tau - 0.35 - i * 0.18) / 0.45, 0, 1); return { a: easeOut(a), dy: (1 - easeOut(a)) * 14 * unit }; };
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  let y = frame.y + H * 0.115;
+  let y = frame.y + H * (s.textTop != null && s.textTop !== '' ? +s.textTop : 0.115);
   // date
   if (s.date) {
     const e = el(0);

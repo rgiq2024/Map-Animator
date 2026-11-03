@@ -39,6 +39,7 @@ import { exportVideo, renderStill, TRANSITIONS } from './export.js';
 import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
+import { fetchRailways, trackAlongRail } from './railsnap.js';
 import { defaultBrand, drawBranding, preloadBrand, loadBrandFonts } from './branding.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
 import { AffectedBuildings } from './hazards.js';
@@ -1210,6 +1211,7 @@ export function createEditor() {
       if (d.coords.length < 2) { toast('Add at least 2 points'); return; }
       geom = { type: 'LineString', coordinates: d.coords };
     } else geom = { type: 'Point', coordinates: d.coords[0] };
+    if (d.replace) { const T = layerById(d.replace); cancelDrawing(); if (T) { T.geom = geom; selLayer = T.id; commitLayers(); renderLayerEditor(); repaint(); } return; }
     const L = newLayer(d.kind, geom, { start: newStart(), preset: d.preset });
     if (pendingStyle) { Object.assign(L.style, pendingStyle); pendingStyle = null; }
     if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
@@ -1824,6 +1826,14 @@ export function createEditor() {
         if (polys.length) h += `<div class="btn-row"><select id="sm-region">${polys.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="smRegion">Use this region</button></div>`;
         h += '<p class="hint-line">CSV with latitude / longitude columns and a number column (population, sales…). The first number column is used. Drag the region corners to reshape it.</p>';
       }
+      if (L.kind === 'collision' && L.geom?.type === 'LineString') {
+        h += `<h5>Place the track</h5>
+          <div class="btn-row"><button class="btn sm primary" data-act="colSnap">🛤 Snap to the real railway</button></div>
+          <div class="btn-row"><button class="btn sm" data-act="colRot" data-v="-15">⟲ 15°</button><button class="btn sm" data-act="colRot" data-v="-3">⟲ 3°</button><button class="btn sm" data-act="colRot" data-v="3">⟳ 3°</button><button class="btn sm" data-act="colRot" data-v="15">⟳ 15°</button></div>
+          <div class="btn-row"><button class="btn sm" data-act="colMove" data-v="0">↑</button><button class="btn sm" data-act="colMove" data-v="180">↓</button><button class="btn sm" data-act="colMove" data-v="270">←</button><button class="btn sm" data-act="colMove" data-v="90">→</button><select id="col-step"><option value="10">10 m</option><option value="30" selected>30 m</option><option value="100">100 m</option><option value="300">300 m</option></select></div>
+          <div class="btn-row"><button class="btn sm" data-act="colLen" data-v="0.8">Shorter</button><button class="btn sm" data-act="colLen" data-v="1.25">Longer</button><button class="btn sm" data-act="colRedraw">✎ Redraw the track</button></div>
+          <p class="hint-line">“Snap” finds the railway line nearest to the crash point (OpenStreetMap) and lays the track along it, curves included. You can also drag the track’s end points on the map. Rotate and move turn the whole track around its middle.</p>`;
+      }
       if (L.kind === 'cyclone') h += '<p class="hint-line">Draw the track point by point; give each point a category (TD, TS, 1–5). The storm spins anticlockwise in the north and clockwise in the south.</p>';
       if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
       if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
@@ -2185,6 +2195,41 @@ export function createEditor() {
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
     }
     if (a === 'smLoad') $('#file-sm').click();
+    if (a === 'colRot' || a === 'colMove' || a === 'colLen') {
+      pushUndo();
+      const cs = L.geom.coordinates;
+      const c = cs[Math.floor(cs.length / 2)];
+      const kx = 111320 * Math.cos(c[1] * Math.PI / 180), ky = 110540;
+      const v = +btn.dataset.v;
+      L.geom.coordinates = cs.map(([x, y]) => {
+        let dx = (x - c[0]) * kx, dy = (y - c[1]) * ky;
+        if (a === 'colRot') { const r = -v * Math.PI / 180; [dx, dy] = [dx * Math.cos(r) - dy * Math.sin(r), dx * Math.sin(r) + dy * Math.cos(r)]; }
+        if (a === 'colLen') { dx *= v; dy *= v; }
+        if (a === 'colMove') { const st = +($('#col-step')?.value || 30), r = v * Math.PI / 180; dx += Math.sin(r) * st; dy += Math.cos(r) * st; }
+        return [+(c[0] + dx / kx).toFixed(7), +(c[1] + dy / ky).toFixed(7)];
+      });
+      commitLayers(); repaint();
+      return;
+    }
+    if (a === 'colRedraw') { pushUndo(); const id = L.id; startAdd('collision'); drawing.replace = id; showHint('Click the start of the track, then along it, then the end — then press Finish'); return; }
+    if (a === 'colSnap') {
+      const cs = L.geom.coordinates;
+      const mid = cs[Math.floor(cs.length / 2)];
+      toast('Looking for the railway…', 2000);
+      let lines = [];
+      try { lines = await fetchRailways(mid, 2500); } catch { lines = await railwaysNear(mid); }
+      if (!lines.length) { toast('No railway found within 2.5 km — move the track closer, or drag its ends by hand', 4200); return; }
+      const kx = 111320 * Math.cos(mid[1] * Math.PI / 180), ky = 110540;
+      let len = 0;
+      for (let i = 1; i < cs.length; i++) len += Math.hypot((cs[i][0] - cs[i - 1][0]) * kx, (cs[i][1] - cs[i - 1][1]) * ky);
+      const r = trackAlongRail(lines, mid, Math.max(300, len / 2));
+      if (!r) { toast('Could not follow the railway here', 3000); return; }
+      pushUndo();
+      L.geom.coordinates = r.path; L.style.meetAt = r.meetAt;
+      commitLayers(); renderLayerEditor(); repaint();
+      toast(`Track laid on the railway (${Math.round(r.dist)} m from the old crash point)`, 3600);
+      return;
+    }
     if (a === 'smSample') { pushUndo(); L.style.data = sampleData(L.geom.coordinates[0], { rings: 40, reach: 24, halo: 24, circles: 60 }[L.style.mode] || 180, Math.floor(Math.random() * 1000)); L.style.dataName = 'sample data'; commitLayers(); renderLayerEditor(); }
     if (a === 'smRegion') { const src = layerById($('#sm-region').value); if (src?.geom) { pushUndo(); const g = src.geom.type === 'MultiPolygon' ? { type: 'Polygon', coordinates: src.geom.coordinates.reduce((m, p) => (p[0].length > m[0].length ? p : m)) } : JSON.parse(JSON.stringify(src.geom)); L.geom = g; commitLayers(); renderLayerEditor(); toast('Region copied — press “New sample data” or load your data for it'); } }
     if (a === 'netRun') { L.style.resultTry = ''; L.style.resultSig = ''; L.style.resultErr = ''; scheduleNet(0); }
@@ -3002,6 +3047,19 @@ export function createEditor() {
     renderExportSettings(); save();
     toast('Transition clip added — it plays over the cut to the next scene', 3600);
   });
+
+  /** Railway lines near a point: OpenStreetMap via Overpass, falling back to the map's vector tiles. */
+  async function railwaysNear() {
+    const out = [];
+    try {
+      for (const f of map.querySourceFeatures('openmaptiles', { sourceLayer: 'transportation' })) {
+        if (!/rail/.test(f.properties?.class || '')) continue;
+        const g = f.geometry;
+        if (g.type === 'LineString') out.push(g.coordinates); else if (g.type === 'MultiLineString') out.push(...g.coordinates);
+      }
+    } catch { /* no vector tiles */ }
+    return out;
+  }
 
   // ---- logo & lower third
   function renderBrandSettings() {

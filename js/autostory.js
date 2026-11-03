@@ -10,6 +10,7 @@ import { presetGrade } from './effects.js';
 import { haversine, greatCircle, curvedLine } from './geo.js';
 import { routeVia } from './network.js';
 import { putMedia } from './store.js';
+import { fetchRailways, trackAlongRail } from './railsnap.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const D2R = Math.PI / 180;
@@ -225,6 +226,10 @@ export async function resolvePlaces(plan, progress = () => {}) {
       g.region = [[bb[0][0], bb[0][1]], [bb[1][0], bb[0][1]], [bb[1][0], bb[1][1]], [bb[0][0], bb[1][1]], [bb[0][0], bb[0][1]]];
     }
   }
+  if (plan.event === 'traincrash' && (g.place?.ll || g.to?.ll)) {
+    progress('Finding the railway line…');
+    try { g.rails = await fetchRailways(g.place?.ll || g.to.ll, 3000); } catch { g.rails = null; }
+  }
   if (country) { progress('Finding the country…'); const c = await find(country); if (c) g.country = { ...c, name: country }; }
   if (g.from && g.to && plan.event !== 'servicearea') {
     progress('Tracing the route…');
@@ -266,7 +271,7 @@ export function defaultBlocks(plan) {
     routeStyle: rail ? 'railway' : ev === 'journey' ? ({ plane: 'flight', train: 'railway', foot: 'walk', bike: 'road' }[plan.mode] || 'road') : ev === 'shipcrash' ? 'ship' : 'road',
     spotStyle: ev === 'quake' || ev === 'flood' ? 'ripple' : ev === 'strike' ? 'target' : 'pulse',
     zoneKm: ev === 'flood' ? 3 : 1, callText: 'Injured: 70\nDead: 21\nTrains involved: 2', compareKm: 2, beforeId: '', afterId: '', compareMode: 'swipe',
-    hudStyle: 'drone', weatherStyle: ev === 'flood' || ev === 'cyclone' ? 'storm' : ev === 'fire' ? 'embers' : 'rain', ticker: '', music: 'trailer',
+    hudStyle: 'drone', weatherStyle: ev === 'flood' || ev === 'cyclone' ? 'storm' : ev === 'fire' ? 'embers' : 'rain', ticker: '', musicKind: 'trailer',
   };
 }
 
@@ -394,7 +399,7 @@ export function buildStory(plan, g, opts = {}) {
   if (plan.event === 'siteselection') return buildSiteStory(plan, g, opts);
   const k = clamp((+opts.length || 45) / 45, 0.6, 3);
   const vh = REF_W / (opts.aspect || 16 / 9);
-  const focus = g.place?.ll || g.to?.ll || g.from?.ll;
+  let focus = g.place?.ll || g.to?.ll || g.from?.ll;
   if (!focus) throw new Error('No place could be found — check the place names');
   const PLACE = (plan.place || g.place?.name || plan.title || '').toUpperCase();
   const country = g.country?.name || g.place?.country || '';
@@ -430,6 +435,7 @@ export function buildStory(plan, g, opts = {}) {
     const D = 9 * k;
     const sc = newScene('Map');
     darkLook(sc);
+    if (opts.baseMap && opts.baseMap !== 'relief') { sc.look.theme = opts.baseMap; sc.look.grade = { ...presetGrade('none') }; }
     const pts = [focus, g.from?.ll, g.to?.ll, ...(g.route?.coords || [])].filter(Boolean);
     const b = bboxOf(pts);
     const span = Math.max(haversine(b[0], b[1]), 20000);
@@ -442,7 +448,7 @@ export function buildStory(plan, g, opts = {}) {
     sc.camera.mode = 'keyframes';
     sc.camera.keys = [K(0, V(c, z - 0.35), 'linear'), K(D, V(c, z - 0.05), 'linear')];
     sc.stillStart = 0; sc.stillEnd = 0.3;
-    if (B.explainer) sc.layers.push(L('title', null, 0.2, { duration: 1.2, hold: 0, style: { look: 'explainer', text: plan.title, sub: plan.subtitle, date: plan.date, lines: (plan.context?.length ? plan.context : [country]).filter(Boolean).join('\n'), font: 'Inter', color: '#ffffff', accent: '#e53935', bg: '#0a0f15', side: 'left' } }));
+    if (B.explainer) sc.layers.push(L('title', null, 0.2, { duration: 1.2, hold: 0, style: { textTop: B.lower ? 0.22 : 0.115, textScale: B.lower ? 0.85 : 1, look: 'explainer', text: plan.title, sub: plan.subtitle, date: plan.date, lines: (plan.context?.length ? plan.context : [country]).filter(Boolean).join('\n'), font: 'Inter', color: '#ffffff', accent: '#e53935', bg: '#0a0f15', side: 'left' } }));
     if (country && g.country?.ll) sc.layers.push(L('label', pt(g.country.ll), 0.6, { duration: 1.2, style: { text: country.toUpperCase(), size: 22, color: '#c3ced4', halo: '#0a0f15', weight: 500, upper: true } }));
     let t = 1.2;
     const rc = B.route ? routeLine() : null;
@@ -466,10 +472,14 @@ export function buildStory(plan, g, opts = {}) {
   if (closeUp) {
     const D = 13 * k;
     const sc = newScene('Event');
-    Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: plan.event !== 'traincrash', terrain: false, globe: false, clouds: false });
+    Object.assign(sc.look, { theme: opts.baseClose || 'satellite', placeNames: false, rasterLabels: false, buildings3d: plan.event !== 'traincrash', terrain: false, globe: false, clouds: false });
     sc.camera.mode = 'keyframes';
     sc.stillStart = 0; sc.stillEnd = 0.3;
-    const lb = localBearing(g.route, focus, g.from && g.to ? bearingTo(g.from.ll, g.to.ll) : 60);
+    // train crash: move the event onto the real railway and follow its direction
+    const railSnap = plan.event === 'traincrash' && g.rails?.length && focus ? trackAlongRail(g.rails, focus, 900) : null;
+    const useRail = railSnap && railSnap.dist < 2500;
+    if (useRail) focus = railSnap.centre;
+    const lb = useRail ? bearingTo(railSnap.path[0], railSnap.path.at(-1)) : localBearing(g.route, focus, g.from && g.to ? bearingTo(g.from.ll, g.to.ll) : 60);
     const camB = (lb + 62) % 360;
     let zEnd = 15.5, tilt = 55;
     const arrive = Math.min(D * 0.38, 5);
@@ -478,10 +488,15 @@ export function buildStory(plan, g, opts = {}) {
     else if (plan.event === 'traincrash' || plan.event === 'carcrash' || plan.event === 'shipcrash') {
       const half = plan.event === 'traincrash' ? 900 : 500;
       const a = dest(focus, lb + 180, half), b = dest(focus, lb, half);
-      const geom = { type: 'LineString', coordinates: [a, focus.map(r6), b] };
+      let geom = { type: 'LineString', coordinates: [a, focus.map(r6), b] };
+      let meetAt = 0.5;
+      // lay the trains on the real railway line when OpenStreetMap has it
+      const snap = useRail ? trackAlongRail(g.rails, focus, half) : null;
+      if (snap) { geom = { type: 'LineString', coordinates: snap.path }; meetAt = snap.meetAt; }
       const crashAt = Math.max(arrive + 3.5, D * 0.6);
       const runDur = 6;
       const col = L('collision', geom, Math.max(0.3, crashAt - runDur), { duration: runDur, name: EVENTS[plan.event] });
+      col.style.meetAt = meetAt;
       if (plan.event === 'traincrash') Object.assign(col.style, { scenario: plan.scenario, liveryA: 'ave', liveryB: 'red', cars: 6, approach: plan.scenario === 'rearend' ? 500 : 420 });
       if (plan.event === 'carcrash') Object.assign(col.style, { modelA: 'builtin:car', modelB: 'builtin:truck', sizeMode: 'real', size: 1, approach: 200, impact: 'fire', blast: 0.6 });
       if (plan.event === 'shipcrash') Object.assign(col.style, { modelA: 'builtin:containership', modelB: 'builtin:tanker', sizeMode: 'real', size: 1, impact: 'fire' });
@@ -555,8 +570,8 @@ export function buildStory(plan, g, opts = {}) {
     sc.camera.mode = 'keyframes';
     sc.camera.keys = [K(0, V(focus, fit.zoom - 0.6), 'ease'), K(1.2, V(focus, fit.zoom), 'linear'), K(D, V(focus, fit.zoom + 0.15), 'linear')];
     sc.stillStart = 0; sc.stillEnd = 0.3;
-    sc.layers.push(L('compare', { type: 'Polygon', coordinates: [[...quad, quad[0]]] }, 1, { duration: Math.max(4, D - 2), name: 'Before / after', style: { media: B.beforeId, media2: B.afterId, mode: B.compareMode || 'swipe', cycles: 2, labels: true, labelA: 'BEFORE', labelB: 'AFTER', crs: '3857' } }));
-    if (B.spot) sc.layers.push(L('point', pt(focus), 1.2, { duration: 0.8, style: { marker: 'ring', color: '#ff3b30', size: 1.2, effect: B.spotStyle === 'target' ? 'pulse' : B.spotStyle || 'pulse', label: '' } }));
+    sc.layers.push(L('compare', { type: 'Polygon', coordinates: [[...quad, quad[0]]] }, 0.3, { duration: Math.max(4, D - 1.5), name: 'Before / after', style: { media: B.beforeId, media2: B.afterId, mode: B.compareMode || 'swipe', cycles: 2, labels: true, labelA: B.labelA || 'BEFORE', labelB: B.labelB || 'AFTER', crs: '3857', screen: B.compareFull !== false } }));
+    if (B.spot && B.compareFull === false) sc.layers.push(L('point', pt(focus), 1.2, { duration: 0.8, style: { marker: 'ring', color: '#ff3b30', size: 1.2, effect: B.spotStyle === 'target' ? 'pulse' : B.spotStyle || 'pulse', label: '' } }));
     sc.transition = 'dissolve'; sc.transitionSeconds = 0.8;
     scenes.push(sc);
   }
@@ -576,11 +591,12 @@ export function buildStory(plan, g, opts = {}) {
   const story = { name: plan.title, scenes };
   if (B.lower) story.brand = Object.fromEntries(Object.entries({ lower: true, country: (country || '').toUpperCase(), place: PLACE, date: (plan.date || '').toUpperCase(), ticker: B.ticker || [plan.subtitle, plan.title].filter(Boolean).join(' | ') }).filter(([, v]) => v !== ''));
   else story.brand = { lower: false };
-  if (B.music) story.sound = { auto: true, v2: true, music: B.music || 'trailer' };
+  if (B.music) story.sound = { auto: true, v2: true, music: B.musicKind || 'trailer' };
   return story;
 }
 
 // ---------------------------------------------------------------- the dialog
+const BASEMAPS = [['satellite', 'Satellite (Esri)'], ['sentinel', 'Sentinel-2 cloudless'], ['usgs', 'USGS imagery (USA)'], ['esritopo', 'Esri Topographic'], ['esristreet', 'Esri Streets'], ['osm', 'OpenStreetMap'], ['opentopo', 'OpenTopoMap'], ['terrainbase', 'Terrain'], ['darkgray', 'Dark gray canvas'], ['lightgray', 'Light gray canvas'], ['dark', 'Dark (vector)'], ['nightroads', 'Night roads'], ['classic', 'Classic'], ['citylights', 'Earth at night']];
 const EXAMPLES = [
   'Train collision at Urda on the Madrid–Seville line, 28 October 2026, Toledo, Castilla-La Mancha',
   'Best location for a new store in Texas',
@@ -604,6 +620,8 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
         <label>Length <select id="av-len"><option value="30">About 30 s</option><option value="45" selected>About 45 s</option><option value="60">About 1 min</option><option value="120">About 2 min</option><option value="300">About 5 min</option></select></label>
         <label>Style <select id="av-style"><option value="news">TV news</option><option value="documentary">Documentary (no news graphics)</option></select></label>
         <label>Channel name <input id="av-channel" type="text" value="NEWS" maxlength="16" /></label>
+        <label>Base map — close-up <select id="av-base-close">${BASEMAPS.map(([k, n]) => `<option value="${k}" ${k === 'satellite' ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label>Base map — news map <select id="av-base-map"><option value="relief" selected>Dark relief (news style)</option>${BASEMAPS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></label>
       </div>
       <div class="av-plan" id="av-plan" hidden></div>
     </div>
@@ -620,11 +638,11 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
       spot: `<label>Effect<select data-b="spotStyle">${opt('ripple', B.spotStyle, 'Ripples (waves)')}${opt('pulse', B.spotStyle, 'Pulse rings')}${opt('radar', B.spotStyle, 'Radar sweep')}${opt('target', B.spotStyle, 'Target lock')}</select></label>`,
       zone: `<label>Radius (km)<input type="number" min="0.05" step="0.05" data-b="zoneKm" value="${esc(B.zoneKm)}" /></label>`,
       callout: `<label>Facts — one per line (“ / ” splits a box into two lines)<textarea rows="3" data-b="callText">${esc(B.callText)}</textarea></label>`,
-      compare: `<label>Before image (pre-event)<input type="file" accept="image/*" data-file="before" />${files.before ? `<small>✓ ${esc(files.before.name)}</small>` : ''}</label><label>After image (post-event)<input type="file" accept="image/*" data-file="after" />${files.after ? `<small>✓ ${esc(files.after.name)}</small>` : ''}</label><label>Area shown (km across)<input type="number" min="0.1" step="0.1" data-b="compareKm" value="${esc(B.compareKm)}" /></label><label>Effect<select data-b="compareMode">${opt('swipe', B.compareMode, 'Swipe across')}${opt('pingpong', B.compareMode, 'Swipe back and forth')}${opt('fade', B.compareMode, 'Cross-fade')}${opt('split', B.compareMode, 'Split screen')}</select></label>`,
+      compare: `<label>Before image (pre-event)<input type="file" accept="image/*" data-file="before" />${files.before ? `<small>✓ ${esc(files.before.name)}</small>` : ''}</label><label>After image (post-event)<input type="file" accept="image/*" data-file="after" />${files.after ? `<small>✓ ${esc(files.after.name)}</small>` : ''}</label><label>Show<select data-b="compareFull">${opt('true', String(B.compareFull !== false), 'Full screen')}${opt('false', String(B.compareFull !== false), 'Placed on the map')}</select></label><label>Area shown on the map (km across)<input type="number" min="0.1" step="0.1" data-b="compareKm" value="${esc(B.compareKm)}" /></label><label>Effect<select data-b="compareMode">${opt('swipe', B.compareMode, 'Swipe across')}${opt('pingpong', B.compareMode, 'Swipe back and forth')}${opt('fade', B.compareMode, 'Cross-fade')}${opt('split', B.compareMode, 'Split screen')}</select></label>`,
       hud: `<label>HUD<select data-b="hudStyle">${opt('drone', B.hudStyle, 'Drone camera')}${opt('satellite', B.hudStyle, 'Satellite feed')}${opt('geoint', B.hudStyle, 'GEOINT (blue)')}${opt('scope', B.hudStyle, 'Scope view')}${opt('tactical', B.hudStyle, 'Tactical')}${opt('livefeed', B.hudStyle, 'Live-feed scanner')}</select></label>`,
       weather: `<label>Effect<select data-b="weatherStyle">${opt('rain', B.weatherStyle, 'Rain')}${opt('storm', B.weatherStyle, 'Thunderstorm')}${opt('snow', B.weatherStyle, 'Snow')}${opt('fog', B.weatherStyle, 'Fog')}${opt('embers', B.weatherStyle, 'Embers / smoke')}${opt('sandstorm', B.weatherStyle, 'Sandstorm')}</select></label>`,
       lower: `<label>Ticker (separate items with |, empty = subtitle and title)<input type="text" data-b="ticker" value="${esc(B.ticker)}" /></label>`,
-      music: `<label>Score<select data-b="music">${opt('trailer', B.music, 'Epic cinematic trailer')}${opt('heroic', B.music, 'Epic cinematic (heroic)')}${opt('tension', B.music, 'Tension')}${opt('epic', B.music, 'Epic drums')}${opt('documentary', B.music, 'Documentary piano')}${opt('ambient', B.music, 'Ambient')}</select></label>`,
+      music: `<label>Score<select data-b="musicKind">${opt('trailer', B.musicKind, 'Epic cinematic trailer')}${opt('heroic', B.musicKind, 'Epic cinematic (heroic)')}${opt('tension', B.musicKind, 'Tension')}${opt('epic', B.musicKind, 'Epic drums')}${opt('documentary', B.musicKind, 'Documentary piano')}${opt('ambient', B.musicKind, 'Ambient')}</select></label>`,
     };
     return `<div class="av-blocks"><h4>Choose what goes in the video</h4><p class="muted">Tick the parts you want — they are built in this order. Everything stays editable afterwards.</p>
       ${BLOCKS.map(([k, t, d]) => `<div class="av-blk ${B[k] ? 'on' : ''}"><input type="checkbox" data-b="${k}" ${B[k] ? 'checked' : ''} /><div><b>${k === 'event3d' ? `${esc(t)} — ${esc(EVENTS[plan.event] || '')}` : esc(t)}</b><small>${esc(d)}</small></div>${sub[k] ? `<div class="av-sub" ${B[k] ? '' : 'hidden'}>${sub[k]}</div>` : ''}</div>`).join('')}</div>`;
@@ -695,7 +713,7 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
     const k = el.dataset.b;
     if (!k) return;
     plan.blocks ||= defaultBlocks(plan);
-    plan.blocks[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? +el.value : el.value;
+    plan.blocks[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? +el.value : el.value === 'true' ? true : el.value === 'false' ? false : el.value;
     if (el.type === 'checkbox') { const box = el.closest('.av-blk'); box.classList.toggle('on', el.checked); const sb = box.querySelector('.av-sub'); if (sb) sb.hidden = !el.checked; }
   };
   $('#av-plan').addEventListener('input', onBlock);
@@ -710,7 +728,7 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
         status('Saving the images…');
         for (const k of ['before', 'after']) { const id = `media_${Date.now().toString(36)}${k}`; await putMedia(id, files[k]); B[`${k}Id`] = id; }
       }
-      const story = buildStory(plan, geo, { length: +$('#av-len').value, style: $('#av-style').value, channel: $('#av-channel').value.trim() || 'NEWS', aspect });
+      const story = buildStory(plan, geo, { length: +$('#av-len').value, style: $('#av-style').value, channel: $('#av-channel').value.trim() || 'NEWS', aspect, baseClose: $('#av-base-close').value, baseMap: $('#av-base-map').value });
       d.close(); d.remove();
       await onCreate?.(story, plan);
     } catch (e) { status(e.message || 'Could not build the video'); }
