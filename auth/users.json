@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "note": "Users of GIS One Map Animator. Passwords are stored as salted PBKDF2-SHA256 hashes. Manage users in the app (Users), download the new file and replace this one.",
+  "users": [
+    {
+      "u": "admin",
+      "name": "Administrator",
+      "role": "admin",
+      "salt": "89QMWsKW8F+0lZUvypiw6g==",
+      "hash": "1hejhr9PgiZUW+3CSSm3AKrGsIDWQyf5CNVAYp6mScI=",
+      "iter": 150000
+    }
+  ]
+}

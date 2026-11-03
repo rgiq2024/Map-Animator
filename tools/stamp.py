@@ -15,6 +15,7 @@ for f in sorted((root / 'js').glob('*.js')):
 imap = '<script type="importmap">' + json.dumps({"imports": imports}, separators=(',', ':')) + '</script>'
 html = re.sub(r'<script type="importmap">.*?</script>', lambda m: imap, html, count=1, flags=re.S)
 html = re.sub(r'<script type="module" src="js/app\.js(\?v=\w+)?"></script>', f'<script type="module" src="js/app.js?v={h(root / "js/app.js")}"></script>', html)
+html = re.sub(r'<script type="module" src="js/auth\.js(\?v=\w+)?"></script>', f'<script type="module" src="js/auth.js?v={h(root / "js/auth.js")}"></script>', html)
 html = re.sub(r'href="css/app\.css(\?v=\w+)?"', f'href="css/app.css?v={h(root / "css/app.css")}"', html)
 idx.write_text(html)
 print('stamped', len(imports) - 1, 'modules')

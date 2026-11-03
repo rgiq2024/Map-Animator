@@ -136,3 +136,16 @@ Inspired by [mapanimator.baldinger.se](https://mapanimator.baldinger.se/) and GE
 ## License
 
 MIT
+
+## Login and users
+
+The app opens with a sign-in screen. Users and their password hashes (salted PBKDF2-SHA256) are in `auth/users.json`.
+
+- **Administrators** see **Users** in the header: add users, reset passwords, change roles, remove users. Changes are collected in a new `users.json` — press **Download users.json** and replace `auth/users.json` in the repository. Anyone can change their own password with **Password** (same download step).
+- Sessions last 14 days with “Keep me signed in” (otherwise until the browser closes). Removing a user or changing a password signs that user out everywhere.
+- **Limits:** GitHub Pages serves static files, so this login keeps casual visitors out but cannot stop someone who reads the site's code. For real protection, switch to **Firebase Authentication**:
+  1. Create a free project at console.firebase.google.com → add a Web app → copy its config.
+  2. Authentication → Sign-in method → enable **Email/Password**; Authentication → Users → **Add user** for each person.
+  3. In `js/auth-config.js` set `mode: 'firebase'`, paste the config into `firebase`, and optionally list `allowedEmails` and `adminEmails`.
+  4. Authentication → Settings → Authorised domains → add `rgiq2024.github.io`.
+  Also consider making the repository private (GitHub Pages from a private repository needs a paid plan).
