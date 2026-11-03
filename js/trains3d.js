@@ -253,7 +253,9 @@ export function buildTrainRig(L, shadowTex) {
   const B = mkTrain(s.liveryB || 'red', s.colorB);
   const scen = s.scenario || 'headon';
   const spacing = 4.7;
-  const laneA = scen === 'sideswipe' ? spacing / 2 : 0, laneB = scen === 'sideswipe' ? -spacing / 2 : 0;
+  const noCrash = s.crash === false;
+  // without a crash the trains run on the two tracks of a double line
+  const laneA = scen === 'sideswipe' ? spacing / 2 : noCrash ? 0 : 0, laneB = scen === 'sideswipe' ? -spacing / 2 : noCrash ? -spacing : 0;
   // overhead line masts and wires
   if (s.poles !== false) {
     const mastM = new THREE.MeshStandardMaterial({ color: 0xa4aab0, metalness: 0.6, roughness: 0.45 });
@@ -310,34 +312,60 @@ export function buildTrainRig(L, shadowTex) {
     const D = Math.max(0.1, +Lnow.duration || 5);
     const p = tm.edit ? 0.82 : clamp(tm.tau / D, 0, 1);
     const tau = tm.edit ? -1 : tm.tau - D;
-    const kk = tau < 0 ? 0 : easeOut(tau / 1.5);
-    const sv = clamp(+st.severity || 1, 0, 2.5);
+    const crash = st.crash !== false;
+    const kk = tau < 0 || !crash ? 0 : easeOut(tau / 1.5);
     const meet = clamp(+st.meetAt || 0.5, 0.05, 0.95) * P.S;
     const appr = Math.max(50, +st.approach || 450);
+    const R = trainRun(st, D, tm.edit ? D * 0.82 : tm.tau, appr);
+    const sv = clamp(+st.severity || 1, 0, 2.5) * R.force;
     const none = { sign: 1 };
+    const remA = R.a, remB = R.b;
     if (scen === 'rearend') {
-      const hA = meet - appr * (1 - p) + 2.2 * sv * kk;
-      const hB = meet + trainLen - 0.12 * appr * (1 - p) + 3 * sv * kk;
+      const hA = meet - remA + 2.2 * sv * kk;
+      const hB = meet + trainLen - remB + 3 * sv * kk;
       place(A, hA, 1, laneA, kk ? { sign: 1, amp: 2.8 * sv * kk, comp: 1.5 * sv * kk, roll: 22 * sv * kk, lift: 2.6 * sv * kk, noseLat: 0.9 * sv * kk } : none);
       place(B, hB, 1, laneB, kk ? { sign: -1, amp: 2.2 * sv * kk, comp: 0.8 * sv * kk, roll: 16 * sv * kk } : none);
     } else if (scen === 'sideswipe') {
       // B derails towards A's track just before they meet, its nose strikes A's second car
       const der = clamp((p - 0.78) / 0.22, 0, 1);
-      const hA = meet + pitch * k * 1.3 - appr * (1 - p);
-      const hB = meet + appr * (1 - p) - 1.5 * sv * kk;
+      const hA = meet + pitch * k * 1.3 - remA;
+      const hB = meet + remB - 1.5 * sv * kk;
       const slideB = (i) => (i === 0 ? 1 : i === 1 ? 0.55 : i === 2 ? 0.2 : 0) * (spacing * 0.75 * ease3(der) + 1.2 * sv * kk);
       const slideA = (i) => (i >= 1 && i <= 3 ? (i === 2 ? 1 : 0.6) * 1.6 * sv * kk : 0);
       place(A, hA, 1, laneA, { sign: 1, amp: 1.8 * sv * kk, comp: 0.9 * sv * kk, roll: 20 * sv * kk, slide: slideA });
       place(B, hB, -1, laneB, { sign: -1, amp: 2.6 * sv * kk, comp: 1.6 * sv * kk, roll: 26 * sv * kk, slide: slideB, noseLat: 0 });
     } else {
-      const hA = meet - appr * (1 - p) + 4.5 * sv * kk;
-      const hB = meet + appr * (1 - p) + 1.5 * sv * kk;
+      const hA = meet - remA + 4.5 * sv * kk;
+      const hB = meet + remB + 1.5 * sv * kk;
       place(A, hA, 1, laneA, kk ? { sign: 1, amp: 3.2 * sv * kk, comp: 1.7 * sv * kk, roll: 24 * sv * kk, lift: 2.8 * sv * kk, noseLat: 1.4 * sv * kk } : none);
       place(B, hB, -1, laneB, kk ? { sign: -1, amp: 2.8 * sv * kk, comp: 1.8 * sv * kk, roll: 22 * sv * kk, noseLat: -1.6 * sv * kk } : none);
     }
   }
   const ease3 = (u) => u * u * (3 - 2 * u);
   return { obj: root, anchor: P.anchor, update, local: P };
+}
+/**
+ * How far (m) each train's nose still is from the crash point at layer time t (seconds since the layer starts).
+ * With speeds set (km/h, or stopped) the trains move at those real speeds × time scale; otherwise the old
+ * "run-up" distance is covered in the layer's duration. Negative = already past (only without a crash).
+ */
+export function trainRun(st, D, t, appr = 450) {
+  const custom = st.motionMode === 'real';
+  const crash = st.crash !== false;
+  const left = crash ? Math.max(0, D - t) : D - t;
+  if (!custom) { const f = clamp(left / D, crash ? 0 : -2, 1); return { a: appr * f, b: (st.scenario === 'rearend' ? 0.12 : 1) * appr * f, force: 1, va: appr / D * 3.6, vb: appr / D * 3.6 }; }
+  const ts = clamp(+st.timeScale || 1, 0.05, 4);
+  const va = st.stateA === 'stopped' ? 0 : Math.max(0, +(st.speedA ?? 240)), vb = st.stateB === 'stopped' ? 0 : Math.max(0, +(st.speedB ?? 240));
+  // a train that brakes slows down linearly over the last 40 % of the run
+  const brake = (v, mode) => {
+    if (mode !== 'braking') return v / 3.6 * ts * left;
+    const T = D * 0.4, v0 = v / 3.6 * ts;
+    if (left >= T) return v0 * (left - T) + v0 * T * 0.5 + (v0 * 0.25) * T * 0.5;
+    const vNow = v0 * (0.25 + 0.75 * (left / T));
+    return (vNow + v0 * 0.25) / 2 * left;
+  };
+  const closing = (st.scenario === 'rearend' ? Math.abs(va - vb) : va + vb);
+  return { a: brake(va, st.stateA), b: brake(vb, st.stateB), force: clamp(closing / 320, 0.25, 1.8), va, vb };
 }
 
 /** One train moving along a line (for "3D train on a track"). */
