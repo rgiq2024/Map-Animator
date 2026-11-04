@@ -167,3 +167,15 @@ export async function liveWeather(places) {
     days: (d.daily?.time || []).map((t, i) => ({ day: new Date(`${t}T12:00:00`).toLocaleDateString('en', { weekday: 'short' }), icon: WMO(d.daily.weather_code[i], true), hi: Math.round(d.daily.temperature_2m_max[i]), lo: Math.round(d.daily.temperature_2m_min[i]) })),
   }));
 }
+
+/** Copernicus Sentinel Hub tile URL for exactly one acquisition day (from a real scene in the catalogue). */
+export function cdseDayFrame(key, opts, day) {
+  const p = SAT_PRODUCTS[key];
+  const id = String(opts.wmsUrl || '').trim().replace(/^.*\/wms\//, '');
+  if (!id) throw new Error('Paste your Copernicus instance ID first');
+  const layer = String(opts.wmsLayer || p.defLayer || '').trim();
+  const base = `https://sh.dataspace.copernicus.eu/ogc/wms/${encodeURIComponent(id)}?SHOWLOGO=false`;
+  const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const d = new Date(`${day}T12:00:00Z`);
+  return { url: wmsUrl(base, layer, `${day}/${day}`, true), date: day, label: `${d.getUTCDate()} ${MON3[d.getUTCMonth()]} ${d.getUTCFullYear()}`, maxzoom: p.sentinel === 1 ? 14 : 15 };
+}

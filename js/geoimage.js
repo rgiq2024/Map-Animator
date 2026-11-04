@@ -33,7 +33,7 @@ export function mediaOf(L) {
   const s = L.style || {};
   if (L.kind === 'image') return [s.media].filter(Boolean);
   if (L.kind === 'compare') return [s.media, s.media2].filter(Boolean);
-  if (L.kind === 'timeseries' && s.source !== 'wayback') return (s.frames || []).map((f) => f.media).filter(Boolean);
+  if (L.kind === 'timeseries' && !['wayback', 'livesat', 'pc'].includes(s.source)) return (s.frames || []).map((f) => f.media).filter(Boolean);
   return [];
 }
 /** Wait until every image of a scene is decoded (before rendering exact frames). */

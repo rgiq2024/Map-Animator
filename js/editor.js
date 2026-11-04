@@ -28,6 +28,8 @@ import { IMG_KINDS, readGeoImages, storeImage, imageFor, preloadImages, mediaOf,
 import { WaybackLayers, waybackReleases, yearlyReleases } from './wayback.js';
 import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, liveWeather, isSentinel } from './livesat.js';
 import { analysisFilter, movingTargets } from './analysis.js';
+import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
+import { cdseDayFrame } from './livesat.js';
 import { thermalFilter } from './hudplus.js';
 import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 import { drawLetterbox, TITLE_LOOKS } from './titles.js';
@@ -1415,6 +1417,7 @@ export function createEditor() {
     let st = null;
     try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
     if (k === 'sentinel') { addSentinel(b.dataset.sat || 's2_true'); return; }
+    if (k === 'pc') { addPC(b.dataset.col || 'sentinel-2-l2a'); return; }
     if (k === 'geovideo') {
       cancelDrawing();
       const L = newLayer('geovideo', quadGeom(fitQuad(9 / 16)), { start: newStart() });
@@ -1428,12 +1431,50 @@ export function createEditor() {
     if (k === 'oilspill') { pendingStyle = st; startAdd(k); showHint('Click around the oil slick (start at the ship / source) — then press Finish'); return; }
     startAdd(k);
   });
+  /** Real scenes from Microsoft Planetary Computer, picked by acquisition date. */
+  function addPC(col) {
+    cancelDrawing();
+    const L = newLayer('timeseries', null, { start: newStart() });
+    const to = new Date().toISOString().slice(0, 10), from = new Date(Date.now() - 90 * 86400e3).toISOString().slice(0, 10);
+    Object.assign(L.style, { source: 'pc', pcCol: col, pcLook: '', pcFrom: from, pcTo: to, pcCloud: 30, frames: [], opacity: 1, position: 'custom', pos: { x: 0.87, y: 0.24 }, labelSize: 0.55, bar: true, per: 2.4, fade: 0.8 });
+    L.name = PC_COLLECTIONS[col]?.name.split(' ·')[0] || 'Satellite scenes';
+    addLayer(L);
+    pcFind(L);
+  }
+  let pcList = null, pcListFor = '';
+  const viewBbox = () => {
+    const a = map.unproject([frame.x, frame.y + frame.h]), b = map.unproject([frame.x + frame.w, frame.y]);
+    return [Math.max(-180, a.lng), Math.max(-85, a.lat), Math.min(180, b.lng), Math.min(85, b.lat)].map((v) => +v.toFixed(5));
+  };
+  async function pcFind(L, cdse = false) {
+    const s = L.style;
+    const bbox = viewBbox();
+    s.pcBbox = bbox;
+    pcList = 'loading'; pcListFor = L.id;
+    renderLayerEditor();
+    try {
+      pcList = cdse
+        ? await cdseScenes({ sat: SAT_PRODUCTS[s.sat]?.sentinel || 2, bbox, from: s.pcFrom, to: s.pcTo, maxCloud: +s.pcCloud || 100 })
+        : await pcScenes({ collection: s.pcCol, bbox, from: s.pcFrom, to: s.pcTo, maxCloud: +s.pcCloud || 100 });
+      if (!pcList.length) toast('No scenes over this view in those dates — widen the dates or allow more cloud', 4600);
+    } catch (err) { pcList = null; toast(`Could not search the catalogue (${err.message || 'network'})`, 4600); }
+    if (selLayer === L.id) renderLayerEditor();
+  }
+  function pcListHtml(L) {
+    const s = L.style;
+    if (pcList === 'loading' && pcListFor === L.id) return '<p class="hint-line">Searching for real scenes over this view…</p>';
+    if (!Array.isArray(pcList) || pcListFor !== L.id) return '';
+    const have = new Set((s.frames || []).map((f) => f.date));
+    let h = `<div class="wb-list pc-list">${pcList.map((g) => `<label class="wb-item pc-item">${g.thumb ? `<img src="${esc(g.thumb)}" loading="lazy" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;flex:none">` : ''}<input type="checkbox" data-pcday="${g.day}" ${have.has(g.day) ? 'checked' : ''}><span>${g.label}<small class="muted"> · ${esc(g.platform || '')}${g.cloud != null ? ` · ${Math.round(g.cloud)}% cloud` : ''} · ${g.n} scene${g.n === 1 ? '' : 's'}</small></span></label>`).join('') || '<p class="muted small">No scenes found.</p>'}</div>`;
+    if (pcList.length) h += `<div class="btn-row wrap"><button class="btn sm" data-act="pcAll">Tick all ${pcList.length}</button><button class="btn sm" data-act="pcNone">Untick all</button><button class="btn sm primary" data-act="pcUse">Use ticked dates</button></div>`;
+    return h;
+  }
   /** Sentinel-1 / Sentinel-2 imagery by date as cross-fading map layers. */
   async function addSentinel(sat) {
     cancelDrawing();
     const L = newLayer('timeseries', null, { start: newStart() });
     const p = SAT_PRODUCTS[sat];
-    Object.assign(L.style, { source: 'livesat', sat, satMode: 'loop', count: sat === 's2_cloudless' ? 0 : 3, every: p.sentinel === 1 ? 12 : 10, window: p.sentinel === 1 ? 12 : 20, yearFrom: 2018, yearTo: 2024, frames: [], opacity: 1, position: 'top-right', labelSize: 0.55, bar: true });
+    Object.assign(L.style, { source: 'livesat', sat, satMode: 'loop', count: sat === 's2_cloudless' ? 0 : 3, every: p.sentinel === 1 ? 12 : 10, window: p.sentinel === 1 ? 12 : 20, yearFrom: 2018, yearTo: 2024, frames: [], opacity: 1, position: 'custom', pos: { x: 0.87, y: 0.24 }, labelSize: 0.55, bar: true });
     L.name = p.sentinel === 1 ? 'Sentinel-1 radar' : 'Sentinel-2';
     addLayer(L);
     if (p.src === 'cdse') { toast('Paste your Copernicus instance ID in the layer settings, then press Load imagery', 5200); return; }
@@ -2206,6 +2247,23 @@ export function createEditor() {
   function renderFrames(L) {
     const s = L.style, fr = s.frames || [];
     let h = '';
+    if (s.source === 'pc') {
+      const C = PC_COLLECTIONS[s.pcCol] || PC_COLLECTIONS['sentinel-2-l2a'];
+      h += '<h5>Real scenes · Microsoft Planetary Computer</h5>';
+      h += fRow('Satellite', `<select id="pc-col">${Object.entries(PC_COLLECTIONS).map(([k, c]) => `<option value="${k}" ${s.pcCol === k ? 'selected' : ''}>${c.name}</option>`).join('')}</select>`);
+      const looks = pcLooks[s.pcCol];
+      if (!looks) { pcRenders(s.pcCol).then((r) => { pcLooks[s.pcCol] = r; if (selLayer === L.id) renderLayerEditor(); }).catch(() => { pcLooks[s.pcCol] = []; }); h += '<p class="hint-line">Loading the looks…</p>'; }
+      else if (looks.length) h += fRow('Look', `<select id="pc-look">${looks.map((o) => `<option ${s.pcLook === o.name ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}</select>`);
+      h += `<div class="wb-pick"><div class="wb-range"><label>From<input type="date" id="pc-from" value="${esc(s.pcFrom || '')}"></label><label>To<input type="date" id="pc-to" value="${esc(s.pcTo || '')}"></label></div></div>`;
+      if (C.cloud) h += fRow('Most cloud allowed', `<select id="pc-cloud">${[5, 10, 20, 30, 50, 80, 100].map((x) => `<option value="${x}" ${+s.pcCloud === x ? 'selected' : ''}>${x === 100 ? 'Any' : `${x}%`}</option>`).join('')}</select>`);
+      h += '<div class="btn-row"><button class="btn sm primary" data-act="pcFind">🔍 Find scenes in this view</button></div>';
+      h += pcListHtml(L);
+      const mz = (looks || []).find((o) => o.name === s.pcLook)?.minZoom || (looks || [])[0]?.minZoom || 0;
+      h += `<p class="hint-line">${fr.length ? `${fr.length} date${fr.length === 1 ? '' : 's'} in the video: ${esc(fr[0].label)}${fr.length > 1 ? ` → ${esc(fr.at(-1).label)}` : ''}. ` : ''}Real acquisitions over the area in the video frame — each ticked day is a mosaic of that day’s scenes.${mz ? ` Imagery shows from zoom ${mz} — zoom in if the map stays empty.` : ''} ${C.sat === 1 ? 'Radar: sees through clouds and at night; calm water and oil slicks look dark.' : ''} Data: Microsoft Planetary Computer · contains modified Copernicus Sentinel data${s.pcCol.startsWith('landsat') || s.pcCol.startsWith('hls') ? ' · USGS / NASA Landsat' : ''}.</p>`;
+      h += '<h5>Dates (in order)</h5>';
+      h += `<ol class="frame-list">${fr.map((f, i) => `<li><span class="fr-n">${i + 1}</span><input data-b="frame:${i}:label" value="${esc(f.label || '')}" title="Label shown in the video"><small class="muted">${esc(f.date || '')}</small><span><button class="mini" data-act="frUp" data-i="${i}" title="Earlier">↑</button><button class="mini" data-act="frDown" data-i="${i}" title="Later">↓</button><button class="mini" data-act="frDel" data-i="${i}" title="Remove">✕</button></span></li>`).join('') || '<li class="empty">No dates yet — find scenes and tick the days you want.</li>'}</ol>`;
+      return h;
+    }
     if (s.source === 'livesat') {
       h += '<h5>Live satellite / radar</h5>';
       h += fRow('Imagery', `<select id="ls-prod">${Object.entries(SAT_PRODUCTS).map(([k, p]) => `<option value="${k}" ${s.sat === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`);
@@ -2221,6 +2279,14 @@ export function createEditor() {
           h += fRow('Last date', `<input type="date" id="ls-end" value="${esc((s.satEnd || '').slice(0, 10))}">`);
         }
         h += '<div class="btn-row"><button class="btn sm primary" data-act="lsLoad">Load imagery</button></div>';
+        if (P.src === 'cdse') {
+          s.pcFrom ||= new Date(Date.now() - 60 * 86400e3).toISOString().slice(0, 10); s.pcTo ||= new Date().toISOString().slice(0, 10);
+          h += '<h5>Or pick real acquisitions</h5>';
+          h += `<div class="wb-pick"><div class="wb-range"><label>From<input type="date" id="pc-from" value="${esc(s.pcFrom)}"></label><label>To<input type="date" id="pc-to" value="${esc(s.pcTo)}"></label></div></div>`;
+          if (P.sentinel === 2) h += fRow('Most cloud allowed', `<select id="pc-cloud">${[5, 10, 20, 30, 50, 80, 100].map((x) => `<option value="${x}" ${+(s.pcCloud || 30) === x ? 'selected' : ''}>${x === 100 ? 'Any' : `${x}%`}</option>`).join('')}</select>`);
+          h += '<div class="btn-row"><button class="btn sm" data-act="cdseFind">🔍 Find Sentinel passes over this view</button></div>';
+          h += pcListHtml(L);
+        }
         h += `<p class="hint-line">${fr.length ? `${fr.length} image${fr.length === 1 ? '' : 's'} · ${esc(fr[0].label)}${fr.length > 1 ? ` → ${esc(fr.at(-1).label)}` : ''}. ` : ''}${P.sentinel === 1 ? 'Sentinel-1 is radar: it sees through clouds and at night; calm water (and oil slicks) looks dark. A satellite passes every 6–12 days.' : 'Sentinel-2 passes every ~5 days; each date shows the clearest scene in its search window — widen the window if you see gaps or clouds.'} Zoom in (10 m pixels). Contains modified Copernicus Sentinel data.</p>`;
         return h;
       }
@@ -2355,7 +2421,19 @@ export function createEditor() {
     if (zoomTo) zoomToLayer(zoomTo);
     toast(items.some((r) => r.quad) ? 'Image placed from its georeference' : 'Image placed in the view — drag its corners to line it up with the map', 4200);
   });
+  const pcLooks = {};
   $('#layer-editor').addEventListener('change', (e) => {
+    const Lp = selLayer && layerById(selLayer);
+    if (Lp && ['pc-col', 'pc-look', 'pc-from', 'pc-to', 'pc-cloud'].includes(e.target.id)) {
+      const v = e.target.value;
+      if (e.target.id === 'pc-col') { Lp.style.pcCol = v; Lp.style.pcLook = ''; pcList = null; renderLayerEditor(); }
+      if (e.target.id === 'pc-look') { Lp.style.pcLook = v; if ((Lp.style.frames || []).length) toast('Press “Use ticked dates” to redraw the dates with this look', 3600); }
+      if (e.target.id === 'pc-from') Lp.style.pcFrom = v;
+      if (e.target.id === 'pc-to') Lp.style.pcTo = v;
+      if (e.target.id === 'pc-cloud') Lp.style.pcCloud = +v;
+      save();
+      return;
+    }
     if (e.target.id !== 'ls-prod') return;
     const L = selLayer && layerById(selLayer);
     if (!L) return;
@@ -2416,6 +2494,45 @@ export function createEditor() {
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
     }
     if (a === 'smLoad') $('#file-sm').click();
+    if (a === 'pcFind' || a === 'cdseFind') {
+      if (a === 'cdseFind' && $('#ls-wms')) { L.style.wmsUrl = $('#ls-wms').value; L.style.wmsLayer = $('#ls-layer').value; }
+      pcFind(L, a === 'cdseFind');
+    }
+    if (a === 'pcAll' || a === 'pcNone') $$('#layer-editor [data-pcday]').forEach((c) => { c.checked = a === 'pcAll'; });
+    if (a === 'pcUse' && Array.isArray(pcList)) {
+      const days = $$('#layer-editor [data-pcday]').filter((c) => c.checked).map((c) => c.dataset.pcday).sort();
+      if (!days.length) { toast('Tick at least one day'); return; }
+      if (days.length > 30) { toast('Up to 30 dates at a time'); return; }
+      const st = L.style;
+      try {
+        let frames;
+        if (st.source === 'pc') {
+          const looks = pcLooks[st.pcCol] || await pcRenders(st.pcCol).catch(() => []);
+          const look = looks.find((o) => o.name === st.pcLook) || looks[0];
+          if (!look) throw new Error('no looks for this satellite');
+          st.pcLook = look.name;
+          toast(`Preparing ${days.length} date${days.length === 1 ? '' : 's'}…`);
+          frames = [];
+          for (const day of days) {
+            const t = await pcDayTiles({ collection: st.pcCol, bbox: st.pcBbox || viewBbox(), day, options: look.options, maxCloud: +st.pcCloud || 100 });
+            const g = pcList.find((x) => x.day === day);
+            frames.push({ url: t.url, date: day, label: g?.label || day, minzoom: Math.max(0, look.minZoom || 0), maxzoom: t.maxzoom || 18 });
+          }
+          st.credit = `Microsoft Planetary Computer · ${st.pcCol.startsWith('landsat') ? 'USGS Landsat' : 'contains modified Copernicus Sentinel data'}`;
+        } else {
+          frames = days.map((day) => cdseDayFrame(st.sat, { wmsUrl: st.wmsUrl, wmsLayer: st.wmsLayer }, day));
+          st.credit = SAT_CREDITS.cdse;
+        }
+        pushUndo();
+        st.frames = frames;
+        st.per ||= 2.4; st.fade ??= 0.8;
+        setSeriesDuration(L);
+        renderLayerEditor();
+        commitLayers();
+        const mz = frames[0]?.minzoom || 0;
+        toast(mz && map.getZoom() < mz ? `Zoom in to ${mz}+ to see the imagery` : `${frames.length} real date${frames.length === 1 ? '' : 's'} added`, 4200);
+      } catch (err) { toast(`Could not prepare the imagery (${err.message || 'network'})`, 4800); }
+    }
     if (a === 'mcShow' || a === 'mcAdd' || a === 'mcDel') {
       const k = btn.dataset.k || '';
       const key = `hl${k}List`;
