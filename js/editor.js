@@ -15,6 +15,7 @@ import { addAudioFile, mixProject, playFrom, stopPlayback, startRecording, stopR
 import { projectFileJSON, deleteMedia } from './store.js';
 import { drawDepthOfField, drawVignette, starfield } from './effects.js';
 import { FX_FORMS } from './fx.js';
+import { MC_EDIT, hlRects } from './storyfx.js';
 import { ModelLayer, BUILTIN_MODELS, inspectModelFile } from './models3d.js';
 import { seekScene, videoFor } from './videofx.js';
 import { buildEvents, defaultSound, MUSIC, SFX_KINDS, hasSound } from './sfx.js';
@@ -295,6 +296,7 @@ export function createEditor() {
     drawVignette(octx, fr, +scene().camera.lens?.vignette || 0);
     drawLetterbox(octx, fr, scene().look, t, unit);
     hits.boxes = [];
+    MC_EDIT.info = null; MC_EDIT.sel = viewMode === 'edit' && step === 'layers' ? selLayer : null;
     renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: hits.boxes });
     drawBranding(octx, project.brand, fr, unit, sceneOffset() + Math.max(0, (model.outTime ? model.outTime(t) ?? 0 : t - (model.trimIn || 0))));
     {
@@ -459,6 +461,7 @@ export function createEditor() {
       const h = hits.layerHandles.find((q) => (q.x - p[0]) ** 2 + (q.y - p[1]) ** 2 <= r * r);
       const gz = hits.gizmo && hitGizmo(hits.gizmo, p, overlay.width / stage.clientWidth);
       if (gz) { e.preventDefault(); startGizmo(gz, p, e); return; }
+      if (markPicture(p, e)) return;
       const box = hitBox(p);
       if (box) { e.preventDefault(); startBoxDrag(box, p, e); return; }
       if (h) { e.preventDefault(); startDrag({ kind: 'vertex', id: h.id, ring: h.ring, i: h.i }, e); return; }
@@ -476,6 +479,61 @@ export function createEditor() {
       const s = hitSign(p);
       if (s != null) { e.preventDefault(); startDrag({ kind: 'sign', i: s }, e); }
     }
+  }
+
+  /** Match cut picture page: draw, move, resize or remove highlight boxes with the mouse. */
+  function markPicture(p0, e) {
+    const inf = MC_EDIT.info;
+    const L = inf && selLayer === inf.id && layerById(inf.id);
+    if (!L || L.locked) return false;
+    const k = inf.key, mode = L.style[`img${k}Mouse`] || 'pan';
+    const toImg = (p) => { const q = inf.inv.transformPoint(new DOMPoint(p[0], p[1])); return [q.x / inf.iw, q.y / inf.ih]; };
+    const u0 = toImg(p0);
+    const rects = hlRects(L.style, k).map((r) => ({ ...r }));
+    const tol = 8 * (overlay.width / stage.clientWidth);
+    const pxW = Math.abs(toImg([p0[0] + tol, p0[1]])[0] - u0[0]), pxH = Math.abs(toImg([p0[0], p0[1] + tol])[1] - u0[1]);
+    let hit = -1, corner = false;
+    for (let i = rects.length - 1; i >= 0; i--) {
+      const r = rects[i];
+      if (Math.abs(u0[0] - (r.x + r.w)) < pxW && Math.abs(u0[1] - (r.y + r.h)) < pxH) { hit = i; corner = true; break; }
+      if (u0[0] >= r.x && u0[0] <= r.x + r.w && u0[1] >= r.y && u0[1] <= r.y + r.h) { hit = i; break; }
+    }
+    if (mode === 'pan' || (mode === 'erase' && hit < 0)) return false;
+    e.preventDefault();
+    const snapshot = JSON.stringify({ scene: scene(), audio: project.audio || [] });
+    const commit = () => { L.style[`hl${k}List`] = rects; undoStack.push(snapshot); updateUndo(); renderLayerEditor(); save(); repaint(); };
+    if (mode === 'erase') { rects.splice(hit, 1); commit(); return true; }
+    map.dragPan.disable();
+    const rect = stage.getBoundingClientRect();
+    const kk = overlay.width / stage.clientWidth;
+    let cur = hit, moved = false;
+    const orig = hit >= 0 ? { ...rects[hit] } : null;
+    const move = (ev) => {
+      const p = [(ev.clientX - rect.left) * kk, (ev.clientY - rect.top) * kk];
+      if (!moved && Math.hypot(p[0] - p0[0], p[1] - p0[1]) < 3) return;
+      moved = true;
+      const u = toImg(p);
+      const c = (v) => Math.max(0, Math.min(1, v));
+      if (hit >= 0 && !corner) { rects[hit].x = c(orig.x + u[0] - u0[0]); rects[hit].y = c(orig.y + u[1] - u0[1]); }
+      else if (hit >= 0) { rects[hit].w = Math.max(0.005, u[0] - orig.x); rects[hit].h = Math.max(0.003, u[1] - orig.y); }
+      else {
+        if (cur < 0) { cur = rects.length; rects.push({}); }
+        Object.assign(rects[cur], { x: c(Math.min(u0[0], u[0])), y: c(Math.min(u0[1], u[1])), w: Math.max(0.005, Math.abs(u[0] - u0[0])), h: Math.max(0.003, Math.abs(u[1] - u0[1])) });
+      }
+      for (const r of rects) for (const f of ['x', 'y', 'w', 'h']) r[f] = +r[f].toFixed(4);
+      L.style[`hl${k}List`] = rects;
+      repaint();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      map.dragPan.enable();
+      suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
+      if (moved) commit();
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    return true;
   }
 
   /** On-screen element (caption, chart, text…) under canvas point p. */
@@ -1897,6 +1955,8 @@ export function createEditor() {
     if (key.startsWith('frame:')) { const [, i, f] = key.split(':'); const fr = L.style.frames?.[+i]; if (fr) fr[f] = v; repaint(); save(); return; }
     setPath(L, key, v);
     eventsCache = null;
+    if (L.kind === 'matchcut' && /^style\.hl\d?Clear$/.test(key)) { const k = key.slice(9, -5); delete L.style[`hl${k}List`]; delete L.style[`hl${k}Clear`]; renderLayerEditor(); commitLayers(); return; }
+    if (L.kind === 'matchcut' && /^style\.img\d?Mouse$/.test(key)) { repaint(); renderLayerEditor(); return; }
     if (['style.per', 'style.fade'].includes(key) && L.kind === 'timeseries') { L.duration = +(Math.max(1, (L.style.frames || []).length) * (+L.style.per || 2)).toFixed(2); eventsCache = null; }
     if (key === 'anim' || key === 'style.marker' || key === 'style.tickerStyle' || key === 'style.key' || key === 'style.layout' || key === 'style.sound' || key === 'style.variant' || key === 'style.look' || key === 'style.mode' || (key === 'style.label' && L.kind === 'timeseries') || key === 'style.labels' || key === 'style.border' || key === 'style.position') { renderLayerEditor(); commitLayers(); return; }
     if ((L.kind === 'model3d' && ['style.livery', 'style.cars'].includes(key)) || (L.kind === 'collision' && ['style.modelA', 'style.modelB', 'style.liveryA', 'style.liveryB'].includes(key))) { if (final) renderLayerEditor(); commitLayers(); return; }
