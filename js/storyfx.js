@@ -57,7 +57,7 @@ export const SF_FORMS = {
   photofx: [['style.look', 'Animation', 'select', PHOTO_LOOKS], ['style.media', 'Photo A', 'image'], ['style.media2', 'Photo B', 'image'], ['style.media3', 'Photo C', 'image'], ['style.count', 'Cards', 'range', [3, 16, 1]], ['style.colorful', 'Colour cards when there is no photo', 'switch'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.size', 'Size', 'range', [0.3, 3, 0.05]], ['style.bg', 'Background (0 = see the map, 1 = white)', 'range', [0, 1, 0.01]], ['style.title', 'Title over the photos', 'text']],
   newsbox: [['style.look', 'Look', 'select', NEWSBOX_LOOKS], ['style.tab', 'Tab text (year)', 'text', null, (L) => L.style.look === 'banner'], ['style.title', 'Title / text', 'text'], ['style.sub', 'Subtitle', 'text', null, (L) => L.style.look === 'banner'], ['style.text', 'Body text (“ / ” starts a new line)', 'textarea', null, (L) => L.style.look === 'card'], ['style.width', 'Card width', 'range', [300, 1000, 5], (L) => L.style.look === 'card'], ['style.color', 'Colour', 'color', null, (L) => ['banner', 'card'].includes(L.style.look)], ['style.color2', 'Gradient to', 'color', null, (L) => L.style.look === 'banner'], ['style.textColor', 'Text colour', 'color', null, (L) => ['date', 'source'].includes(L.style.look)], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]], ['style.position', 'Position (or drag it)', 'select', { '': 'Default', 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', center: 'Centre' }]],
   zoomframe: [['style.caption', 'Caption', 'text'], ['style.media', 'Photo in the frame', 'image'], ['style.clip', 'Video in the frame', 'video'], ['style.zoom', 'Zoom on the map (when there is no photo / video)', 'range', [1.2, 8, 0.1]], ['style.width', 'Frame width', 'range', [120, 700, 1]], ['style.aspect', 'Frame height ÷ width', 'range', [0.4, 1.5, 0.01]], ['style.dx', 'Frame offset ←→ (or drag it)', 'range', [-700, 700, 1]], ['style.dy', 'Frame offset ↑↓', 'range', [-500, 500, 1]], ['style.color', 'Colour', 'color'], ['style.loop', 'Loop the video', 'switch']],
-  matchcut: [['style.phrase', 'Highlighted phrase (stays in place)', 'text'], ['style.pages', 'Pages in order — news, magazine, web, tags, image, image2, image3 (one per line)', 'textarea'], ['style.text', 'Your own text (paste the article — if it contains the phrase, that part is highlighted)', 'textarea'], ['style.headline', 'Headline over the text', 'text'], ['style.masthead', 'Newspaper name', 'text'], ['style.byline', 'Web byline', 'text'], ['style.tags', 'Magazine / tag-strip words (separate with |)', 'text'], ['style.media', 'Picture 1 (newspaper cutting, screenshot…)', 'image'], ['style.imgAuto', 'Picture 1: zoom in on the highlight automatically', 'switch', null, (L) => /\bimage\b/.test(L.style.pages || '')], ['style.imgMouse', 'Picture 1: mouse on the video', 'select', { pan: 'Move the picture (drag) · zoom with the mouse wheel', mark: 'Draw highlights — drag across words / lines; drag a box to move it, its corner to resize', erase: 'Remove highlights — click a box' }, (L) => /\bimage\b/.test(L.style.pages || '')], ['style.hlClear', 'Picture 1: reset highlights (back to one box)', 'switch', null, (L) => /\bimage\b/.test(L.style.pages || '') && Array.isArray(L.style.hlList)], ['style.imgZoom', 'Picture 1: zoom (drag the picture on the video to move it)', 'range', [0.2, 6, 0.05], (L) => /\bimage\b/.test(L.style.pages || '')], ['style.hlX', 'Picture 1: highlight from left', 'range', [0, 1, 0.005], (L) => /\bimage\b/.test(L.style.pages || '') && !Array.isArray(L.style.hlList)], ['style.hlY', 'Picture 1: highlight from top', 'range', [0, 1, 0.005], (L) => /\bimage\b/.test(L.style.pages || '') && !Array.isArray(L.style.hlList)], ['style.hlW', 'Picture 1: highlight width', 'range', [0.02, 1, 0.005], (L) => /\bimage\b/.test(L.style.pages || '') && !Array.isArray(L.style.hlList)], ['style.hlH', 'Picture 1: highlight height', 'range', [0.01, 0.5, 0.005], (L) => /\bimage\b/.test(L.style.pages || '') && !Array.isArray(L.style.hlList)], ['style.media2', 'Picture 2', 'image'], ['style.img2Auto', 'Picture 2: zoom in on the highlight automatically', 'switch', null, (L) => /image2/.test(L.style.pages || '')], ['style.img2Mouse', 'Picture 2: mouse on the video', 'select', { pan: 'Move the picture (drag) · zoom with the mouse wheel', mark: 'Draw highlights — drag across words / lines; drag a box to move it, its corner to resize', erase: 'Remove highlights — click a box' }, (L) => /image2/.test(L.style.pages || '')], ['style.hl2Clear', 'Picture 2: reset highlights (back to one box)', 'switch', null, (L) => /image2/.test(L.style.pages || '') && Array.isArray(L.style.hl2List)], ['style.img2Zoom', 'Picture 2: zoom (drag the picture on the video to move it)', 'range', [0.2, 6, 0.05], (L) => /image2/.test(L.style.pages || '')], ['style.hl2X', 'Picture 2: highlight from left', 'range', [0, 1, 0.005], (L) => /image2/.test(L.style.pages || '') && !Array.isArray(L.style.hl2List)], ['style.hl2Y', 'Picture 2: highlight from top', 'range', [0, 1, 0.005], (L) => /image2/.test(L.style.pages || '') && !Array.isArray(L.style.hl2List)], ['style.hl2W', 'Picture 2: highlight width', 'range', [0.02, 1, 0.005], (L) => /image2/.test(L.style.pages || '') && !Array.isArray(L.style.hl2List)], ['style.hl2H', 'Picture 2: highlight height', 'range', [0.01, 0.5, 0.005], (L) => /image2/.test(L.style.pages || '') && !Array.isArray(L.style.hl2List)], ['style.media3', 'Picture 3', 'image'], ['style.img3Auto', 'Picture 3: zoom in on the highlight automatically', 'switch', null, (L) => /image3/.test(L.style.pages || '')], ['style.img3Mouse', 'Picture 3: mouse on the video', 'select', { pan: 'Move the picture (drag) · zoom with the mouse wheel', mark: 'Draw highlights — drag across words / lines; drag a box to move it, its corner to resize', erase: 'Remove highlights — click a box' }, (L) => /image3/.test(L.style.pages || '')], ['style.hl3Clear', 'Picture 3: reset highlights (back to one box)', 'switch', null, (L) => /image3/.test(L.style.pages || '') && Array.isArray(L.style.hl3List)], ['style.img3Zoom', 'Picture 3: zoom (drag the picture on the video to move it)', 'range', [0.2, 6, 0.05], (L) => /image3/.test(L.style.pages || '')], ['style.hl3X', 'Picture 3: highlight from left', 'range', [0, 1, 0.005], (L) => /image3/.test(L.style.pages || '') && !Array.isArray(L.style.hl3List)], ['style.hl3Y', 'Picture 3: highlight from top', 'range', [0, 1, 0.005], (L) => /image3/.test(L.style.pages || '') && !Array.isArray(L.style.hl3List)], ['style.hl3W', 'Picture 3: highlight width', 'range', [0.02, 1, 0.005], (L) => /image3/.test(L.style.pages || '') && !Array.isArray(L.style.hl3List)], ['style.hl3H', 'Picture 3: highlight height', 'range', [0.01, 0.5, 0.005], (L) => /image3/.test(L.style.pages || '') && !Array.isArray(L.style.hl3List)], ['style.hold', 'Seconds per page', 'range', [0.4, 4, 0.05]], ['style.zoom', 'Zoom on the phrase', 'range', [1, 3, 0.05]], ['style.highlight', 'Highlighter colour', 'color']],
+  matchcut: [['style.phrase', 'Highlighted phrase (stays in place)', 'text'], ['style.pages', 'Pages in order — news, magazine, web, tags, image, image2, image3 (one per line)', 'textarea'], ['style.text', 'Your own text (paste the article — if it contains the phrase, that part is highlighted)', 'textarea'], ['style.headline', 'Headline over the text', 'text'], ['style.masthead', 'Newspaper name', 'text'], ['style.byline', 'Web byline', 'text'], ['style.tags', 'Magazine / tag-strip words (separate with |)', 'text'], ['style.media', 'Picture 1 (newspaper cutting, screenshot…)', 'image'], ['style.imgAuto', 'Picture 1: zoom in on the highlight automatically', 'switch', null, (L) => /\bimage\b/.test(L.style.pages || '')], ['style.imgZoom', 'Picture 1: zoom (mouse wheel on the video; drag to move it when “Move the picture” is chosen)', 'range', [0.2, 6, 0.05], (L) => /\bimage\b/.test(L.style.pages || '')], ['style.media2', 'Picture 2', 'image'], ['style.img2Auto', 'Picture 2: zoom in on the highlight automatically', 'switch', null, (L) => /image2/.test(L.style.pages || '')], ['style.img2Zoom', 'Picture 2: zoom (mouse wheel on the video; drag to move it when “Move the picture” is chosen)', 'range', [0.2, 6, 0.05], (L) => /image2/.test(L.style.pages || '')], ['style.media3', 'Picture 3', 'image'], ['style.img3Auto', 'Picture 3: zoom in on the highlight automatically', 'switch', null, (L) => /image3/.test(L.style.pages || '')], ['style.img3Zoom', 'Picture 3: zoom (mouse wheel on the video; drag to move it when “Move the picture” is chosen)', 'range', [0.2, 6, 0.05], (L) => /image3/.test(L.style.pages || '')], ['style.hold', 'Seconds per page', 'range', [0.4, 4, 0.05]], ['style.zoom', 'Zoom on the phrase', 'range', [1, 3, 0.05]], ['style.highlight', 'Highlighter colour', 'color'], ['style.hlLook', 'Highlighter style', 'select', { marker: 'Highlighter pen (sweeps across)', pen: 'Felt-tip marker (rounded, hand-drawn)', underline: 'Underline', box: 'Box drawn around', circle: 'Circle drawn around', strike: 'Strike-through', spot: 'Spotlight (rest of the page darkens)' }], ['style.hlOpacity', 'Highlighter strength', 'range', [0.15, 1, 0.05]], ['style.hlOrder', 'Several highlights', 'select', { seq: 'One after another (reading order)', together: 'All at the same time' }], ['style.hlAt', 'Highlighting starts (share of the page time)', 'range', [0, 0.8, 0.01]], ['style.hlDur', 'Highlighting takes (share of the page time)', 'range', [0.1, 0.9, 0.01]], ['style.hlDim', 'Darken the rest of the picture', 'switch']],
 };
 export const SF_SET = new Set(Object.keys(SF_KINDS));
 export const SF_SCREEN = new Set(['photofx', 'matchcut', 'newsbox']);
@@ -297,8 +297,9 @@ function matchCut(ctx, L, tm, o) {
   if (!pages.length) return;
   const per = Math.max(0.3, +s.hold || 1.6);
   const tau = tm.edit ? per * 0.6 : tm.tau;
-  const idx = Math.min(pages.length - 1, Math.floor(tau / per));
-  const lu = clamp((tau - idx * per) / per, 0, 1);
+  let idx = Math.min(pages.length - 1, Math.floor(tau / per));
+  let lu = clamp((tau - idx * per) / per, 0, 1);
+  if (MC_EDIT.sel === L.id && MC_EDIT.page != null) { const j = pages.indexOf(MC_EDIT.page ? `image${MC_EDIT.page}` : 'image'); if (j >= 0) { idx = j; lu = 0.99; } }
   const kind = pages[idx];
   const phrase = String(s.phrase || 'match cut');
   const cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2;
@@ -398,11 +399,38 @@ function matchCut(ctx, L, tm, o) {
 }
 
 /** Editor hook: which layer is selected (set by the editor) and where the last picture page was drawn. */
-export const MC_EDIT = { sel: null, info: null };
+export const MC_EDIT = { sel: null, info: null, page: null };
+/** One highlight box r (fractions of the picture, iw × ih px) drawn to progress sw. */
+function drawHighlight(ctx, look, r, sw, iw, ih, col, scale) {
+  const x = r.x * iw, y = r.y * ih, w = r.w * iw, h = r.h * ih;
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (look === 'marker' || look === 'spot') {
+    if (look === 'spot') { ctx.restore(); return; }
+    ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = col;
+    const pad = h * 0.12;
+    ctx.fillRect(x - pad, y - pad, (w + pad * 2) * sw, h + pad * 2);
+  } else if (look === 'pen') {
+    ctx.globalCompositeOperation = 'multiply'; ctx.strokeStyle = col; ctx.lineWidth = h * 1.05;
+    ctx.beginPath(); ctx.moveTo(x + h * 0.2, y + h * 0.56); ctx.lineTo(x + h * 0.2 + (w - h * 0.4) * sw, y + h * 0.46); ctx.stroke();
+  } else if (look === 'underline' || look === 'strike') {
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(h * 0.13, 2 / scale);
+    const yy = look === 'underline' ? y + h * 1.02 : y + h * 0.55;
+    ctx.beginPath(); ctx.moveTo(x, yy); ctx.quadraticCurveTo(x + w * sw * 0.5, yy + h * 0.06, x + w * sw, yy - h * 0.03); ctx.stroke();
+  } else if (look === 'box' || look === 'circle') {
+    ctx.strokeStyle = col; ctx.lineWidth = Math.max(h * 0.1, 2.5 / scale);
+    ctx.beginPath();
+    let len;
+    if (look === 'box') { const p = h * 0.18; ctx.rect(x - p, y - p, w + p * 2, h + p * 2); len = 2 * (w + h + p * 4); }
+    else { const rx = w * 0.58 + h * 0.2, ry = h * 0.9; ctx.ellipse(x + w / 2, y + h / 2, rx, ry, -0.03, Math.PI * 0.9, Math.PI * 0.9 + Math.PI * 2.08); len = Math.PI * 2.08 * Math.sqrt((rx * rx + ry * ry) / 2); }
+    ctx.setLineDash([len * sw, len * 2]); ctx.stroke();
+  }
+  ctx.restore();
+}
 /** Highlight boxes of picture key ('' | '2' | '3') as fractions of the picture. */
 export function hlRects(s, key) {
   const list = s[`hl${key}List`];
-  if (Array.isArray(list)) return list.map((r) => ({ x: clamp(+r.x || 0, 0, 1), y: clamp(+r.y || 0, 0, 1), w: clamp(+r.w || 0.05, 0.005, 1), h: clamp(+r.h || 0.03, 0.003, 1) }));
+  if (Array.isArray(list)) return list.map((r) => ({ ...r, x: clamp(+r.x || 0, 0, 1), y: clamp(+r.y || 0, 0, 1), w: clamp(+r.w || 0.05, 0.005, 1), h: clamp(+r.h || 0.03, 0.003, 1) }));
   const num = (v, d) => (v === '' || v == null || !isFinite(+v) ? d : +v);
   return [{ x: clamp(num(s[`hl${key}X`], 0.3), 0, 1), y: clamp(num(s[`hl${key}Y`], 0.45), 0, 1), w: clamp(num(s[`hl${key}W`], 0.25), 0.01, 1), h: clamp(num(s[`hl${key}H`], 0.06), 0.005, 1) }];
 }
@@ -427,7 +455,7 @@ function imagePage(ctx, L, tm, o, kind, lu, idx, n, per, tau) {
   const auto = s[`img${key}Auto`] !== false;
   const userZ = clamp(num(s[`img${key}Zoom`], 1), 0.1, 8);
   const editing = MC_EDIT.sel === L.id;
-  const live = tm.edit || (editing && (s[`img${key}Mouse`] || 'pan') !== 'pan');
+  const live = tm.edit || (editing && (s[`img${key}Mouse`] || 'mark') !== 'pan');
   let scale, cxImg, cyImg;
   if (auto) {
     // scaled so the highlighted area fills about 40 % of the frame width, centred on it
@@ -450,22 +478,31 @@ function imagePage(ctx, L, tm, o, kind, lu, idx, n, per, tau) {
   ctx.drawImage(im.bmp, 0, 0);
   // where the picture is on screen, so the editor can draw / move / remove highlights on it
   try { MC_EDIT.info = { id: L.id, key, inv: ctx.getTransform().inverse(), iw, ih, rects }; } catch { /* no DOMMatrix */ }
-  // highlighter marker sweeping across each box in reading order, one after another
+  // highlighter: each box swept / drawn in reading order (or all together)
   const order = rects.map((r, i) => [r, i]).sort((a, b) => (Math.abs(a[0].y - b[0].y) < Math.min(a[0].h, b[0].h) * 0.5 ? a[0].x - b[0].x : a[0].y - b[0].y));
   const total = order.reduce((a, [r]) => a + r.w, 0) || 1;
-  const prog = live ? 1 : easeOut(clamp((lu - 0.12) / 0.55, 0, 1));
+  const at = clamp(num(s.hlAt, 0.12), 0, 0.9), dur = clamp(num(s.hlDur, 0.55), 0.05, 1);
+  const prog = live ? 1 : easeOut(clamp((lu - at) / dur, 0, 1));
+  const together = s.hlOrder === 'together';
+  const op = clamp(num(s.hlOpacity, 0.85), 0.05, 1);
+  const prs = [];
   let acc = 0;
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = hexA(s.highlight || '#ffe14d', 0.85);
   for (const [r] of order) {
     const a0 = acc / total, a1 = (acc + r.w) / total; acc += r.w;
-    const sw = clamp((prog - a0) / Math.max(1e-6, a1 - a0), 0, 1);
-    if (sw <= 0) continue;
-    const pad = r.h * ih * 0.12;
-    ctx.fillRect(r.x * iw - pad, r.y * ih - pad, (r.w * iw + pad * 2) * sw, r.h * ih + pad * 2);
+    prs.push([r, together ? prog : clamp((prog - a0) / Math.max(1e-6, a1 - a0), 0, 1)]);
   }
+  if (s.hlDim || (s.hlLook === 'spot')) {
+    // darken everything except the highlighted boxes
+    ctx.save();
+    ctx.fillStyle = `rgba(0,0,0,${0.55 * prog})`;
+    ctx.beginPath(); ctx.rect(-iw, -ih, iw * 3, ih * 3);
+    for (const [r] of prs) { const pd = r.h * ih * 0.25; ctx.rect(r.x * iw - pd, r.y * ih - pd, r.w * iw + pd * 2, r.h * ih + pd * 2); }
+    ctx.fill('evenodd');
+    ctx.restore();
+  }
+  for (const [r, sw] of prs) if (sw > 0) drawHighlight(ctx, r.look || s.hlLook || 'marker', r, sw, iw, ih, hexA(r.color || s.highlight || '#ffe14d', op), scale);
   ctx.globalCompositeOperation = 'source-over';
-  if (editing && (s[`img${key}Mouse`] || 'pan') !== 'pan') {
+  if (editing && (s[`img${key}Mouse`] || 'mark') !== 'pan') {
     // outlines and numbers while you mark the picture
     const lw = 1.5 / scale;
     ctx.lineWidth = lw; ctx.setLineDash([6 / scale, 4 / scale]);

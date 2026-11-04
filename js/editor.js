@@ -297,6 +297,7 @@ export function createEditor() {
     drawLetterbox(octx, fr, scene().look, t, unit);
     hits.boxes = [];
     MC_EDIT.info = null; MC_EDIT.sel = viewMode === 'edit' && step === 'layers' ? selLayer : null;
+    if (MC_EDIT.sel !== MC_EDIT.last) { MC_EDIT.page = null; MC_EDIT.last = MC_EDIT.sel; }
     renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: hits.boxes });
     drawBranding(octx, project.brand, fr, unit, sceneOffset() + Math.max(0, (model.outTime ? model.outTime(t) ?? 0 : t - (model.trimIn || 0))));
     {
@@ -486,7 +487,7 @@ export function createEditor() {
     const inf = MC_EDIT.info;
     const L = inf && selLayer === inf.id && layerById(inf.id);
     if (!L || L.locked) return false;
-    const k = inf.key, mode = L.style[`img${k}Mouse`] || 'pan';
+    const k = inf.key, mode = L.style[`img${k}Mouse`] || 'mark';
     const toImg = (p) => { const q = inf.inv.transformPoint(new DOMPoint(p[0], p[1])); return [q.x / inf.iw, q.y / inf.ih]; };
     const u0 = toImg(p0);
     const rects = hlRects(L.style, k).map((r) => ({ ...r }));
@@ -1790,7 +1791,8 @@ export function createEditor() {
     const pages = String(L.style.pages || '').split('\n').map((x) => x.trim().toLowerCase()).filter(Boolean);
     const per = Math.max(0.3, +L.style.hold || 1.6);
     const idx = Math.min(pages.length - 1, Math.max(0, Math.floor((time - L.start) / per)));
-    const pg = pages[idx] || '';
+    const inf = MC_EDIT.info;
+    const pg = inf && inf.id === L.id ? `image${inf.key}` : pages[idx] || '';
     if (!pg.startsWith('image')) return;
     e.preventDefault(); e.stopPropagation();
     const k = `img${pg.slice(5)}Zoom`;
@@ -1906,6 +1908,7 @@ export function createEditor() {
         if (polys.length) h += `<div class="btn-row"><select id="sm-region">${polys.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="smRegion">Use this region</button></div>`;
         h += '<p class="hint-line">CSV with latitude / longitude columns and a number column (population, sales…). The first number column is used. Drag the region corners to reshape it.</p>';
       }
+      if (L.kind === 'matchcut') h += highlightPanel(L);
       if (L.kind === 'collision' && L.geom?.type === 'LineString') {
         h += `<h5>Place the track</h5>
           <div class="btn-row"><button class="btn sm primary" data-act="colSnap">🛤 Snap to the real railway</button></div>
@@ -1939,6 +1942,29 @@ export function createEditor() {
     let o = obj;
     for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
     o[ks.at(-1)] = v;
+  }
+  /** Match cut: list of highlight boxes per picture, each with its own properties. */
+  function highlightPanel(L) {
+    const s = L.style;
+    const pgs = String(s.pages || '').split('\n').map((x) => x.trim().toLowerCase());
+    const LOOK = { '': 'Same as “Highlighter style”', marker: 'Highlighter pen', pen: 'Felt-tip marker', underline: 'Underline', box: 'Box around', circle: 'Circle around', strike: 'Strike-through' };
+    let h = '';
+    for (const k of ['', '2', '3']) {
+      if (!pgs.includes(`image${k}`)) continue;
+      if (!Array.isArray(s[`hl${k}List`])) s[`hl${k}List`] = hlRects(s, k);
+      const list = s[`hl${k}List`], n = k || '1', on = MC_EDIT.page === k;
+      h += `<h5>Highlights on picture ${n} (${list.length})</h5>`;
+      h += `<div class="btn-row"><button class="btn sm ${on ? 'primary' : ''}" data-act="mcShow" data-k="${k}">${on ? `✓ Picture ${n} is shown — click to go back` : `👁 Show picture ${n} to mark it`}</button><button class="btn sm" data-act="mcAdd" data-k="${k}">＋ Add highlight</button></div>`;
+      h += fRow('Mouse on the video', fSel(`style.img${k}Mouse`, s[`img${k}Mouse`] || 'mark', { mark: 'Draw · move · resize highlights', pan: 'Move the picture', erase: 'Click a highlight to remove it' }));
+      h += '<p class="hint-line">Drag across any words or lines on the video to highlight them — one drag per word, phrase or line, as many as you like. Drag inside a box to move it, its bottom-right corner to resize. Mouse wheel zooms the picture.</p>';
+      list.forEach((r, i) => {
+        const b = `style.hl${k}List.${i}`;
+        h += `<div class="hl-item" style="border:1px solid var(--line,#333);border-radius:8px;padding:6px 8px;margin:6px 0">
+          <div class="btn-row"><b>#${i + 1}</b>${fSel(`${b}.look`, r.look || '', LOOK)}${fColor(`${b}.color`, r.color || s.highlight || '#ffe14d')}<button class="btn sm" data-act="mcDel" data-k="${k}" data-i="${i}" title="Remove this highlight">✕</button></div>
+          ${fRow('From left', fRange(`${b}.x`, r.x, 0, 1, 0.002))}${fRow('From top', fRange(`${b}.y`, r.y, 0, 1, 0.002))}${fRow('Width', fRange(`${b}.w`, r.w, 0.005, 1, 0.002))}${fRow('Height', fRange(`${b}.h`, r.h, 0.003, 0.4, 0.001))}</div>`;
+      });
+    }
+    return h;
   }
   let layerEditTimer = null;
   function onLayerField(e, final) {
@@ -2319,6 +2345,22 @@ export function createEditor() {
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
     }
     if (a === 'smLoad') $('#file-sm').click();
+    if (a === 'mcShow' || a === 'mcAdd' || a === 'mcDel') {
+      const k = btn.dataset.k || '';
+      const key = `hl${k}List`;
+      if (a === 'mcShow') MC_EDIT.page = MC_EDIT.page === k ? null : k;
+      if (a === 'mcAdd') {
+        pushUndo();
+        const list = Array.isArray(L.style[key]) ? L.style[key] : (L.style[key] = hlRects(L.style, k));
+        const n = list.length;
+        list.push({ x: +(0.1 + (n % 4) * 0.05).toFixed(3), y: +(0.2 + (n % 6) * 0.1).toFixed(3), w: 0.3, h: 0.05 });
+        MC_EDIT.page = k;
+        if (!L.style[`img${k}Mouse`] || L.style[`img${k}Mouse`] === 'erase') L.style[`img${k}Mouse`] = 'mark';
+        save();
+      }
+      if (a === 'mcDel') { pushUndo(); (L.style[key] || []).splice(+btn.dataset.i, 1); save(); }
+      renderLayerEditor(); repaint();
+    }
     if (a === 'colRot' || a === 'colMove' || a === 'colLen') {
       pushUndo();
       const cs = L.geom.coordinates;
