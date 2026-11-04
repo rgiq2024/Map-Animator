@@ -17,6 +17,7 @@ import { SM_KINDS, SM_ANIMS, SM_DEFAULTS, SM_FORMS, SM_SET, smPhases, drawSmartM
 import { imageFor as smImage } from './geoimage.js';
 import { SF_KINDS, SF_ANIMS, SF_DEFAULTS, SF_FORMS, SF_SET, SF_SCREEN, sfPhases, drawStoryFx } from './storyfx.js';
 import { trainRun } from './trains3d.js';
+import { SH_KINDS, SH_ANIMS, SH_DEFAULTS, SH_FORMS, SH_SET, shPhases, drawShape } from './shapes.js';
 import { VZ_KINDS, VZ_ANIMS, VZ_DEFAULTS, VZ_FORMS, VZ_SET, VZ_SCREEN, vzPhases, drawViz } from './vizfx.js';
 import { TWIN_KINDS, TWIN_ANIMS, TWIN_DEFAULTS, TWIN_FORMS, TWIN_SET, twinPhases, drawTwin, drawSensor } from './twin.js';
 import { HZ_KINDS, HZ_ANIMS, HZ_DEFAULTS, HZ_FORMS, HZ_SET, hzPhases, drawHazard } from './hazards.js';
@@ -48,6 +49,7 @@ export const FX_KINDS = {
   ...SM_KINDS,
   ...VZ_KINDS,
   ...SF_KINDS,
+  ...SH_KINDS,
   ...TWIN_KINDS,
   crowd: { name: 'People / crowd', icon: '🧍', geom: 'point', desc: 'Animated people: a crowd, a protest march, people walking, gathering or running away' },
   ...HZ_KINDS,
@@ -88,6 +90,7 @@ export const FX_ANIMS = {
   ...SM_ANIMS,
   ...VZ_ANIMS,
   ...SF_ANIMS,
+  ...SH_ANIMS,
   ...TWIN_ANIMS,
   crowd: { none: 'Already there', appear: 'Appear one by one' },
   ...HZ_ANIMS,
@@ -124,6 +127,7 @@ export const FX_DEFAULTS = {
   ...SM_DEFAULTS,
   ...VZ_DEFAULTS,
   ...SF_DEFAULTS,
+  ...SH_DEFAULTS,
   ...TWIN_DEFAULTS,
   crowd: { anim: 'none', duration: 1.5, style: { behaviour: 'crowd', look: 'people', count: 150, radius: 40, width: 14, speed: 1, size: 1, exaggerate: 3, flagColor: '#e53935', view: 'auto', seed: 0 } },
   ...HZ_DEFAULTS,
@@ -167,6 +171,7 @@ export const FX_FORMS = {
   ...SM_FORMS,
   ...VZ_FORMS,
   ...SF_FORMS,
+  ...SH_FORMS,
   ...TWIN_FORMS,
   crowd: [['style.behaviour', 'What they do', 'select', CROWD_BEHAVIOURS], ['style.look', 'Who', 'select', CROWD_LOOKS], ['style.count', 'How many people', 'range', [5, 800, 5]], ['style.radius', 'Spread (m around the point)', 'range', [5, 600, 1], (L) => L.geom?.type === 'Point'], ['style.width', 'Width of the march (m)', 'range', [2, 120, 1], (L) => L.geom?.type === 'LineString'], ['style.speed', 'Speed', 'range', [0.2, 3, 0.05]], ['style.exaggerate', 'Make people bigger (so they show)', 'range', [1, 10, 0.1]], ['style.flagColor', 'Flag colour', 'color', null, (L) => L.style.look === 'protest'], ['style.view', 'Seen from', 'select', { auto: 'Automatic (side when tilted)', side: 'Always from the side', top: 'Always from above' }], ['style.seed', 'Shuffle', 'number', 1]],
   ...HZ_FORMS,
@@ -250,7 +255,7 @@ export const FX_FORMS = {
   trees: [['style.type', 'Trees', 'select', TREE_TYPES], ['style.density', 'Trees per hectare', 'range', [2, 200, 1], (L) => L.geom?.type === 'Polygon'], ['style.spacing', 'Spacing (m)', 'range', [4, 60, 1], (L) => L.geom?.type === 'LineString'], ['style.bothSides', 'Both sides of the line', 'switch', null, (L) => L.geom?.type === 'LineString'], ['style.height', 'Tree height (m)', 'range', [3, 40, 1]], ['style.exaggerate', 'Exaggerate size', 'range', [1, 8, 0.1]], ['style.view', 'Look', 'select', { auto: 'Side view when tilted, from above when flat', side: 'Always side view' }], ['style.seed', 'Shuffle', 'number', 1], ['style.leaves', 'Leaves falling from the trees', 'switch'], ['style.leafSpeed', 'Leaf fall speed', 'range', [0.2, 3, 0.05], (L) => L.style.leaves]],
   timeseries: [['style.frames', 'Dates', 'frames'], ['style.per', 'Seconds per date', 'number', 0.1], ['style.fade', 'Cross-fade (s)', 'number', 0.1], ['style.editFrame', 'Preview date while editing', 'range', [0, 30, 1]], ['style.label', 'Year label', 'select', { show: 'Show', none: 'Hide' }], ['style.position', 'Label position', 'select', POS, (L) => L.style.label !== 'none'], ['style.labelSize', 'Label size', 'range', [0.4, 2.5, 0.05], (L) => L.style.label !== 'none'], ['style.labelColor', 'Label colour', 'color', null, (L) => L.style.label !== 'none'], ['style.accent', 'Accent colour', 'color', null, (L) => L.style.label !== 'none'], ['style.bar', 'Timeline bar under the year', 'switch', null, (L) => L.style.label !== 'none'], ['style.labelBox', 'Dark box behind', 'switch', null, (L) => L.style.label !== 'none'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]]],
 };
-export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext', 'title', 'news', 'effect', 'video', ...VZ_SCREEN, ...SF_SCREEN]);
+export const FX_SCREEN = new Set(['chart', 'hud', 'flicker', 'hudtext', 'title', 'news', 'effect', 'video', ...VZ_SCREEN, ...SF_SCREEN, 'shape']);
 export const FX_BELOW = new Set(['capture']);
 
 // ---------------------------------------------------------------- geometry helpers
@@ -1323,6 +1328,7 @@ export function drawFX(ctx, L, tm, o, phase) {
   const { proj, unit, frame } = o;
   if (VZ_SET.has(L.kind)) { if (phase !== 'captions' || frame) drawViz(ctx, L, tm, o, phase); return; }
   if (SF_SET.has(L.kind)) { drawStoryFx(ctx, L, tm, o, phase); return; }
+  if (SH_SET.has(L.kind)) { if (phase === 'captions' && frame) drawShape(ctx, L, tm, o); return; }
   switch (L.kind) {
     case 'satellite': if (phase !== 'captions') drawSatellite(ctx, L, tm, proj, unit, phase, linesOf(L.geom)); break;
     case 'iss': if (phase !== 'captions' && L.geom) drawSatellite(ctx, L, tm, proj, unit, phase, issTrack(L)); break;
@@ -1394,6 +1400,7 @@ export function fxPhases(kind) {
   if (SM_SET.has(kind)) return smPhases(kind);
   if (VZ_SET.has(kind)) return vzPhases(kind);
   if (SF_SET.has(kind)) return sfPhases(kind);
+  if (SH_SET.has(kind)) return shPhases(kind);
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];
   if (kind === 'forecast') return ['captions'];

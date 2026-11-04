@@ -241,6 +241,7 @@ async function forEachFrame(o, ctx, emit, canvas) {
   let tmpPix = null, mask = null, cur2 = null;
   // load transition clips before rendering
   for (const sc of o.scenes) if (sc.transition === 'stinger' && sc.transitionMedia) { const v = videoFor(sc.transitionMedia); if (v && !v.ready) await new Promise((res) => { const to = setTimeout(res, 5000); v.el.addEventListener('loadeddata', () => { clearTimeout(to); res(); }, { once: true }); }); }
+  let sceneStart = 0;
   for (let si = 0; si < o.scenes.length; si++) {
     const scene = o.scenes[si];
     o.onStatus?.(`Loading the map for ${scene.name}…`);
@@ -252,6 +253,7 @@ async function forEachFrame(o, ctx, emit, canvas) {
     const nextD = Math.max(0.2, +scene.transitionSeconds || 0.8);
     for (let i = 0; i < n; i++) {
       if (o.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
+      const gt = sceneStart + i / fps;
       const tau = i / fps;
       const t = model.srcTime ? model.srcTime(tau) : model.trimIn + tau;
       await drawOne(o, ctx, scene, model, t);
@@ -369,12 +371,15 @@ async function forEachFrame(o, ctx, emit, canvas) {
         if (prevTr === 'zoom') { const k = 1 + e * 0.6; ctx.globalAlpha = 1 - e; ctx.translate(width / 2, height / 2); ctx.scale(k, k); ctx.drawImage(snap, -width / 2, -height / 2); }
         ctx.restore();
       }
+      // the clean last frame (without the overlays) is what the next scene transitions from
+      if (i === n - 1) { sctx.drawImage(canvas, 0, 0); haveSnap = true; }
+      // overlays that run through the whole video (logo strip, lower third) — drawn after the transition
+      o.drawOverlay?.(ctx, gt, si);
       await emit();
       done++;
       o.onProgress?.(done / grand, canvas, { scene: si + 1, scenes: o.scenes.length, frame: done, frames: grand });
     }
-    sctx.drawImage(canvas, 0, 0);
-    haveSnap = true;
+    sceneStart += n / fps;
   }
 }
 

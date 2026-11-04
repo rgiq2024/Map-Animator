@@ -296,7 +296,7 @@ export function createEditor() {
     drawLetterbox(octx, fr, scene().look, t, unit);
     hits.boxes = [];
     renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: hits.boxes });
-    drawBranding(octx, project.brand, fr, unit, t - (model.trimIn || 0));
+    drawBranding(octx, project.brand, fr, unit, sceneOffset() + Math.max(0, (model.outTime ? model.outTime(t) ?? 0 : t - (model.trimIn || 0))));
     {
       const mc = map.getCanvas();
       const k = mc.width / stage.clientWidth;
@@ -1724,6 +1724,7 @@ export function createEditor() {
   $('#add-viz')?.addEventListener('click', vizHandler);
   $('#add-hudpack')?.addEventListener('click', vizHandler);
   $('#add-story')?.addEventListener('click', vizHandler);
+  $('#add-shapes')?.addEventListener('click', vizHandler);
 
   // editor form
   const fRow = (label, inner, cls = '') => `<label class="row ${cls}"><span>${label}</span>${inner}</label>`;
@@ -3840,6 +3841,7 @@ export function createEditor() {
           jumpCam(c, expScene, t);
           applyTimeEffects(t, expScene, m);
         },
+        drawOverlay: (ctx, gt) => drawBranding(ctx, project.brand, { x: 0, y: 0, w: width, h: height }, unit, gt),
         drawFrame: (ctx, sc, m, t) => {
           const full = { x: 0, y: 0, w: width, h: height };
           const mc = map.getCanvas();
@@ -3851,7 +3853,6 @@ export function createEditor() {
           drawVignette(ctx, full, +sc.camera.lens?.vignette || 0);
           drawLetterbox(ctx, full, sc.look, t, unit);
           renderCaptions(ctx, { map, model: m, scene: sc, time: t, px, unit, frame: full, exact: true });
-          drawBranding(ctx, project.brand, full, unit, t - (m.trimIn || 0));
           drawScreenEffects(ctx, sc, { frame: full, unit, time: t, src: { canvas: mc, sx: 0, sy: 0, sw: mc.width, sh: mc.height } }, layerTiming);
           if (project.credits) drawAttribution(ctx, themeAttribution(sc.look), unit, width, height);
         },
