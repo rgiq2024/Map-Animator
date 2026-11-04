@@ -1725,6 +1725,21 @@ export function createEditor() {
   $('#add-hudpack')?.addEventListener('click', vizHandler);
   $('#add-story')?.addEventListener('click', vizHandler);
   $('#add-shapes')?.addEventListener('click', vizHandler);
+  // mouse wheel over the video zooms the picture of a selected match-cut picture page
+  stage.addEventListener('wheel', (e) => {
+    const L = selLayer && layerById(selLayer);
+    if (!L || L.kind !== 'matchcut') return;
+    const pages = String(L.style.pages || '').split('\n').map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const per = Math.max(0.3, +L.style.hold || 1.6);
+    const idx = Math.min(pages.length - 1, Math.max(0, Math.floor((time - L.start) / per)));
+    const pg = pages[idx] || '';
+    if (!pg.startsWith('image')) return;
+    e.preventDefault(); e.stopPropagation();
+    const k = `img${pg.slice(5)}Zoom`;
+    L.style[k] = +Math.min(6, Math.max(0.2, (+L.style[k] || 1) * (e.deltaY < 0 ? 1.08 : 1 / 1.08))).toFixed(3);
+    repaint();
+    clearTimeout(stage._mcT); stage._mcT = setTimeout(() => { commitLayers(); renderLayerEditor(); }, 300);
+  }, { capture: true, passive: false });
 
   // editor form
   const fRow = (label, inner, cls = '') => `<label class="row ${cls}"><span>${label}</span>${inner}</label>`;
