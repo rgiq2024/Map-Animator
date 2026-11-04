@@ -16,7 +16,58 @@ export const SAT_PRODUCTS = {
   viirs: { name: 'NASA VIIRS true colour (daily, whole Earth)', src: 'gibs', layer: 'VIIRS_SNPP_CorrectedReflectance_TrueColor', daily: true },
   radar: { name: 'Weather radar (RainViewer, last 2 hours)', src: 'rainviewer' },
   custom: { name: 'Your own WMS layer…', src: 'wms' },
+  // Sentinel (Copernicus) — by date
+  s2_true: { name: 'Sentinel-2 · natural colour by date (Esri, no account)', src: 'esri_s2', rule: 'Natural Color with DRA', sentinel: 2 },
+  s2_cir: { name: 'Sentinel-2 · colour infrared (vegetation red)', src: 'esri_s2', rule: 'Color Infrared with DRA', sentinel: 2 },
+  s2_swir: { name: 'Sentinel-2 · short-wave infrared (burn scars, wet ground)', src: 'esri_s2', rule: 'SWIR with DRA', sentinel: 2 },
+  s2_agri: { name: 'Sentinel-2 · agriculture', src: 'esri_s2', rule: 'Agriculture with DRA', sentinel: 2 },
+  s2_ndvi: { name: 'Sentinel-2 · NDVI (vegetation health)', src: 'esri_s2', rule: 'NDVI Colorized', sentinel: 2 },
+  s2_bathy: { name: 'Sentinel-2 · bathymetric (shallow water, slicks)', src: 'esri_s2', rule: 'Bathymetric with DRA', sentinel: 2 },
+  s1_esri: { name: 'Sentinel-1 · radar VV (Esri; oil slicks show dark)', src: 'esri_s1', sentinel: 1 },
+  s2_cloudless: { name: 'Sentinel-2 cloudless · one mosaic per year (EOX)', src: 'eox', sentinel: 2 },
+  cdse_s1: { name: 'Copernicus Browser · Sentinel-1 (your free instance ID)', src: 'cdse', sentinel: 1, defLayer: 'IW_VV' },
+  cdse_s2: { name: 'Copernicus Browser · Sentinel-2 (your free instance ID)', src: 'cdse', sentinel: 2, defLayer: 'TRUE_COLOR' },
 };
+/** True for the Sentinel products (picked by days, not minutes). */
+export const isSentinel = (key) => !!SAT_PRODUCTS[key]?.sentinel;
+const ESRI_S2 = 'https://sentinel.arcgis.com/arcgis/rest/services/Sentinel2/ImageServer';
+const ESRI_S1 = 'https://sentinel1.imagery1.arcgis.com/arcgis/rest/services/Sentinel1RTC/ImageServer';
+const EOX_YEARS = [2016, 2018, 2019, 2020, 2021, 2022, 2023, 2024];
+function esriUrl(base, t0, t1, rule) {
+  let u = `${base}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=jpgpng&transparent=true&f=image&time=${t0},${t1}`;
+  if (rule) u += `&renderingRule=${encodeURIComponent(JSON.stringify({ rasterFunction: rule }))}`;
+  return u;
+}
+/** Sentinel frames: one image per step of days, each the best (least cloudy / latest) scene inside its window. */
+function sentinelFrames(p, opts) {
+  const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dl = (d) => `${d.getUTCDate()} ${MON3[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  if (p.src === 'eox') {
+    const from = +opts.yearFrom || 2018, to = +opts.yearTo || 2024;
+    return EOX_YEARS.filter((y) => y >= from && y <= to).map((y) => ({ url: `https://tiles.maps.eox.at/wmts/1.0.0/${y === 2016 ? 's2cloudless' : `s2cloudless-${y}`}_3857/default/g/{z}/{y}/{x}.jpg`, date: String(y), label: String(y), maxzoom: 15 }));
+  }
+  const every = Math.max(1, +opts.every || (p.sentinel === 1 ? 12 : 5));
+  const win = Math.max(every, +opts.window || every);
+  const n = opts.mode === 'latest' ? 1 : Math.max(1, Math.min(24, +opts.count || 4));
+  const end = new Date(opts.end || Date.now());
+  end.setUTCHours(23, 59, 59, 0);
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d1 = new Date(end.getTime() - i * every * 86400e3), d0 = new Date(d1.getTime() - win * 86400e3);
+    let url;
+    if (p.src === 'esri_s2') url = esriUrl(ESRI_S2, d0.getTime(), d1.getTime(), p.rule);
+    else if (p.src === 'esri_s1') url = esriUrl(ESRI_S1, d0.getTime(), d1.getTime(), '');
+    else {
+      const id = String(opts.wmsUrl || '').trim().replace(/^.*\/wms\//, '');
+      if (!id) throw new Error('Paste your Copernicus instance ID (Copernicus Browser → Dashboard → Configurations)');
+      const layer = String(opts.wmsLayer || p.defLayer || '').trim();
+      const base = `https://sh.dataspace.copernicus.eu/ogc/wms/${encodeURIComponent(id)}?SHOWLOGO=false${p.sentinel === 2 ? '&MAXCC=40' : ''}`;
+      url = wmsUrl(base, layer, `${d0.toISOString().slice(0, 10)}/${d1.toISOString().slice(0, 10)}`, true);
+    }
+    out.push({ url, date: d1.toISOString().slice(0, 10), label: dl(d1), maxzoom: p.sentinel === 1 ? 14 : 15 });
+  }
+  return out;
+}
 /** A sensible satellite for a longitude. */
 export function satForLongitude(lng) {
   if (lng < -105) return 'goes_west_geocolor';
@@ -40,6 +91,7 @@ function wmsUrl(base, layer, time, v13 = true) {
  */
 export async function satFrames(key, opts = {}) {
   const p = SAT_PRODUCTS[key] || SAT_PRODUCTS.meteosat_ir;
+  if (p.sentinel) return sentinelFrames(p, opts);
   if (p.src === 'rainviewer') {
     const r = await fetch('https://api.rainviewer.com/public/weather-maps.json');
     if (!r.ok) throw new Error('Radar list unavailable');
@@ -70,7 +122,7 @@ export async function satFrames(key, opts = {}) {
   for (let i = n - 1; i >= 0; i--) { const d = new Date(end.getTime() - i * step * 60e3); out.push({ url: wmsUrl(base, layer, iso(d), v13), date: iso(d), label: label(d) }); }
   return out;
 }
-export const SAT_CREDITS = { gibs: 'NASA GIBS / NOAA', eumetsat: '© EUMETSAT', rainviewer: 'RainViewer', wms: '' };
+export const SAT_CREDITS = { gibs: 'NASA GIBS / NOAA', eumetsat: '© EUMETSAT', rainviewer: 'RainViewer', wms: '', esri_s2: 'Contains modified Copernicus Sentinel data · Esri', esri_s1: 'Contains modified Copernicus Sentinel data · Esri', eox: 'Sentinel-2 cloudless by EOX (Copernicus Sentinel data)', cdse: 'Contains modified Copernicus Sentinel data · Copernicus Data Space' };
 
 // ---------------------------------------------------------------- live weather for the cities on the map
 const WMO = (c, day) => {

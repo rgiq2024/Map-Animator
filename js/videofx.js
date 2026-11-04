@@ -1,6 +1,7 @@
 // Your own effect clips (explosions, smoke, fire, muzzle flashes…) placed on the map. Clips on a black
 // background are blended with "screen" so only the light parts show; WebM/MOV with alpha use "normal".
 import { getMedia } from './store.js';
+import { drawQuad, quadOf } from './geoimage.js';
 
 const vids = new Map(); // media id → { el, ready, url }
 
@@ -33,7 +34,7 @@ export async function seekScene(scene, t, layerTiming) {
   const jobs = [];
   for (const L of scene.layers || []) {
     const zf = L.kind === 'zoomframe';
-    if ((L.kind !== 'videofx' && L.kind !== 'video' && !zf) || L.hidden || !(zf ? L.style.clip : L.style.media)) continue;
+    if ((L.kind !== 'videofx' && L.kind !== 'video' && L.kind !== 'geovideo' && !zf) || L.hidden || !(zf ? L.style.clip : L.style.media)) continue;
     const v = videoFor(zf ? L.style.clip : L.style.media);
     if (!v) continue;
     if (!v.ready) await new Promise((res) => { const to = setTimeout(res, 4000); v.el.addEventListener('loadeddata', () => { clearTimeout(to); res(); }, { once: true }); });
@@ -42,7 +43,7 @@ export async function seekScene(scene, t, layerTiming) {
     const dur = v.el.duration || 0;
     let target;
     if (zf) { target = Math.max(0, tm.tau); if (L.style.loop !== false && dur > 0) target %= dur; target = Math.min(target, Math.max(0, dur - 0.04)); }
-    else if (L.kind === 'video') { target = Math.max(0, tm.tau) * (+L.style.speed || 1) + (+L.style.trim || 0); if (L.style.loop && dur > 0) target %= dur; target = Math.min(target, Math.max(0, dur - 0.04)); }
+    else if (L.kind === 'video' || L.kind === 'geovideo') { target = Math.max(0, tm.tau) * (+L.style.speed || 1) + (+L.style.trim || 0); if (L.style.loop && dur > 0) target %= dur; target = Math.min(target, Math.max(0, dur - 0.04)); }
     else target = localTime(L, tm.tau, dur);
     if (Math.abs(v.el.currentTime - target) < 0.001) continue;
     jobs.push(new Promise((res) => { const to = setTimeout(res, 3000); v.el.addEventListener('seeked', () => { clearTimeout(to); res(); }, { once: true }); v.el.currentTime = target; }));
@@ -103,3 +104,59 @@ function unscreen(el, W, H, gain) {
   return kc;
 }
 export const videoGizmoRadius = (L, unit) => 80 * unit * (+L.style.size || 1);
+
+/** Video fitted onto the map by its four corners (TL, TR, BR, BL), warped like a georeferenced image. */
+export function drawGeoVideo(ctx, L, tm, o) {
+  const q = quadOf(L);
+  if (!q) return;
+  const s = L.style, { proj, unit } = o;
+  const v = videoFor(s.media);
+  let a = tm.alpha * (+s.opacity || 1);
+  if (L.anim === 'fade' && !tm.edit) a *= Math.min(1, Math.max(0, tm.tau / 0.8));
+  if (!v?.ready || !v.el.videoWidth) {
+    const pts = q.map(proj);
+    ctx.save();
+    ctx.globalAlpha *= tm.alpha;
+    ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath();
+    ctx.fillStyle = 'rgba(15,20,30,0.55)'; ctx.fill();
+    ctx.setLineDash([6 * unit, 4 * unit]); ctx.strokeStyle = '#2d7ff9'; ctx.lineWidth = 2 * unit; ctx.stroke();
+    const c = pts.reduce((acc, p) => [acc[0] + p[0] / 4, acc[1] + p[1] / 4], [0, 0]);
+    ctx.fillStyle = '#fff'; ctx.font = `600 ${14 * unit}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(s.media ? 'Loading video…' : '📹 Choose a video in the layer settings', c[0], c[1]);
+    ctx.restore();
+    return;
+  }
+  if (!o.exact) {
+    const dur = v.el.duration || 0;
+    let target = Math.max(0, tm.edit ? 0 : tm.tau) * (+s.speed || 1) + (+s.trim || 0);
+    if (s.loop !== false && dur > 0) target %= dur;
+    target = Math.min(target, Math.max(0, dur - 0.04));
+    if (Math.abs(v.el.currentTime - target) > 0.12) { try { v.el.currentTime = target; } catch { /* not seekable yet */ } }
+  }
+  const img = { ready: true, bmp: v.el, w: v.el.videoWidth, h: v.el.videoHeight };
+  let clip = null;
+  if (L.anim === 'wipe' && !tm.edit) {
+    const u = Math.min(1, Math.max(0, tm.tau / Math.min(1.5, +L.duration || 1)));
+    if (u <= 0.001) return;
+    const P = q.map(proj);
+    const lerp = (A, B, k) => [A[0] + (B[0] - A[0]) * k, A[1] + (B[1] - A[1]) * k];
+    const dir = s.dir || 'lr';
+    let poly;
+    if (dir === 'lr') poly = [P[0], lerp(P[0], P[1], u), lerp(P[3], P[2], u), P[3]];
+    else if (dir === 'rl') poly = [lerp(P[1], P[0], u), P[1], P[2], lerp(P[2], P[3], u)];
+    else if (dir === 'tb') poly = [P[0], P[1], lerp(P[1], P[2], u), lerp(P[0], P[3], u)];
+    else poly = [lerp(P[3], P[0], u), lerp(P[2], P[1], u), P[2], P[3]];
+    clip = (c) => { poly.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); c.closePath(); };
+  }
+  let pts = null;
+  try { pts = drawQuad(ctx, img, q, proj, { crs: s.crs, alpha: a, clip, blend: s.blend === 'screen' ? 'screen' : s.blend === 'multiply' ? 'multiply' : null }); } catch { /* frame not ready */ }
+  if (s.border !== false && s.border) {
+    const P = q.map(proj);
+    ctx.save();
+    ctx.globalAlpha *= a;
+    ctx.beginPath(); P.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath();
+    ctx.strokeStyle = s.borderColor || '#fff'; ctx.lineWidth = 2 * unit; ctx.stroke();
+    ctx.restore();
+  }
+  return pts;
+}

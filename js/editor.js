@@ -26,7 +26,8 @@ import { putMedia } from './store.js';
 import { TEMPLATES as QS_TEMPLATES, openQuickStart } from './quickstart.js';
 import { IMG_KINDS, readGeoImages, storeImage, imageFor, preloadImages, mediaOf, quadOf, quadGeom, quadFromBounds, quadBounds, rotateQuad, scaleQuad, moveQuad, fixAspect, labelFromName } from './geoimage.js';
 import { WaybackLayers, waybackReleases, yearlyReleases } from './wayback.js';
-import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, liveWeather } from './livesat.js';
+import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, liveWeather, isSentinel } from './livesat.js';
+import { analysisFilter, movingTargets } from './analysis.js';
 import { thermalFilter } from './hudplus.js';
 import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 import { drawLetterbox, TITLE_LOOKS } from './titles.js';
@@ -186,7 +187,7 @@ export function createEditor() {
   }
 
   const joinFilters = (...f) => f.filter((x) => x && x !== 'none').join(' ') || 'none';
-  const mapFilterAt = (sc, t) => joinFilters(gradeFilter(sc.look.grade), thermalFilter(sc, t, layerTiming), effectFilter(sc, t, layerTiming));
+  const mapFilterAt = (sc, t) => joinFilters(gradeFilter(sc.look.grade), thermalFilter(sc, t, layerTiming), effectFilter(sc, t, layerTiming), analysisFilter(sc, t));
   /** Put the camera at c, plus any camera-shake effect. */
   function jumpCam(c, sc, t) {
     map.jumpTo({ center: c.center, zoom: c.zoom, bearing: c.bearing || 0, pitch: c.pitch || 0 });
@@ -270,6 +271,9 @@ export function createEditor() {
   function drawOverlay() {
     if (exporting || !model || !project) return;
     const W = overlay.width, H = overlay.height;
+    // reset everything (a clip or save left over by a failed draw would stop the canvas clearing)
+    // reset everything (a clip or save left over by a failed draw would stop the canvas clearing)
+    if (octx.reset) octx.reset(); else { octx.setTransform(1, 0, 0, 1, 0, 0); octx.globalAlpha = 1; octx.globalCompositeOperation = 'source-over'; }
     octx.setTransform(1, 0, 0, 1, 0, 0);
     octx.clearRect(0, 0, W, H);
     const px = W / stage.clientWidth;
@@ -1404,7 +1408,45 @@ export function createEditor() {
   $('#add-layer').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#add-fx').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#upload-model-btn').onclick = () => $('#file-model').click();
-  $('#add-img').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
+  $('#add-img').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    const k = b.dataset.add;
+    let st = null;
+    try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
+    if (k === 'sentinel') { addSentinel(b.dataset.sat || 's2_true'); return; }
+    if (k === 'geovideo') {
+      cancelDrawing();
+      const L = newLayer('geovideo', quadGeom(fitQuad(9 / 16)), { start: newStart() });
+      L.name = 'Video on the map';
+      L.style.fresh = true;
+      addLayer(L);
+      toast('Choose the video — then drag its corners onto the matching places on the map', 4600);
+      setTimeout(() => $('#file-video').click(), 60);
+      return;
+    }
+    if (k === 'oilspill') { pendingStyle = st; startAdd(k); showHint('Click around the oil slick (start at the ship / source) — then press Finish'); return; }
+    startAdd(k);
+  });
+  /** Sentinel-1 / Sentinel-2 imagery by date as cross-fading map layers. */
+  async function addSentinel(sat) {
+    cancelDrawing();
+    const L = newLayer('timeseries', null, { start: newStart() });
+    const p = SAT_PRODUCTS[sat];
+    Object.assign(L.style, { source: 'livesat', sat, satMode: 'loop', count: sat === 's2_cloudless' ? 0 : 3, every: p.sentinel === 1 ? 12 : 10, window: p.sentinel === 1 ? 12 : 20, yearFrom: 2018, yearTo: 2024, frames: [], opacity: 1, position: 'top-right', labelSize: 0.55, bar: true });
+    L.name = p.sentinel === 1 ? 'Sentinel-1 radar' : 'Sentinel-2';
+    addLayer(L);
+    if (p.src === 'cdse') { toast('Paste your Copernicus instance ID in the layer settings, then press Load imagery', 5200); return; }
+    try {
+      const fr = await satFrames(sat, { count: L.style.count, every: L.style.every, window: L.style.window, yearFrom: L.style.yearFrom, yearTo: L.style.yearTo });
+      L.style.frames = fr; L.style.credit = SAT_CREDITS[p.src];
+      L.style.per = fr.length > 1 ? 2.2 : 6; L.style.fade = fr.length > 1 ? 0.8 : 0;
+      setSeriesDuration(L);
+      if (selLayer === L.id) renderLayerEditor();
+      commitLayers();
+      toast(p.sentinel === 1 ? 'Sentinel-1 radar: calm oil slicks look dark on the sea. Zoom in to see 10 m detail.' : 'Sentinel-2: 10 m detail — zoom in. Change the dates in the layer settings.', 5200);
+    } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
+  }
   $('#add-nature').addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) startAdd(b.dataset.add); });
   $('#add-3d').addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
@@ -1769,7 +1811,7 @@ export function createEditor() {
       if (st) Object.assign(L.style, st);
       if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
       if (b.dataset.name) L.name = b.dataset.name;
-      if (b.dataset.dur) L.duration = +b.dataset.dur;
+      if (L.kind === 'tracklabel' && !L.style.target) { const mv = movingTargets(scene()); L.style.target = mv.at(-1).id; L.style.name ||= (mv.at(-1).id === 'route' ? 'ROUTE' : String(mv.at(-1).name || '').toUpperCase()); L.duration = Math.max(L.duration, (layerById(L.style.target)?.duration || 0) + (layerById(L.style.target)?.start || 0) - L.start); }
       if (b.dataset.hold) L.hold = +b.dataset.hold;
       if (L.kind === 'title' && L.style.font) loadFonts(scene()).then(repaint);
       addLayer(L);
@@ -1874,6 +1916,7 @@ export function createEditor() {
         else if (type === 'color') h += fRow(label, fColor(path, v));
         else if (type === 'range') h += fRow(label, fRange(path, v, o[0], o[1], o[2]));
         else if (type === 'switch') h += fRow(label, fSw(path, v));
+        else if (type === 'target') h += fRow(label, fSel(path, v || 'route', Object.fromEntries(movingTargets(scene()).map((x) => [x.id, x.name]))));
         else if (type === 'number') h += fRow(label, fNum(path, v, o || 1));
         else if (type === 'textarea') h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea></label>`;
         else if (type === 'image') {
@@ -2167,6 +2210,20 @@ export function createEditor() {
       h += '<h5>Live satellite / radar</h5>';
       h += fRow('Imagery', `<select id="ls-prod">${Object.entries(SAT_PRODUCTS).map(([k, p]) => `<option value="${k}" ${s.sat === k ? 'selected' : ''}>${p.name}</option>`).join('')}</select>`);
       if (s.sat === 'custom') h += `<label class="field"><span>WMS address</span><input id="ls-wms" value="${esc(s.wmsUrl || '')}" placeholder="https://…/wms"></label><label class="field"><span>Layer name</span><input id="ls-layer" value="${esc(s.wmsLayer || '')}"></label>`;
+      if (isSentinel(s.sat)) {
+        const P = SAT_PRODUCTS[s.sat];
+        if (P.src === 'cdse') h += `<label class="field"><span>Copernicus instance ID</span><input id="ls-wms" value="${esc(s.wmsUrl || '')}" placeholder="e.g. 1a2b3c4d-…"></label><label class="field"><span>Layer name in your configuration</span><input id="ls-layer" value="${esc(s.wmsLayer || P.defLayer)}"></label><p class="hint-line">Free: sign in at dataspace.copernicus.eu → Copernicus Browser → Dashboard → Configuration Utility → New configuration (Sentinel-1 GRD or Sentinel-2 L2A template) → copy its ID and a layer name here.</p>`;
+        if (P.src === 'eox') h += fRow('From year', `<select id="ls-y0">${[2016, 2018, 2019, 2020, 2021, 2022, 2023, 2024].map((y) => `<option ${+s.yearFrom === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`) + fRow('To year', `<select id="ls-y1">${[2016, 2018, 2019, 2020, 2021, 2022, 2023, 2024].map((y) => `<option ${+(s.yearTo || 2024) === y ? 'selected' : ''}>${y}</option>`).join('')}</select>`);
+        else {
+          h += fRow('Number of dates', `<select id="ls-count">${[1, 2, 3, 4, 6, 8, 12].map((x) => `<option ${+s.count === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`);
+          h += fRow('Days between dates', `<select id="ls-every">${[1, 2, 3, 5, 6, 10, 12, 15, 30, 60, 90, 180, 365].map((x) => `<option ${+s.every === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`);
+          h += fRow('Search window (days before each date)', `<select id="ls-window">${[3, 5, 6, 10, 12, 20, 30, 60].map((x) => `<option ${+s.window === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`);
+          h += fRow('Last date', `<input type="date" id="ls-end" value="${esc((s.satEnd || '').slice(0, 10))}">`);
+        }
+        h += '<div class="btn-row"><button class="btn sm primary" data-act="lsLoad">Load imagery</button></div>';
+        h += `<p class="hint-line">${fr.length ? `${fr.length} image${fr.length === 1 ? '' : 's'} · ${esc(fr[0].label)}${fr.length > 1 ? ` → ${esc(fr.at(-1).label)}` : ''}. ` : ''}${P.sentinel === 1 ? 'Sentinel-1 is radar: it sees through clouds and at night; calm water (and oil slicks) looks dark. A satellite passes every 6–12 days.' : 'Sentinel-2 passes every ~5 days; each date shows the clearest scene in its search window — widen the window if you see gaps or clouds.'} Zoom in (10 m pixels). Contains modified Copernicus Sentinel data.</p>`;
+        return h;
+      }
       h += fRow('Show', `<select id="ls-mode"><option value="loop" ${s.satMode !== 'latest' ? 'selected' : ''}>Animated loop</option><option value="latest" ${s.satMode === 'latest' ? 'selected' : ''}>Latest image only</option></select>`);
       if (s.satMode !== 'latest' && s.sat !== 'radar') h += fRow('Hours back', `<select id="ls-hours">${[1, 2, 3, 6, 12, 24, 48, 72].map((x) => `<option ${+s.hours === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`) + fRow('Every', `<select id="ls-step">${[10, 15, 30, 60, 120].map((x) => `<option value="${x}" ${+s.step === x ? 'selected' : ''}>${x} min</option>`).join('')}</select>`);
       h += fRow('Ending at (UTC, empty = now)', `<input type="datetime-local" id="ls-end" value="${esc(s.satEnd || '')}">`);
@@ -2298,13 +2355,22 @@ export function createEditor() {
     if (zoomTo) zoomToLayer(zoomTo);
     toast(items.some((r) => r.quad) ? 'Image placed from its georeference' : 'Image placed in the view — drag its corners to line it up with the map', 4200);
   });
+  $('#layer-editor').addEventListener('change', (e) => {
+    if (e.target.id !== 'ls-prod') return;
+    const L = selLayer && layerById(selLayer);
+    if (!L) return;
+    L.style.sat = e.target.value;
+    if (isSentinel(L.style.sat)) { L.style.count ||= 3; L.style.every ||= SAT_PRODUCTS[L.style.sat].sentinel === 1 ? 12 : 10; L.style.window ||= 20; }
+    renderLayerEditor();
+  });
   $('#layer-editor').addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-act]');
     const a = btn?.dataset.act;
     const L = selLayer && layerById(selLayer);
     if (!a || !L) return;
     const q = quadOf(L);
-    const img = imageFor(L.style.media || L.style.frames?.[0]?.media);
+    const gv = L.kind === 'geovideo' ? videoFor(L.style.media) : null;
+    const img = gv ? { ready: !!gv.el.videoWidth, w: gv.el.videoWidth, h: gv.el.videoHeight } : imageFor(L.style.media || L.style.frames?.[0]?.media);
     const geo = (nq) => { pushUndo(); L.geom = quadGeom(nq); renderLayerEditor(); repaint(); save(); };
     if (a === 'pickImg') { geoPick = { mode: 'field', id: L.id, field: btn.dataset.field }; $('#file-geoimg').click(); }
     if (a === 'addFrames') { geoPick = { mode: 'frames', id: L.id }; $('#file-geoimg').click(); }
@@ -2327,18 +2393,23 @@ export function createEditor() {
     if (a === 'frSort') { pushUndo(); fr.sort((x, y) => String(x.label).localeCompare(String(y.label), undefined, { numeric: true })); renderLayerEditor(); commitLayers(); }
     if (a === 'lsLoad') {
       const st = L.style;
-      st.sat = $('#ls-prod').value; st.satMode = $('#ls-mode').value;
+      st.sat = $('#ls-prod').value; st.satMode = $('#ls-mode')?.value || 'loop';
       if ($('#ls-hours')) st.hours = +$('#ls-hours').value;
       if ($('#ls-step')) st.step = +$('#ls-step').value;
       st.satEnd = $('#ls-end').value || '';
       if ($('#ls-wms')) { st.wmsUrl = $('#ls-wms').value; st.wmsLayer = $('#ls-layer').value; }
+      if ($('#ls-count')) st.count = +$('#ls-count').value;
+      if ($('#ls-every')) st.every = +$('#ls-every').value;
+      if ($('#ls-window')) st.window = +$('#ls-window').value;
+      if ($('#ls-y0')) { st.yearFrom = +$('#ls-y0').value; st.yearTo = +$('#ls-y1').value; }
+      const sent = isSentinel(st.sat);
       try {
-        const frames = await satFrames(st.sat, { mode: st.satMode, hours: st.hours, step: st.step, end: st.satEnd ? new Date(`${st.satEnd}:00Z`) : null, wmsUrl: st.wmsUrl, wmsLayer: st.wmsLayer });
+        const frames = await satFrames(st.sat, { mode: st.satMode, hours: st.hours, step: st.step, end: st.satEnd ? new Date(sent ? `${st.satEnd.slice(0, 10)}T12:00:00Z` : `${st.satEnd}:00Z`) : null, wmsUrl: st.wmsUrl, wmsLayer: st.wmsLayer, count: st.count, every: st.every, window: st.window, yearFrom: st.yearFrom, yearTo: st.yearTo });
         pushUndo();
         st.frames = frames;
         st.credit = SAT_CREDITS[SAT_PRODUCTS[st.sat]?.src] || '';
-        st.per = frames.length > 1 ? Math.max(0.15, +(Math.min(0.6, 8 / frames.length)).toFixed(2)) : 4;
-        st.fade = frames.length > 1 ? +(st.per * 0.6).toFixed(2) : 0;
+        st.per = sent ? (frames.length > 1 ? 2.2 : 6) : frames.length > 1 ? Math.max(0.15, +(Math.min(0.6, 8 / frames.length)).toFixed(2)) : 4;
+        st.fade = sent ? (frames.length > 1 ? 0.8 : 0) : frames.length > 1 ? +(st.per * 0.6).toFixed(2) : 0;
         setSeriesDuration(L);
         renderLayerEditor(); commitLayers();
         toast(`${frames.length} satellite image${frames.length === 1 ? '' : 's'} loaded`);
@@ -2481,7 +2552,7 @@ export function createEditor() {
     const f = e.target.files[0];
     e.target.value = '';
     const L = selLayer && layerById(selLayer);
-    if (!f || !L || (L.kind !== 'videofx' && L.kind !== 'video' && L.kind !== 'zoomframe')) return;
+    if (!f || !L || (L.kind !== 'videofx' && L.kind !== 'video' && L.kind !== 'zoomframe' && L.kind !== 'geovideo')) return;
     if (f.size > 200e6) { toast('That clip is very large — use one under 200 MB'); return; }
     const id = `vd_${Math.random().toString(36).slice(2, 10)}`;
     await putMedia(id, f);
@@ -2492,7 +2563,8 @@ export function createEditor() {
     L.name = f.name.replace(/\.[^.]+$/, '');
     const v = videoFor(id);
     v.el.addEventListener('loadeddata', () => {
-      if (v.el.duration && isFinite(v.el.duration)) { L.duration = +Math.min(30, v.el.duration).toFixed(2); renderLayerEditor(); commitLayers(); }
+      if (L.kind === 'geovideo' && L.style.fresh && v.el.videoWidth && quadOf(L)) { L.geom = quadGeom(fixAspect(quadOf(L), v.el.videoHeight / v.el.videoWidth)); delete L.style.fresh; }
+      if (v.el.duration && isFinite(v.el.duration)) { L.duration = +Math.min(L.kind === 'geovideo' ? 120 : 30, v.el.duration).toFixed(2); renderLayerEditor(); commitLayers(); }
       repaint();
     }, { once: true });
     renderLayerEditor();

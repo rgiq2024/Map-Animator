@@ -73,6 +73,13 @@ The **timeline** works like a video editor (Premiere Pro basics):
 
 Rendering happens frame by frame: for each frame the map waits until all tiles are loaded, so every frame is sharp, then frames are encoded with WebCodecs into an MP4 (H.264 where available, otherwise VP9/AV1). The video frame is exactly the bright rectangle in the editor.
 
+### Remote sensing: Sentinel imagery, oil spills, video on the map, moving labels
+
+- **Sentinel-2 by date** (natural colour, colour infrared, SWIR, agriculture, NDVI, bathymetric), **Sentinel-1 radar (SAR)** and **Sentinel-2 cloudless yearly mosaics** — *Add → Imagery & remote sensing*. Each date is the clearest scene in its search window; dates cross-fade with a label. Sources: Esri Sentinel-2 / Sentinel-1 image services, EOX s2cloudless, or **Copernicus Browser** with your own free instance ID (Sentinel Hub WMS, any layer from your configuration). Contains modified Copernicus Sentinel data.
+- **Oil spill** — draw the slick (start at the ship): it spreads from the source, drifts, has a marching dashed outline, an “OIL SPILL” label you can drag, a glowing source ship, a drift arrow and a stats card (area, estimated volume from the thickness, perimeter, sensor, date). Styles: outline only, dark slick, rainbow sheen, thickness zones, red alert. *SAR look* turns the map into a teal radar picture like a Sentinel-1 scene.
+- **Video on the map** — a drone / satellite / thermal clip warped onto the map by its four corners (move, rotate and stretch the corners like a georeferenced image). Exported frame-exact.
+- **Moving label** — text that follows a moving object or 3D model (plane taking off, ship, vehicle, missile path, the route arrow) with live `{speed}` `{alt}` `{heading}` `{lat}` `{lon}` `{dist}`; looks: tag, data box, target tracker, flag, plain text; optional dotted trail.
+
 ## Code
 
 A static site — plain HTML, CSS and ES modules, no build step.

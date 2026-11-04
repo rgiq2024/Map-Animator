@@ -24,6 +24,8 @@ import { HZ_KINDS, HZ_ANIMS, HZ_DEFAULTS, HZ_FORMS, HZ_SET, hzPhases, drawHazard
 import { drawPeople, CROWD_BEHAVIOURS, CROWD_LOOKS } from './people.js';
 import { NET_KINDS, NET_ANIMS, NET_DEFAULTS, NET_FORMS, NET_SET, netPhases, drawNet } from './network.js';
 import { drawImageLayer, drawCompareLayer, drawSeriesLayer, drawSeriesLabel } from './geoimage.js';
+import { AN_KINDS, AN_ANIMS, AN_DEFAULTS, AN_FORMS, AN_SET, anPhases, drawAnalysis } from './analysis.js';
+import { drawGeoVideo } from './videofx.js';
 
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
 const MONO = '"JetBrains Mono",ui-monospace,Menlo,monospace';
@@ -48,6 +50,8 @@ function hexA(hex, a) {
 export const FX_KINDS = {
   ...SM_KINDS,
   ...VZ_KINDS,
+  ...AN_KINDS,
+  geovideo: { name: 'Video on the map', icon: '📹', geom: 'image', desc: 'A drone or satellite video fitted onto the map by its four corners (georeferenced video)' },
   ...SF_KINDS,
   ...SH_KINDS,
   ...TWIN_KINDS,
@@ -89,6 +93,8 @@ export const FX_KINDS = {
 export const FX_ANIMS = {
   ...SM_ANIMS,
   ...VZ_ANIMS,
+  ...AN_ANIMS,
+  geovideo: { fade: 'Fade in', wipe: 'Wipe in', none: 'Cut in' },
   ...SF_ANIMS,
   ...SH_ANIMS,
   ...TWIN_ANIMS,
@@ -126,6 +132,8 @@ export const FX_ANIMS = {
 export const FX_DEFAULTS = {
   ...SM_DEFAULTS,
   ...VZ_DEFAULTS,
+  ...AN_DEFAULTS,
+  geovideo: { anim: 'fade', duration: 10, style: { media: '', name: '', opacity: 1, crs: '3857', blend: 'normal', border: true, borderColor: '#ffffff', speed: 1, trim: 0, loop: true, dir: 'lr' } },
   ...SF_DEFAULTS,
   ...SH_DEFAULTS,
   ...TWIN_DEFAULTS,
@@ -170,6 +178,8 @@ const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': '
 export const FX_FORMS = {
   ...SM_FORMS,
   ...VZ_FORMS,
+  ...AN_FORMS,
+  geovideo: [['style.media', 'Video', 'video'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', screen: 'Screen (dark backgrounds, e.g. thermal / night video)', multiply: 'Multiply' }], ['style.speed', 'Playback speed', 'range', [0.25, 4, 0.05]], ['style.trim', 'Start the clip at (s)', 'number', 0.1], ['style.loop', 'Loop', 'switch'], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
   ...SF_FORMS,
   ...SH_FORMS,
   ...TWIN_FORMS,
@@ -1328,6 +1338,8 @@ export function drawFX(ctx, L, tm, o, phase) {
   const { proj, unit, frame } = o;
   if (VZ_SET.has(L.kind)) { if (phase !== 'captions' || frame) drawViz(ctx, L, tm, o, phase); return; }
   if (SF_SET.has(L.kind)) { drawStoryFx(ctx, L, tm, o, phase); return; }
+  if (AN_SET.has(L.kind)) { drawAnalysis(ctx, L, tm, o, phase); return; }
+  if (L.kind === 'geovideo') { if (phase === 'below') drawGeoVideo(ctx, L, tm, o); return; }
   if (SH_SET.has(L.kind)) { if (phase === 'captions' && frame) drawShape(ctx, L, tm, o); return; }
   switch (L.kind) {
     case 'satellite': if (phase !== 'captions') drawSatellite(ctx, L, tm, proj, unit, phase, linesOf(L.geom)); break;
@@ -1400,6 +1412,8 @@ export function fxPhases(kind) {
   if (SM_SET.has(kind)) return smPhases(kind);
   if (VZ_SET.has(kind)) return vzPhases(kind);
   if (SF_SET.has(kind)) return sfPhases(kind);
+  if (AN_SET.has(kind)) return anPhases(kind);
+  if (kind === 'geovideo') return ['below'];
   if (SH_SET.has(kind)) return shPhases(kind);
   if (kind === 'chart' || kind === 'hud' || kind === 'flicker' || kind === 'hudtext' || kind === 'title' || kind === 'news' || kind === 'video') return ['captions'];
   if (kind === 'effect') return [];

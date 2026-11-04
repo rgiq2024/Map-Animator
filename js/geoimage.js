@@ -8,7 +8,7 @@ import { placeAt } from './place.js';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (u) => 0.5 - 0.5 * Math.cos(Math.PI * clamp(u, 0, 1));
-export const IMG_KINDS = new Set(['image', 'compare', 'timeseries']);
+export const IMG_KINDS = new Set(['image', 'compare', 'timeseries', 'geovideo']);
 const MAX_PX = 4096;
 
 // ---------------------------------------------------------------- image cache
