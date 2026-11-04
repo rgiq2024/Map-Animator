@@ -3513,8 +3513,78 @@ export function createEditor() {
     const was = playing;
     playing = p;
     document.body.classList.toggle('is-playing', p);
-    if (p) { playStartNow = performance.now(); playStartTime = time; playStartOut = outOf(time); playFrom(project, sceneOffset() + playStartOut, tl?.state.rate || 1, soundEvents(), sceneOffset() + model.duration).catch(() => {}); }
-    else if (was) stopPlayback();
+    if (p) { playStartNow = performance.now(); playStartTime = time; playStartOut = outOf(time); playFrom(project, sceneOffset() + playStartOut, tl?.state.rate || 1, soundEvents(), playAll ? Infinity : sceneOffset() + model.duration).catch(() => {}); }
+    else if (was && !keepAudio) stopPlayback();
+    if (!p && !keepAudio && playAll) endPlayAll();
+  }
+
+  // ---------------------------------------------------------------- preview of all scenes together
+  let playAll = false, keepAudio = false, allBadge = null;
+  function playAllScenes() {
+    if (!project || exporting) return;
+    if (playAll) { setPlaying(false); return; }
+    if (!project.scenes.some((sc) => hasContent(sc, buildScene(sc, frame.w, frame.h)))) { toast('Add a route or a layer first'); return; }
+    setPlaying(false);
+    keepAudio = true;
+    try { selectScene(0, true); } finally { keepAudio = false; }
+    playAll = true;
+    time = model.trimIn;
+    setViewMode('play');
+    applyCamera(time);
+    setPlaying(true);
+    showAllBadge();
+  }
+  function endPlayAll() {
+    playAll = false;
+    allBadge?.remove(); allBadge = null;
+    $('#tl-all')?.classList.remove('active');
+  }
+  function showAllBadge() {
+    $('#tl-all')?.classList.add('active');
+    if (!allBadge) {
+      allBadge = document.createElement('div');
+      allBadge.className = 'all-badge';
+      stage.appendChild(allBadge);
+    }
+    const n = project.scenes.length;
+    allBadge.innerHTML = `<span>All scenes · ${sceneIdx + 1} of ${n} · ${esc(scene().name || '')}</span><span class="dots">${project.scenes.map((_, i) => `<i class="${i < sceneIdx ? 'done' : i === sceneIdx ? 'on' : ''}"></i>`).join('')}</span><button type="button">■ Stop</button>`;
+    allBadge.querySelector('button').onclick = (e) => { e.stopPropagation(); setPlaying(false); };
+  }
+  /** Freeze the last frame of a scene on top of the stage and animate it away (approximates the scene's transition). */
+  function transitionOut(sc) {
+    const tr = sc.transition || 'cut';
+    if (tr === 'cut') return;
+    const secs = clamp(+sc.transitionSeconds || 0.8, 0.2, 4);
+    const c = document.createElement('canvas');
+    c.width = overlay.width; c.height = overlay.height;
+    const g = c.getContext('2d');
+    try { g.drawImage(map.getCanvas(), 0, 0, c.width, c.height); } catch { /* ignore */ }
+    try { g.drawImage(overlay, 0, 0); } catch { /* ignore */ }
+    c.className = 'all-snap';
+    Object.assign(c.style, { left: overlay.style.left || '0', top: overlay.style.top || '0', width: `${overlay.clientWidth || stage.clientWidth}px`, height: `${overlay.clientHeight || stage.clientHeight}px`, transitionDuration: `${secs}s` });
+    const r = overlay.getBoundingClientRect(), rs = stage.getBoundingClientRect();
+    c.style.left = `${r.left - rs.left}px`; c.style.top = `${r.top - rs.top}px`;
+    stage.appendChild(c);
+    const t = String(tr).toLowerCase();
+    const end = /slide|push|left/.test(t) ? { transform: 'translateX(-100%)' } : /right/.test(t) ? { transform: 'translateX(100%)' } : /up/.test(t) ? { transform: 'translateY(-100%)' } : /down/.test(t) ? { transform: 'translateY(100%)' }
+      : /zoom/.test(t) ? { transform: 'scale(1.6)', opacity: '0' } : /wipe|reveal/.test(t) ? { clipPath: 'inset(0 0 0 100%)' } : /circle|iris/.test(t) ? { clipPath: 'circle(0% at 50% 50%)' } : /blur/.test(t) ? { filter: 'blur(18px)', opacity: '0' }
+        : /black|dip/.test(t) ? { filter: 'brightness(0)', opacity: '0' } : /white|flash/.test(t) ? { filter: 'brightness(3)', opacity: '0' } : { opacity: '0' };
+    if (end.clipPath) c.style.clipPath = /circle|iris/.test(t) ? 'circle(75% at 50% 50%)' : 'inset(0 0 0 0)';
+    requestAnimationFrame(() => requestAnimationFrame(() => Object.assign(c.style, end)));
+    setTimeout(() => c.remove(), secs * 1000 + 120);
+  }
+  /** Move on to the next scene without stopping the sound. */
+  function nextOfAll(now) {
+    transitionOut(scene());
+    keepAudio = true;
+    try { selectScene(sceneIdx + 1, true); } finally { keepAudio = false; }
+    time = model.trimIn;
+    setViewMode('play');
+    applyCamera(time);
+    playing = true;
+    document.body.classList.add('is-playing');
+    playStartNow = now; playStartOut = 0; playStartTime = time;
+    showAllBadge();
   }
   /** Automatic sound effects for the whole project (cached until something changes). */
   let eventsCache = null;
@@ -3552,13 +3622,19 @@ export function createEditor() {
     setPlaying(!playing);
   }
   $('#tl-play').onclick = togglePlay;
+  $('#tl-all').onclick = playAllScenes;
+  $('#play-all').onclick = playAllScenes;
 
   function tick(now) {
     rafId = requestAnimationFrame(tick);
     if (!project || exporting) return;
     if (playing) {
       let o = playStartOut + ((now - playStartNow) / 1000) * (tl.state.rate || 1);
-      if (o >= model.duration) {
+      if (o >= model.duration && playAll) {
+        if (sceneIdx < project.scenes.length - 1) { nextOfAll(now); return; }
+        if (tl.state.loop) { setPlaying(false); playAllScenes(); return; }
+        o = model.duration; setPlaying(false);
+      } else if (o >= model.duration) {
         if (tl.state.loop) { o = 0; playStartOut = 0; playStartTime = model.trimIn; playStartNow = now; playFrom(project, sceneOffset(), tl.state.rate, soundEvents(), sceneOffset() + model.duration).catch(() => {}); }
         else { o = model.duration; setPlaying(false); }
       }
@@ -3828,6 +3904,7 @@ export function createEditor() {
     if (e.key === 'Escape') { stopPlacing(); cancelDrawing(); closePops(); selPoint = null; selectSign(null); repaint(); return; }
     if (e.key === 'Enter' && drawing && !typing) { e.preventDefault(); finishDrawing(); return; }
     if (typing) return;
+    if (e.code === 'Space' && e.shiftKey) { e.preventDefault(); playAllScenes(); return; }
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
     if (!(step === 'route' && selPoint && e.key.startsWith('Arrow')) && tl.handleKey(e)) { e.preventDefault(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
