@@ -29,6 +29,7 @@ import { WaybackLayers, waybackReleases, yearlyReleases } from './wayback.js';
 import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, liveWeather, isSentinel } from './livesat.js';
 import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
+import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
 import { cdseDayFrame } from './livesat.js';
 import { thermalFilter } from './hudplus.js';
 import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
@@ -1418,6 +1419,16 @@ export function createEditor() {
     try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
     if (k === 'sentinel') { addSentinel(b.dataset.sat || 's2_true'); return; }
     if (k === 'pc') { addPC(b.dataset.col || 'sentinel-2-l2a'); return; }
+    if (k === 'objdetect') {
+      cancelDrawing();
+      const L = newLayer('objdetect', null, { start: newStart() });
+      L.name = b.dataset.manual ? 'Measured objects' : 'Detected objects';
+      if (b.dataset.manual) Object.assign(L.style, { summary: false, anim: 'flicker' });
+      L.duration = Math.max(L.duration, 6);
+      addLayer(L);
+      if (b.dataset.manual) startOdPick(L); else runDetect(L);
+      return;
+    }
     if (k === 'geovideo') {
       cancelDrawing();
       const L = newLayer('geovideo', quadGeom(fitQuad(9 / 16)), { start: newStart() });
@@ -1993,6 +2004,7 @@ export function createEditor() {
         h += '<p class="hint-line">CSV with latitude / longitude columns and a number column (population, sales…). The first number column is used. Drag the region corners to reshape it.</p>';
       }
       if (L.kind === 'matchcut') h += highlightPanel(L);
+      if (L.kind === 'objdetect') h += detectPanel(L);
       if (L.kind === 'collision' && L.geom?.type === 'LineString') {
         h += `<h5>Place the track</h5>
           <div class="btn-row"><button class="btn sm primary" data-act="colSnap">🛤 Snap to the real railway</button></div>
@@ -2027,6 +2039,87 @@ export function createEditor() {
     for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
     o[ks.at(-1)] = v;
   }
+  // ---------------------------------------------------------------- AI object detection
+  let odBusy = null, odPick = null;
+  const odFmt = (m) => `${m.toFixed(m < 100 ? 1 : 0)} m`;
+  function detectPanel(L) {
+    const s = L.style;
+    const want = new Set(String(s.classes || '').split(',').filter(Boolean));
+    let h = '<h5>Find objects on the image</h5>';
+    h += `<div class="chip-row" style="display:flex;flex-wrap:wrap;gap:4px 10px">${DOTA.map((c) => `<label class="small" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-odcls="${c}" ${want.has(c) ? 'checked' : ''}>${CLASS_INFO[c]?.icon || ''} ${esc(CLASS_INFO[c]?.name || c)}</label>`).join('')}</div>`;
+    h += fRow('Only if at least this sure', `<select id="od-conf">${[0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7].map((x) => `<option value="${x}" ${+s.minConf === x ? 'selected' : ''}>${Math.round(x * 100)}%</option>`).join('')}</select>`);
+    h += fRow('Find small objects (2× detail, slower)', `<input type="checkbox" id="od-small" ${s.small ? 'checked' : ''}>`);
+    const busy = odBusy && odBusy.id === L.id;
+    h += `<div class="btn-row wrap"><button class="btn sm primary" data-act="odRun" ${busy ? 'disabled' : ''}>${busy ? `Detecting… ${Math.round((odBusy.p || 0) * 100)}%` : '🎯 Detect objects in this view'}</button><button class="btn sm ${odPick?.id === L.id ? 'primary' : ''}" data-act="odPick">${odPick?.id === L.id ? '✓ Click both ends of the object on the map… (Esc to stop)' : '📏 Add by hand: click both ends'}</button></div>`;
+    h += '<p class="hint-line">Looks at the map imagery inside the video frame. Works best on sharp satellite pictures (Esri World Imagery / Wayback, zoom 16–19) — on 10 m Sentinel images only big ships show. Keep the map flat (no tilt) while detecting. Length and width are measured on the ground from the box corners. Model: YOLO11n-OBB (DOTA), runs in your browser.</p>';
+    const objs = s.objects || [];
+    h += `<h5>Objects (${objs.length})</h5>`;
+    if (objs.length) {
+      h += `<div class="od-list" style="display:flex;flex-direction:column;gap:4px">${objs.map((o, i) => {
+        const z = quadSize(o.q);
+        return `<div class="od-row" style="display:flex;gap:6px;align-items:center;border:1px solid var(--line,#333);border-radius:6px;padding:4px 6px${o.hidden ? ';opacity:.45' : ''}"><b class="small">${i + 1}</b>${fSel(`style.objects.${i}.cls`, o.cls, Object.fromEntries(Object.entries(CLASS_INFO).map(([k2, v]) => [k2, `${v.icon} ${v.name}`])))}<small class="muted" style="white-space:nowrap">${odFmt(z.len)} ×</small><input type="number" data-odw="${i}" value="${z.wid.toFixed(1)}" min="0.5" step="0.5" title="Width in metres" style="width:58px"><small class="muted">m${o.conf ? ` · ${Math.round(o.conf * 100)}%` : ''}</small><span style="margin-left:auto;white-space:nowrap"><button class="mini" data-act="odZoom" data-i="${i}" title="Show it">⌖</button><button class="mini" data-act="odHide" data-i="${i}" title="Show / hide">${o.hidden ? '◌' : '👁'}</button><button class="mini" data-act="odDel" data-i="${i}" title="Remove">✕</button></span></div>`;
+      }).join('')}</div>`;
+      h += '<div class="btn-row"><button class="btn sm" data-act="odClear">Remove all</button></div>';
+    } else h += '<p class="muted small">Nothing yet — press Detect, or add one by hand.</p>';
+    return h;
+  }
+  async function runDetect(L) {
+    if (odBusy) return;
+    const s = L.style;
+    const classes = new Set(String(s.classes || '').split(',').filter(Boolean));
+    if (!classes.size) { toast('Tick at least one kind of object'); return; }
+    if (map.getPitch() > 8) toast('Tip: tilt the map flat (0°) for the best detection and measurements', 4200);
+    odBusy = { id: L.id, p: 0 };
+    renderLayerEditor();
+    try {
+      toast('Loading the detection model (first time ~10 MB)…', 3000);
+      await loadModel();
+      await new Promise((res) => { map.once('render', res); map.triggerRepaint(); setTimeout(res, 400); });
+      const mc = map.getCanvas();
+      const kx = mc.width / overlay.width;
+      const sx = Math.max(0, frame.x * kx), sy = Math.max(0, frame.y * kx);
+      const src = document.createElement('canvas');
+      src.width = Math.max(1, Math.round(Math.min(mc.width - sx, frame.w * kx))); src.height = Math.max(1, Math.round(Math.min(mc.height - sy, frame.h * kx)));
+      src.getContext('2d').drawImage(mc, sx, sy, src.width, src.height, 0, 0, src.width, src.height);
+      try { src.getContext('2d').getImageData(0, 0, 1, 1); } catch { throw new Error('this basemap does not allow reading its pixels — switch to Esri / satellite imagery'); }
+      const found = await detectCanvas(src, { classes, minConf: +s.minConf || 0.3, scale: s.small ? 2 : 1, onProgress: (p) => { odBusy.p = p; const bt = $('#layer-editor [data-act="odRun"]'); if (bt) bt.textContent = `Detecting… ${Math.round(p * 100)}%`; } });
+      const kk = overlay.width / stage.clientWidth;
+      const toLL = ([x, y]) => { const ll = map.unproject([(x + sx) / kx / kk, (y + sy) / kx / kk]); return [+ll.lng.toFixed(7), +ll.lat.toFixed(7)]; };
+      pushUndo();
+      const keep = (s.objects || []).filter((o) => o.manual);
+      s.objects = [...keep, ...found.map((f) => ({ id: Math.random().toString(36).slice(2, 9), cls: f.cls, conf: +f.conf.toFixed(3), q: f.pts.map(toLL) }))];
+      toast(found.length ? `Found ${found.length} object${found.length === 1 ? '' : 's'}` : 'Nothing found — zoom in closer (16–19), tick more kinds or lower “at least this sure”', 4600);
+    } catch (err) {
+      toast(`Detection failed: ${err.message || err}`, 5200);
+    } finally {
+      odBusy = null;
+      renderLayerEditor(); commitLayers(); repaint();
+    }
+  }
+  function startOdPick(L) { odPick = { id: L.id, pts: [] }; toast('Click one end of the object, then the other end', 4200); renderLayerEditor(); }
+  stage.addEventListener('mousedown', (e) => {
+    if (!odPick) return;
+    const L = layerById(odPick.id);
+    if (!L) { odPick = null; return; }
+    e.preventDefault(); e.stopPropagation();
+    const r = stage.getBoundingClientRect();
+    const ll = map.unproject([e.clientX - r.left, e.clientY - r.top]);
+    odPick.pts.push([ll.lng, ll.lat]);
+    if (odPick.pts.length < 2) { toast('Now click the other end', 2400); return; }
+    const [A, B] = odPick.pts;
+    const k = Math.cos(((A[1] + B[1]) / 2) * Math.PI / 180), M = 111320;
+    const dx = (B[0] - A[0]) * k * M, dy = (B[1] - A[1]) * M, len = Math.hypot(dx, dy) || 1;
+    const half = Math.max(1, len * 0.14);
+    const nx = (-dy / len) * half, ny = (dx / len) * half;
+    const off = (P, sx2, sy2) => [+(P[0] + sx2 / (k * M)).toFixed(7), +(P[1] + sy2 / M).toFixed(7)];
+    pushUndo();
+    (L.style.objects ||= []).push({ id: Math.random().toString(36).slice(2, 9), cls: 'ship', manual: true, q: [off(A, nx, ny), off(B, nx, ny), off(B, -nx, -ny), off(A, -nx, -ny)] });
+    odPick = null;
+    renderLayerEditor(); commitLayers(); repaint();
+    toast(`Measured ${odFmt(len)} long — set the type in the list; width is a first guess (drag the sliders on the map later)`, 4600);
+  }, { capture: true });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && odPick) { odPick = null; renderLayerEditor(); } });
+
   /** Match cut: list of highlight boxes per picture, each with its own properties. */
   function highlightPanel(L) {
     const s = L.style;
@@ -2424,6 +2517,30 @@ export function createEditor() {
   const pcLooks = {};
   $('#layer-editor').addEventListener('change', (e) => {
     const Lp = selLayer && layerById(selLayer);
+    if (Lp && Lp.kind === 'objdetect' && e.target.dataset.odw != null) {
+      const o = Lp.style.objects?.[+e.target.dataset.odw];
+      const w = Math.max(0.3, +e.target.value || 0);
+      if (o && w) {
+        pushUndo();
+        const z = quadSize(o.q), q = o.q;
+        const mid = (A, B) => [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
+        const [A, B] = z.longFirst ? [mid(q[3], q[0]), mid(q[1], q[2])] : [mid(q[0], q[1]), mid(q[2], q[3])];
+        const k = Math.cos(((A[1] + B[1]) / 2) * Math.PI / 180), M = 111320;
+        const dx = (B[0] - A[0]) * k * M, dy = (B[1] - A[1]) * M, len = Math.hypot(dx, dy) || 1;
+        const nx = (-dy / len) * (w / 2), ny = (dx / len) * (w / 2);
+        const off = (P, a, b) => [+(P[0] + a / (k * M)).toFixed(7), +(P[1] + b / M).toFixed(7)];
+        o.q = [off(A, nx, ny), off(B, nx, ny), off(B, -nx, -ny), off(A, -nx, -ny)];
+        commitLayers(); repaint(); renderLayerEditor();
+      }
+      return;
+    }
+    if (Lp && Lp.kind === 'objdetect' && (e.target.dataset.odcls || e.target.id === 'od-conf' || e.target.id === 'od-small')) {
+      if (e.target.dataset.odcls) Lp.style.classes = $$('#layer-editor [data-odcls]').filter((c) => c.checked).map((c) => c.dataset.odcls).join(',');
+      if (e.target.id === 'od-conf') Lp.style.minConf = +e.target.value;
+      if (e.target.id === 'od-small') Lp.style.small = e.target.checked;
+      save();
+      return;
+    }
     if (Lp && ['pc-col', 'pc-look', 'pc-from', 'pc-to', 'pc-cloud'].includes(e.target.id)) {
       const v = e.target.value;
       if (e.target.id === 'pc-col') { Lp.style.pcCol = v; Lp.style.pcLook = ''; pcList = null; renderLayerEditor(); }
@@ -2494,6 +2611,11 @@ export function createEditor() {
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
     }
     if (a === 'smLoad') $('#file-sm').click();
+    if (a === 'odRun') runDetect(L);
+    if (a === 'odPick') { if (odPick?.id === L.id) { odPick = null; renderLayerEditor(); } else startOdPick(L); }
+    if (a === 'odDel' || a === 'odHide') { pushUndo(); const o = L.style.objects?.[+btn.dataset.i]; if (o) { if (a === 'odDel') L.style.objects.splice(+btn.dataset.i, 1); else o.hidden = !o.hidden; } renderLayerEditor(); commitLayers(); repaint(); }
+    if (a === 'odClear') { pushUndo(); L.style.objects = []; renderLayerEditor(); commitLayers(); repaint(); }
+    if (a === 'odZoom') { const o = L.style.objects?.[+btn.dataset.i]; if (o) { const c = o.q.reduce((acc, p) => [acc[0] + p[0] / 4, acc[1] + p[1] / 4], [0, 0]); map.easeTo({ center: c, zoom: Math.max(map.getZoom(), 17), duration: 700 }); } }
     if (a === 'pcFind' || a === 'cdseFind') {
       if (a === 'cdseFind' && $('#ls-wms')) { L.style.wmsUrl = $('#ls-wms').value; L.style.wmsLayer = $('#ls-layer').value; }
       pcFind(L, a === 'cdseFind');
