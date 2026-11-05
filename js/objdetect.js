@@ -235,7 +235,9 @@ export function drawObjDetect(ctx, L, tm, o, phase) {
     });
     return;
   }
-  // captions: measurement lines, labels, count card
+  // captions: measurement lines, labels, count card (labels that would overlap are left out)
+  const placed = [];
+  const free = (x, y, w, h) => !placed.some((r) => x < r[0] + r[2] && x + w > r[0] && y < r[1] + r[3] && y + h > r[1]);
   items.forEach(({ ob, P, c }, i) => {
     if (P.some((p) => !isFinite(p[0]))) return;
     const a = reveal(L, tm, i, items.length, ob, c, fr) * tm.alpha;
@@ -253,11 +255,14 @@ export function drawObjDetect(ctx, L, tm, o, phase) {
     const tag = (txt, x, y, bg) => {
       ctx.font = `600 ${fs}px ${MONO}`;
       const w = ctx.measureText(txt).width + fs * 0.9, h = fs * 1.55;
+      if (!free(x - w / 2, y - h / 2, w, h)) return 0;
+      placed.push([x - w / 2, y - h / 2, w, h]);
       ctx.fillStyle = bg || 'rgba(20,24,30,0.86)'; ctx.fillRect(x - w / 2, y - h / 2, w, h);
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, x, y + fs * 0.05);
       return h;
     };
-    if (s.measure !== false) {
+    const pxLen = Math.hypot(L2[0] - L1[0], L2[1] - L1[1]);
+    if (s.measure !== false && pxLen > 46 * unit * k) {
       ctx.strokeStyle = col; ctx.lineWidth = 1.3 * unit * th;
       const grow = tm.edit ? 1 : clamp((tm.tau - 0) * 1, 0, 1);
       ctx.beginPath(); ctx.moveTo(L1[0], L1[1]); ctx.lineTo(L1[0] + (L2[0] - L1[0]) * grow, L1[1] + (L2[1] - L1[1]) * grow); ctx.stroke();
@@ -276,7 +281,11 @@ export function drawObjDetect(ctx, L, tm, o, phase) {
       for (const p of P) if (p[1] < top) { top = p[1]; lx = p[0]; }
       ctx.font = `700 ${fs * 1.05}px ${UI}`;
       const w = ctx.measureText(txt).width + fs, h = fs * 1.7;
-      const x = clamp(lx - w / 2, fr ? fr.x + 4 : -1e9, fr ? fr.x + fr.w - w - 4 : 1e9), y = top - h - 6 * unit;
+      const x = clamp(lx - w / 2, fr ? fr.x + 4 : -1e9, fr ? fr.x + fr.w - w - 4 : 1e9);
+      let y = top - h - 6 * unit;
+      if (!free(x, y, w, h)) { let bot = -Infinity; for (const p of P) bot = Math.max(bot, p[1]); y = bot + 6 * unit; }
+      if (!free(x, y, w, h)) { ctx.restore(); return; }
+      placed.push([x, y, w, h]);
       ctx.fillStyle = hexA(col, 0.95); ctx.fillRect(x, y, w, h);
       ctx.fillStyle = '#06121a'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(txt, x + fs / 2, y + h / 2 + fs * 0.04);
