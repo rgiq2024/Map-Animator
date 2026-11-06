@@ -85,6 +85,10 @@ Rendering happens frame by frame: for each frame the map waits until all tiles a
 - **Video on the map** — a drone / satellite / thermal clip warped onto the map by its four corners (move, rotate and stretch the corners like a georeferenced image). Exported frame-exact.
 - **Moving label** — text that follows a moving object or 3D model (plane taking off, ship, vehicle, missile path, the route arrow) with live `{speed}` `{alt}` `{heading}` `{lat}` `{lon}` `{dist}`; looks: tag, data box, target tracker, flag, plain text; optional dotted trail.
 
+## Tutorials
+
+`tutorials.html` (linked from the top bar, the home page and Help) has step-by-step guides for the workflow and a card for every element in *Layers → Add* — an example frame, its settings panel, how to place it, its animations and the settings you can change, with search. Pictures are in `assets/tutorials/`.
+
 ## Code
 
 A static site — plain HTML, CSS and ES modules, no build step.
