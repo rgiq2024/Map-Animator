@@ -30,7 +30,7 @@ import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, l
 import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
 import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
-import { cartoReady, countriesByName } from './cartofx.js';
+import { cartoReady, countriesByName, countryNames, GROUPS as CF_GROUPS } from './cartofx.js';
 import { openModelBuilder, MF_PRESETS, clone as mfClone } from './modelflow.js';
 import { MODES as TR_MODES, lineModel, transitState, parseStations, osmRoutesInView, osmRoute, osmTracks, routeOnNetwork, roadRoute, geocode as trGeocodeName, ETIHAD_RAIL } from './transit.js';
 import { cdseDayFrame } from './livesat.js';
@@ -1892,6 +1892,13 @@ export function createEditor() {
   $('#add-hudpack')?.addEventListener('click', vizHandler);
   $('#add-story')?.addEventListener('click', vizHandler);
   $('#add-shapes')?.addEventListener('click', vizHandler);
+  (function fillCountryPicker() {
+    const sel = $('#carto-country');
+    if (!sel) return;
+    const names = countryNames();
+    if (!names.length) { setTimeout(fillCountryPicker, 500); return; }
+    sel.insertAdjacentHTML('beforeend', `<optgroup label="Groups">${Object.keys(CF_GROUPS).map((g) => `<option value="${g.toUpperCase()}">${g.toUpperCase()}</option>`).join('')}</optgroup><optgroup label="Countries">${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`);
+  })();
   $('#add-carto')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -1899,10 +1906,19 @@ export function createEditor() {
     let st = null;
     try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
     cancelDrawing();
+    const pick = $('#carto-country')?.value || '';
+    if (pick && st) {
+      if (k === 'spotlight' && st.source !== 'layer') { st.countries = pick; if (st.label !== '') st.label = pick.toUpperCase(); st.cities = ''; }
+      if (k === 'regions' && st.source === 'countries') st.countries = pick;
+      if (k === 'regions' && st.source === 'osm') st.area = pick;
+    }
+    if (pick && !st && k === 'eventdots') st = { source: 'countries', countries: pick };
+    if (pick && !st && k === 'locator') st = { country: pick };
     if (!LAYER_KINDS[k]?.geom) {
       const L = newLayer(k, null, { start: newStart() });
       if (st) Object.assign(L.style, st);
       if (b.dataset.name) L.name = b.dataset.name;
+      if (pick && k === 'spotlight' && L.style.source !== 'layer') L.name = `Spotlight: ${pick}`;
       const lastPoly = [...(scene().layers || [])].reverse().find((x) => /Polygon/.test(x.geom?.type || ''));
       if ((k === 'eventdots' || (k === 'spotlight' && L.style.source === 'layer')) && !L.style.ref) {
         if (lastPoly) { L.style.ref = lastPoly.id; L.style.source = 'layer'; }
@@ -1911,7 +1927,7 @@ export function createEditor() {
       if (k === 'elevprofile') { L.start = 0; L.duration = Math.max(4, (scene().duration || 10)); }
       if (k === 'catmarkers') toast('Edit the categories and places (Category | longitude, latitude) in the settings', 4200);
       addLayer(L);
-      if (k === 'spotlight' && L.style.source === 'countries') {
+      if ((k === 'spotlight' && L.style.source === 'countries') || (k === 'regions' && L.style.source === 'countries')) {
         let n = 0;
         const fit = () => { const c = countriesByName(L.style.countries); if (!c) { if (n++ < 30) setTimeout(fit, 250); return; } if (!c.length) { toast('Country not found — check the name'); return; } let w = 180, s2 = 90, e2 = -180, n2 = -90; for (const x of c) { w = Math.min(w, x.bbox[0]); s2 = Math.min(s2, x.bbox[1]); e2 = Math.max(e2, x.bbox[2]); n2 = Math.max(n2, x.bbox[3]); } if (e2 - w < 120) flyToBounds([[w, s2], [e2, n2]], 0.12); repaint(); };
         fit();
@@ -1921,7 +1937,7 @@ export function createEditor() {
     pendingStyle = st;
     startAdd(k);
     pendingName = b.dataset.name || null;
-    showHint({ inset: 'Click the place to zoom into — then drag the box where you want it', rangerings: 'Click the base the rings are measured from', territory: 'Click around the area under control — then press Finish', units: 'Click the path the units drive along — then press Finish', blast: 'Click where the explosion is', portrait: 'Click the place the portrait belongs to' }[k] || 'Click on the map');
+    showHint({ photopin: 'Click the place for the photo pin — then choose the photo in its settings', leader: 'Click the place the label points to', spokes: 'Click the home / base — then add the places in its settings', lights: 'Click along the runway — then press Finish', fireplume: 'Click the site', missiles: 'Click the launch site, then the target — then press Finish', bigarrow: 'Click along the arrow’s path — then press Finish', inset: 'Click the place to zoom into — then drag the box where you want it', rangerings: 'Click the base the rings are measured from', territory: 'Click around the area under control — then press Finish', units: 'Click the path the units drive along — then press Finish', blast: 'Click where the explosion is', portrait: 'Click the place the portrait belongs to' }[k] || 'Click on the map');
   });
   $('#add-holo')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -2044,6 +2060,14 @@ export function createEditor() {
         }
         else if (type === 'number') h += fRow(label, fNum(path, v, o || 1));
         else if (type === 'textarea') h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea></label>`;
+        else if (type === 'countries') {
+          const names = countryNames();
+          const opts = `<option value="">${names.length ? (o === 'one' ? '— choose a country —' : '— choose a country / group —') : 'Loading countries…'}</option>${o === 'one' ? '' : `<optgroup label="Groups">${Object.keys(CF_GROUPS).map((g) => `<option value="${g.toUpperCase()}">${g.toUpperCase()}</option>`).join('')}</optgroup>`}<optgroup label="Countries">${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`;
+          h += `<label class="field"><span>${label}</span><input type="text" data-b="${path}" value="${esc(v || '')}" placeholder="e.g. Austria"><span class="cpick"><select data-cpick="${path}" data-mode="set">${opts}</select>${o === 'one' ? '' : `<select data-cpick="${path}" data-mode="add"><option value="">＋ add another…</option>${opts.replace(/<option value="">[^<]*<\/option>/, '')}</select>`}<button class="btn sm" data-act="cpZoom" data-field="${path}" title="Zoom the map to it">⌖</button></span></label>`;
+        }
+        else if (type === 'cities') {
+          h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea><span class="cpick"><input type="search" data-cfind="${path}" data-fmt="${o || 'cities'}" placeholder="Find a city or place by name…"><button class="btn sm" data-act="cityFind" data-field="${path}" data-fmt="${o || 'cities'}">＋ Add</button></span></label>`;
+        }
         else if (type === 'image') {
           const im = v && imageFor(v);
           h += `<div class="row img-pick"><span>${label}</span><span class="img-pick-r">${im?.ready ? `<i class="muted small">${im.w}×${im.h}</i>` : ''}<button class="btn sm" data-act="pickImg" data-field="${path}">${v ? 'Replace…' : 'Choose…'}</button></span></div>`;
@@ -2114,6 +2138,49 @@ export function createEditor() {
     for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
     o[ks.at(-1)] = v;
   }
+  // ---------------------------------------------------------------- country / city pickers
+  const getPath = (L, path) => path.split('.').reduce((a, k) => a?.[k], L);
+  function zoomToCountries(names) {
+    let n = 0;
+    const go = () => { const c = countriesByName(names); if (!c) { if (n++ < 30) setTimeout(go, 250); return; } if (!c.length) { toast('Country not found'); return; } let w = 180, s2 = 90, e2 = -180, n2 = -90; for (const x of c) { w = Math.min(w, x.bbox[0]); s2 = Math.min(s2, x.bbox[1]); e2 = Math.max(e2, x.bbox[2]); n2 = Math.max(n2, x.bbox[3]); } if (e2 - w < 150) flyToBounds([[w, s2], [e2, n2]], 0.12); };
+    go();
+  }
+  $('#layer-editor')?.addEventListener('change', (e) => {
+    const sel = e.target.closest('[data-cpick]');
+    if (!sel || !sel.value) return;
+    const L = layerById(selLayer);
+    if (!L) return;
+    pushUndo();
+    const path = sel.dataset.cpick, cur = String(getPath(L, path) || '').trim();
+    const val = sel.dataset.mode === 'add' && cur ? `${cur}, ${sel.value}` : sel.value;
+    setPath(L, path, val);
+    if (L.kind === 'spotlight' && path === 'style.countries' && sel.dataset.mode !== 'add') { L.style.label = sel.value.toUpperCase(); L.style.cities = ''; L.name = `Spotlight: ${sel.value}`; }
+    if (L.kind === 'regions' && path === 'style.countries') L.style.source = 'countries';
+    commitLayers(); renderLayerEditor(); repaint();
+    zoomToCountries(val);
+  });
+  async function cityFind(L, path, fmt, q) {
+    if (!q) { toast('Type a city or place name first'); return; }
+    toast(`Finding ${q}…`, 1500);
+    const ll = await trGeocodeName(q).catch(() => null);
+    if (!ll) { toast(`Could not find “${q}”`); return; }
+    pushUndo();
+    const cur = String(getPath(L, path) || '').replace(/\s+$/, '');
+    let line = `${q} | ${ll[0]}, ${ll[1]}`;
+    if (fmt === 'places') { const cat = String(L.style.cats || '').split('\n')[0]?.split('|')[0]?.trim() || 'Place'; line = `${cat} | ${ll[0]}, ${ll[1]} | ${q}`; }
+    if (fmt === 'pois') line = `${q} | ${ll[0]}, ${ll[1]} | pin | #1d6fa5`;
+    if (fmt === 'coords') line = `${ll[0]}, ${ll[1]}`;
+    setPath(L, path, cur ? `${cur}\n${line}` : line);
+    commitLayers(); renderLayerEditor(); repaint();
+    toast(`Added ${q}`, 1800);
+  }
+  $('#layer-editor')?.addEventListener('keydown', (e) => {
+    const inp = e.target.closest('[data-cfind]');
+    if (!inp || e.key !== 'Enter') return;
+    e.preventDefault();
+    const L = layerById(selLayer); if (L) cityFind(L, inp.dataset.cfind, inp.dataset.fmt, inp.value.trim());
+  });
+
   // ---------------------------------------------------------------- model builder
   function openMF(L) {
     pushUndo();
@@ -2922,6 +2989,8 @@ export function createEditor() {
     }
     if (a === 'smLoad') $('#file-sm').click();
     if (a === 'mfOpen') openMF(L);
+    if (a === 'cityFind') { const inp = btn.parentElement.querySelector('[data-cfind]'); cityFind(L, btn.dataset.field, btn.dataset.fmt, inp?.value.trim()); }
+    if (a === 'cpZoom') zoomToCountries(getPath(L, btn.dataset.field));
     if (a === 'trFind') trFindRoutes(L);
     if (a === 'trPick' && Array.isArray(trRoutes)) trPick(L, trRoutes[+btn.dataset.i]);
     if (a === 'trGeo') trGeocode(L);

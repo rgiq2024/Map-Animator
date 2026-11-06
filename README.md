@@ -139,7 +139,21 @@ Rendering happens frame by frame: for each frame the map waits until all tiles a
 - **Incident dots / heat**: clusters of red dots with a heat glow appearing over a country or area, at random or sweeping across.
 - **Portrait badge**: your photo in an octagon, circle, square or shield frame with a name plate and an optional colour tint and leader line.
 
-Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `assets/geo/`.
+- **Pick any country**: the country dropdown at the top of the section (all countries, plus groups USSR, EU, GCC, NATO) is used by the spotlight, fill, tint, dots, regions and locator buttons. In a layer's settings, a country field has a dropdown to replace, a second one to add another, and ⌖ to zoom to it. City / place lists have a *Find a city or place by name* box that adds it with its coordinates (OpenStreetMap Nominatim).
+- **More spotlight looks**: a picture / flag fills the country (with relief and an inner shadow); two colours across a country (red / blue); a neon glow outline with the world darker (night map, sci-fi); a tint with dot city labels and a capital star (`*Bern`); the name in a box.
+- **Photo pin**: a round photo in a coloured map pin with a distance chip.
+- **Leader-line labels**: a white box (Fordo / Natanz), a sci-fi underline with coordinates, a big serif title on an elbow line (Japan), a black tag, a rounded pill, a tilted board.
+- **Distance spokes**: coloured lines from a home to nearby places, each with an icon card and the distance (miles / km).
+- **Runway lights**: chasing, twinkling or switching-on lights in one or two rows, with or without a centre line.
+- **Fire plume**: animated flames and smoke on a ringed marker (nuclear / factory icon).
+- **Missile trails**: glowing heads with wavy smoke trails from launch to target, and fireballs on impact.
+- **Stealth bombers**: flying-wing silhouettes in formation (also in range rings); a **nuclear** symbol for category markers.
+- **Coloured regions / choropleth**: states, districts or counties of any place, from OpenStreetMap admin boundaries (choose the level), or countries. Each region gets its own colour and name (Manipur), or is coloured by your values with classes and a legend (COVID map).
+- **Event timeline**: earthquakes or any dated events (`date | lng, lat | magnitude`), or live USGS earthquakes (past 30 days M4.5+ / past 7 days M2.5+). Dots are sized and coloured by magnitude and appear day by day, with rings, a highlighted newest event and a date timeline.
+- **Ripple rings**: sonar-like pulses at places.
+- **Big curved arrow**: a smooth, tapered arrow with a shadow that grows along the path.
+
+Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `assets/geo/`. Districts: © OpenStreetMap contributors. Earthquakes: USGS.
 
 ## Tutorials
 

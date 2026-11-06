@@ -276,7 +276,7 @@ export const CF_DEFAULTS = {
   inset: { anim: 'open', duration: 1.4, style: { src: 'satellite', zoom: 14.5, gray: true, boxSize: 1, side: 'left', aspect: 1.15, frame: '#ffffff', square: true, markers: true, title: '', dim: 0.15 } },
   spotlight: { anim: 'fade', duration: 1.6, style: {
     source: 'countries', countries: 'Austria', ref: '', mode: 'vivid', gray: 0.85, dark: 0.55, glow: true, outline: '#ffffff', width: 1.4,
-    fill: '#c8102e', fillOpacity: 0.85, media: '', emblemSize: 0.45, inner: true, label: 'AUSTRIA', labelSize: 1, cities: 'Vienna | 16.37, 48.21', labelPos: 'center',
+    fill: '#c8102e', fill2: '#2140ff', split: 0.45, splitDir: 'we', relief: 0.45, cityStyle: 'tag', fillOpacity: 0.85, media: '', emblemSize: 0.45, inner: true, label: 'AUSTRIA', labelSize: 1, cities: 'Vienna | 16.37, 48.21', labelPos: 'center',
   } },
   locator: { anim: 'slide', duration: 0.8, style: { country: '', fill: '#ff8a3d', box: '#ffffff', route: true, size: 1, position: 'top-right', shadow: true } },
   elevprofile: { anim: 'follow', duration: 10, style: {
@@ -295,8 +295,8 @@ export const CF_DEFAULTS = {
 const isMode = (...m) => (L) => m.includes(L.style.mode);
 export const CF_FORMS = {
   catmarkers: [
-    ['style.cats', 'Categories — “Label | circle / triangle / square / diamond / star | colour”', 'textarea'],
-    ['style.places', 'Places — “Category | longitude, latitude | name (optional)”, one per line', 'textarea'],
+    ['style.cats', 'Categories — “Label | circle / triangle / square / diamond / star / nuclear | colour”', 'textarea'],
+    ['style.places', 'Places — “Category | longitude, latitude | name (optional)”, one per line', 'cities', 'places'],
     ['style.size', 'Marker size', 'range', [0.4, 3, 0.05]], ['style.outline', 'White outline', 'switch'], ['style.labels', 'Show names', 'switch'],
     ['style.legend', 'Legend', 'switch'], ['style.legendPos', 'Legend position', 'select', POS, (L) => L.style.legend !== false], ['style.legendSize', 'Legend size', 'range', [0.5, 2.5, 0.05], (L) => L.style.legend !== false],
   ],
@@ -309,18 +309,23 @@ export const CF_FORMS = {
   ],
   spotlight: [
     ['style.source', 'Area', 'select', { countries: 'Countries by name', layer: 'A boundary / area layer' }],
-    ['style.countries', 'Countries (comma separated — groups: USSR, EU, GCC, NATO)', 'text', null, (L) => L.style.source === 'countries'],
+    ['style.countries', 'Countries (pick, or type several: Russia, Belarus — groups: USSR, EU, GCC, NATO)', 'countries', null, (L) => L.style.source === 'countries'],
     ['style.ref', 'Layer', 'layerref', 'polygon', (L) => L.style.source === 'layer'],
-    ['style.mode', 'Look', 'select', { vivid: 'Country in colour, rest grey & dark (Austria)', grayin: 'Grey & bright inside, colour outside (Paris)', fill: 'Colour / flag fill (USSR)', tint: 'Colour tint inside', outline: 'Outline only' }],
+    ['style.mode', 'Look', 'select', { vivid: 'Country in colour, rest grey & dark (Austria)', grayin: 'Grey & bright inside, colour outside (Paris)', fill: 'Colour fill (USSR)', image: 'Picture / flag fills the country', twotone: 'Two colours across it (Iran red / blue)', neon: 'Neon glow outline, world darker', tint: 'Colour tint inside', outline: 'Outline only' }],
     ['style.gray', 'Grey outside / inside', 'range', [0, 1, 0.02], isMode('vivid', 'grayin')], ['style.dark', 'Darken', 'range', [0, 0.9, 0.02], isMode('vivid', 'grayin')],
-    ['style.fill', 'Fill colour', 'color', null, isMode('fill', 'tint')], ['style.fillOpacity', 'Fill strength', 'range', [0.1, 1, 0.02], isMode('fill', 'tint')],
-    ['style.media', 'Emblem / flag picture (optional)', 'image', null, isMode('fill', 'tint')], ['style.emblemSize', 'Emblem size', 'range', [0.1, 1.2, 0.02], (L) => isMode('fill', 'tint')(L) && L.style.media],
+    ['style.fill', 'Colour', 'color', null, isMode('fill', 'tint', 'twotone', 'neon')], ['style.fill2', 'Second colour', 'color', null, isMode('twotone')],
+    ['style.split', 'Where the colours meet', 'range', [0.1, 0.9, 0.01], isMode('twotone')], ['style.splitDir', 'Split direction', 'select', { we: 'West | East', ns: 'North | South', diag: 'Diagonal' }, isMode('twotone')],
+    ['style.fillOpacity', 'Fill strength', 'range', [0.1, 1, 0.02], isMode('fill', 'tint', 'image', 'twotone')],
+    ['style.media', 'Picture (flag, photo, texture)', 'image', null, isMode('fill', 'tint', 'image')], ['style.emblemSize', 'Emblem size', 'range', [0.1, 1.2, 0.02], (L) => isMode('fill', 'tint')(L) && L.style.media],
+    ['style.relief', 'Map relief shows through', 'range', [0, 1, 0.02], isMode('image', 'twotone', 'fill')],
+    ['style.dark', 'Darken the world outside', 'range', [0, 0.9, 0.02], isMode('neon', 'image', 'fill', 'twotone')],
     ['style.outline', 'Outline colour', 'color'], ['style.width', 'Outline width', 'range', [0, 6, 0.1]], ['style.glow', 'Outline glow', 'switch'], ['style.inner', 'Inner borders (between countries / parts)', 'switch'],
-    ['style.label', 'Big name', 'text'], ['style.labelSize', 'Name size', 'range', [0.3, 3, 0.05]], ['style.labelPos', 'Name position', 'select', { center: 'Middle of the area', ...CUSTOM_POS }],
-    ['style.cities', 'City tags — “Name | longitude, latitude”, one per line', 'textarea'],
+    ['style.label', 'Big name', 'text'], ['style.labelSize', 'Name size', 'range', [0.3, 3, 0.05]], ['style.labelBox', 'Name in a box (Switzerland)', 'switch'], ['style.labelPos', 'Name position', 'select', { center: 'Middle of the area', ...CUSTOM_POS }],
+    ['style.cities', 'City tags — “Name | longitude, latitude” (start with * for a capital)', 'cities'],
+    ['style.cityStyle', 'City look', 'select', { tag: 'Black tag (Austria)', dots: 'Dot + bold name (Switzerland)', plain: 'White name' }],
   ],
   locator: [
-    ['style.country', 'Country (empty = the one under the map centre)', 'text'], ['style.fill', 'Silhouette colour', 'color'], ['style.box', 'View box colour', 'color'],
+    ['style.country', 'Country (empty = the one under the map centre)', 'countries', 'one'], ['style.fill', 'Silhouette colour', 'color'], ['style.box', 'View box colour', 'color'],
     ['style.route', 'Draw the route on it', 'switch'], ['style.size', 'Size', 'range', [0.4, 2.5, 0.05]], ['style.position', 'Position', 'select', POS], ['style.shadow', 'Shadow', 'switch'],
   ],
   elevprofile: [
@@ -334,7 +339,7 @@ export const CF_FORMS = {
     ['style.trail', 'Glowing trail on the map', 'switch'], ['style.trailColor', 'Trail colour', 'color', null, (L) => L.style.trail !== false],
   ],
   rangerings: [
-    ['style.rings', 'Rings — “Name | range | mi / km / nm | fighter / twinboom / bomber / jet / heli / missile / none”', 'textarea'],
+    ['style.rings', 'Rings — “Name | range | mi / km / nm | fighter / twinboom / bomber / stealth / jet / heli / missile / none”', 'textarea'],
     ['style.color', 'Ring colour', 'color'], ['style.dash', 'Dotted', 'switch'], ['style.width', 'Ring width', 'range', [0.5, 5, 0.1]],
     ['style.iconColor', 'Silhouette colour', 'color'], ['style.iconSize', 'Silhouette size', 'range', [0.3, 3, 0.05]], ['style.labelColor', 'Label colour', 'color'], ['style.labelSize', 'Label size', 'range', [0.5, 2.5, 0.05]],
     ['style.angle', 'Where the first silhouette sits (degrees)', 'range', [0, 360, 1]], ['style.spread', 'Spacing between silhouettes (degrees)', 'range', [0, 90, 1]], ['style.base', 'Base marker', 'switch'],
@@ -346,7 +351,7 @@ export const CF_FORMS = {
     ['style.outline', 'Outline', 'switch'],
   ],
   units: [
-    ['style.type', 'Unit', 'select', { tank: 'Tank', apc: 'Armoured carrier', truck: 'Truck', artillery: 'Artillery', jeep: 'Jeep', jet: 'Fighter jet', bomber: 'Bomber', heli: 'Helicopter', ship: 'Warship' }],
+    ['style.type', 'Unit', 'select', { tank: 'Tank', apc: 'Armoured carrier', truck: 'Truck', artillery: 'Artillery', jeep: 'Jeep', jet: 'Fighter jet', bomber: 'Bomber', stealth: 'Stealth bomber (flying wing)', heli: 'Helicopter', ship: 'Warship' }],
     ['style.count', 'How many', 'range', [1, 16, 1]], ['style.formation', 'Formation', 'select', { column: 'Column (one behind another)', pairs: 'Pairs', wedge: 'Wedge' }],
     ['style.spacing', 'Spacing', 'range', [0.4, 3, 0.05]], ['style.size', 'Size', 'range', [0.3, 3, 0.05]], ['style.color', 'Colour', 'color'],
     ['style.dust', 'Dust / exhaust', 'switch'], ['style.shadow', 'Shadow', 'switch'],
@@ -354,13 +359,13 @@ export const CF_FORMS = {
   blast: [['style.size', 'Size', 'range', [0.3, 4, 0.05]], ['style.color', 'Burst colour', 'color'], ['style.flash', 'Flash', 'switch'], ['style.smoke', 'Smoke', 'switch'], ['style.scorch', 'Scorch mark stays', 'switch']],
   eventdots: [
     ['style.source', 'Area', 'select', { layer: 'A boundary / area layer', countries: 'Countries by name' }],
-    ['style.ref', 'Layer', 'layerref', 'polygon', (L) => L.style.source !== 'countries'], ['style.countries', 'Countries', 'text', null, (L) => L.style.source === 'countries'],
+    ['style.ref', 'Layer', 'layerref', 'polygon', (L) => L.style.source !== 'countries'], ['style.countries', 'Countries', 'countries', null, (L) => L.style.source === 'countries'],
     ['style.count', 'Dots', 'range', [20, 1500, 10]], ['style.clusters', 'Clusters', 'range', [1, 40, 1]], ['style.seed', 'Pattern', 'range', [1, 50, 1]],
     ['style.color', 'Colour', 'color'], ['style.dotSize', 'Dot size', 'range', [0.3, 3, 0.05]], ['style.heat', 'Heat glow', 'switch'], ['style.heatOpacity', 'Heat strength', 'range', [0.05, 1, 0.02], (L) => L.style.heat !== false],
     ['style.dir', 'Sweeps towards', 'select', { E: 'East', W: 'West', N: 'North', S: 'South' }, (L) => L.anim === 'sweep'],
   ],
   portrait: [
-    ['style.media', 'Photo', 'image'], ['style.name', 'Name plate', 'text'], ['style.shape', 'Frame', 'select', { octagon: 'Octagon', circle: 'Circle', square: 'Square', shield: 'Shield' }],
+    ['style.media', 'Photo', 'image'], ['style.name', 'Name plate', 'text'], ['style.shape', 'Frame', 'select', { octagon: 'Octagon', circle: 'Circle', bubble: 'Glass bubble (Venezuela)', square: 'Square', shield: 'Shield' }],
     ['style.ring', 'Frame colour', 'color'], ['style.plate', 'Plate colour', 'color'], ['style.tint', 'Colour tint on the photo', 'range', [0, 1, 0.02]], ['style.tintColor', 'Tint colour', 'color', null, (L) => +L.style.tint > 0],
     ['style.size', 'Size', 'range', [0.3, 3, 0.05]], ['style.leader', 'Line to the place', 'switch'], ['style.dx', 'Offset right (px)', 'range', [-400, 400, 1], (L) => L.style.leader], ['style.dy', 'Offset down (px)', 'range', [-400, 400, 1], (L) => L.style.leader],
   ],
@@ -381,6 +386,15 @@ function symbolPath(ctx, shape, x, y, r) {
 }
 function drawSymbol(ctx, shape, x, y, r, color, outline, unit) {
   ctx.save();
+  if (shape === 'nuclear') {
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 5 * unit;
+    ctx.fillStyle = color || '#f5c518'; ctx.beginPath(); ctx.arc(x, y, r * 1.25, 0, 7); ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#7a5a00'; ctx.lineWidth = r * 0.12; ctx.stroke();
+    ctx.fillStyle = '#111';
+    for (let i = 0; i < 3; i++) { const a = -Math.PI / 2 + (i * 2 * Math.PI) / 3; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, r * 1.0, a - 0.52, a + 0.52); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = color || '#f5c518'; ctx.beginPath(); ctx.arc(x, y, r * 0.3, 0, 7); ctx.fill(); ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(x, y, r * 0.18, 0, 7); ctx.fill();
+    ctx.restore(); return;
+  }
   ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 4 * unit; ctx.shadowOffsetY = 1 * unit;
   symbolPath(ctx, shape, x, y, r);
   ctx.fillStyle = color; ctx.fill();
@@ -548,6 +562,32 @@ function drawSpotlight(ctx, L, tm, o, phase) {
         }
         ctx.drawImage(C, 0, 0, C.width, C.height, fr.x, fr.y, fr.w, fr.h);
       }
+    } else if (mode === 'image' || mode === 'twotone' || mode === 'neon') {
+      if (+s.dark > 0) { ctx.save(); ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); pathPolys(ctx, P.all, proj); ctx.fillStyle = `rgba(0,0,0,${+s.dark})`; ctx.fill('evenodd'); ctx.restore(); }
+      if (mode !== 'neon') {
+        const [w0, s0, e0, n0] = bboxOf(P.all);
+        const a = proj([w0, n0]), b = proj([e0, s0]);
+        const bx = Math.min(a[0], b[0]), by = Math.min(a[1], b[1]), bw = Math.abs(b[0] - a[0]), bh = Math.abs(b[1] - a[1]);
+        ctx.save(); ctx.beginPath(); pathPolys(ctx, P.all, proj); ctx.clip('evenodd');
+        ctx.globalAlpha *= +s.fillOpacity || 0.9;
+        if (mode === 'image') {
+          const im = s.media && imageFor(s.media);
+          if (im?.ready) { const k = Math.max(bw / im.w, bh / im.h); ctx.drawImage(im.bmp, bx + bw / 2 - (im.w * k) / 2, by + bh / 2 - (im.h * k) / 2, im.w * k, im.h * k); }
+          else { ctx.fillStyle = hexA(s.fill || '#c8102e', 0.8); ctx.fillRect(bx, by, bw, bh); }
+        } else {
+          const sp = clamp(+s.split || 0.45, 0.05, 0.95);
+          const gr = s.splitDir === 'ns' ? ctx.createLinearGradient(0, by, 0, by + bh) : s.splitDir === 'diag' ? ctx.createLinearGradient(bx, by, bx + bw, by + bh) : ctx.createLinearGradient(bx, 0, bx + bw, 0);
+          gr.addColorStop(0, s.fill || '#e01818'); gr.addColorStop(Math.max(0, sp - 0.08), s.fill || '#e01818'); gr.addColorStop(Math.min(1, sp + 0.08), s.fill2 || '#2140ff'); gr.addColorStop(1, s.fill2 || '#2140ff');
+          ctx.fillStyle = gr; ctx.globalCompositeOperation = 'color'; ctx.fillRect(bx, by, bw, bh);
+          ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha *= 0.55; ctx.fillRect(bx, by, bw, bh);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        if (+s.relief > 0 && mode === 'image') { ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = tm.alpha * kFill * clamp(+s.relief, 0, 1); drawMapCrop(ctx, o, fr.x, fr.y, fr.w, fr.h, fr.x, fr.y, fr.w, fr.h); ctx.globalCompositeOperation = 'source-over'; }
+        // inner shadow along the border
+        ctx.globalAlpha = tm.alpha * kFill * 0.55; ctx.filter = `blur(${8 * unit}px)`; ctx.strokeStyle = '#000'; ctx.lineWidth = 16 * unit;
+        ctx.beginPath(); pathPolys(ctx, P.all, proj); ctx.stroke(); ctx.filter = 'none';
+        ctx.restore();
+      }
     } else if (mode === 'fill' || mode === 'tint') {
       const col = s.fill || '#c8102e';
       ctx.beginPath(); pathPolys(ctx, P.all, proj);
@@ -585,8 +625,9 @@ function drawSpotlight(ctx, L, tm, o, phase) {
   const w = (+s.width || 1.4) * unit;
   if (w > 0 && kLine > 0) {
     ctx.lineJoin = 'round';
-    const col = mode === 'fill' ? shade(s.fill || '#c8102e', -0.35) : s.outline || '#ffffff';
+    const col = mode === 'fill' ? shade(s.fill || '#c8102e', -0.35) : mode === 'neon' ? s.fill || '#39ff6a' : s.outline || '#ffffff';
     if (draw && kLine < 1) { ctx.setLineDash([4000 * unit * kLine, 1e6]); }
+    if (mode === 'neon') { ctx.save(); ctx.filter = `blur(${5 * unit}px)`; ctx.strokeStyle = col; ctx.lineWidth = w * 4; for (const g of P.groups) { ctx.beginPath(); pathPolys(ctx, g, proj); ctx.stroke(); } ctx.restore(); }
     if (s.glow !== false) { ctx.shadowColor = hexA(mode === 'fill' ? s.fill : s.outline || '#fff', 0.85); ctx.shadowBlur = 8 * unit; }
     ctx.strokeStyle = col; ctx.lineWidth = w;
     for (const g of P.groups) { ctx.beginPath(); pathPolys(ctx, g, proj); ctx.stroke(); }
@@ -612,8 +653,8 @@ function drawSpotlight(ctx, L, tm, o, phase) {
       ctx.save();
       if (s.labelPos === 'custom') placeAt(ctx, L, fr, q[0] - tw / 2, q[1] - fs / 2, tw, fs, { key: 'label' });
       ctx.globalAlpha = tm.alpha * kFill;
-      ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 10 * unit; ctx.shadowOffsetY = 2 * unit;
-      ctx.fillStyle = '#ffffff'; ctx.fillText(s.label, q[0], q[1]);
+      if (s.labelBox) { ctx.fillStyle = hexA(s.fill || '#d9d900', 0.95); ctx.fillRect(q[0] - tw / 2 - 10 * unit, q[1] - fs * 0.62, tw + 20 * unit, fs * 1.24); ctx.strokeStyle = '#222'; ctx.lineWidth = 1 * unit; ctx.strokeRect(q[0] - tw / 2 - 10 * unit, q[1] - fs * 0.62, tw + 20 * unit, fs * 1.24); ctx.fillStyle = '#1a1a1a'; ctx.fillText(s.label, q[0], q[1]); }
+      else { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 10 * unit; ctx.shadowOffsetY = 2 * unit; ctx.fillStyle = '#ffffff'; ctx.fillText(s.label, q[0], q[1]); }
       ctx.restore();
       if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '0px';
     }
@@ -625,11 +666,22 @@ function drawSpotlight(ctx, L, tm, o, phase) {
     if (k <= 0) return;
     const q = proj(ll);
     ctx.save(); ctx.globalAlpha = tm.alpha * k;
+    const capital = name.startsWith('*'), nm = capital ? name.slice(1).trim() : name;
+    if (s.cityStyle === 'dots' || s.cityStyle === 'plain') {
+      if (s.cityStyle === 'dots') {
+        if (capital) { ctx.fillStyle = '#111'; symbolPath(ctx, 'star', q[0], q[1], 5.5 * unit); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.4 * unit; ctx.stroke(); }
+        else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q[0], q[1], 4 * unit, 0, 7); ctx.fill(); ctx.strokeStyle = '#111'; ctx.lineWidth = 1.8 * unit; ctx.stroke(); }
+      }
+      ctx.font = `800 ${14 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round'; ctx.lineWidth = 4 * unit; ctx.strokeStyle = s.cityStyle === 'dots' ? '#fff' : 'rgba(0,0,0,0.75)'; ctx.strokeText(nm, q[0], q[1] - 6 * unit);
+      ctx.fillStyle = s.cityStyle === 'dots' ? '#111' : '#fff'; ctx.fillText(nm, q[0], q[1] - 6 * unit);
+      ctx.restore(); return;
+    }
     ctx.font = `500 ${13 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const tw = ctx.measureText(name).width + 16 * unit, th = 22 * unit, ty = q[1] - 9 * unit - th;
+    const tw = ctx.measureText(nm).width + 16 * unit, th = 22 * unit, ty = q[1] - 9 * unit - th;
     ctx.fillStyle = 'rgba(8,8,10,0.92)'; rr(ctx, q[0] - tw / 2, ty, tw, th, 2 * unit); ctx.fill();
     ctx.beginPath(); ctx.moveTo(q[0] - 5 * unit, ty + th); ctx.lineTo(q[0], ty + th + 6 * unit); ctx.lineTo(q[0] + 5 * unit, ty + th); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.fillText(name, q[0], ty + th / 2 + 0.5 * unit);
+    ctx.fillStyle = '#fff'; ctx.fillText(nm, q[0], ty + th / 2 + 0.5 * unit);
     ctx.restore();
   });
   ctx.restore();
@@ -817,7 +869,10 @@ function silhouette(ctx, kind, x, y, s, rot, col) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s / 40, s / 40); ctx.fillStyle = col;
   const P = (pts) => { ctx.beginPath(); pts.forEach(([a, b], i) => (i ? ctx.lineTo(a, b) : ctx.moveTo(a, b))); ctx.closePath(); ctx.fill(); };
   // drawn pointing up (−y), 40 units long
-  if (kind === 'twinboom') {
+  if (kind === 'stealth') { // flying wing (B-2 style)
+    P([[0, -14], [26, 6], [20, 9], [15, 6], [10, 10], [5, 7], [0, 10], [-5, 7], [-10, 10], [-15, 6], [-20, 9], [-26, 6]]);
+    if (!String(col).startsWith('rgba')) { ctx.globalAlpha *= 0.3; ctx.fillStyle = '#fff'; P([[0, -12], [5, -2], [-5, -2]]); ctx.globalAlpha /= 0.3; }
+  } else if (kind === 'twinboom') {
     P([[-1.5, -12], [1.5, -12], [2.5, 4], [-2.5, 4]]); // pod
     P([[-22, -4], [22, -4], [22, 2], [-22, 2]]); // wing
     for (const sx of [-8, 8]) { P([[sx - 2, -16], [sx + 2, -16], [sx + 1.6, 18], [sx - 1.6, 18]]); }
@@ -1014,7 +1069,7 @@ function unitSprite(ctx, kind, x, y, s, rot, col, t, moving, shadow) {
       if (kind === 'apc') { ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(0, -3, 4.5, 0, 7); ctx.fill(); ctx.fillStyle = dark; rr(ctx, -0.8, -15, 1.6, 12, 0.5); ctx.fill(); }
       else { ctx.fillStyle = 'rgba(150,190,210,0.55)'; ctx.fillRect(-W2 / 2 + 2, -L2 / 2 + 5, W2 - 4, 3); }
     }
-  } else if (kind === 'jet' || kind === 'bomber' || kind === 'heli') {
+  } else if (kind === 'jet' || kind === 'bomber' || kind === 'heli' || kind === 'stealth') {
     ctx.restore(); ctx.save();
     if (shadow) silhouette(ctx, kind === 'jet' ? 'jet' : kind, x + s * 0.6, y + s * 0.8, s, rot, 'rgba(0,0,0,0.28)');
     silhouette(ctx, kind, x, y, s, rot, col);
@@ -1042,7 +1097,7 @@ function drawUnits(ctx, L, tm, o) {
   const at = (d) => { d = clamp(d, 0, total); let i = 1; while (i < cum.length - 1 && cum[i] < d) i++; const f = (d - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1]); const a = pts[i - 1], b = pts[i]; return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, Math.atan2(b[0] - a[0], -(b[1] - a[1]))]; };
   const t = o.time || 0;
   ctx.save(); ctx.globalAlpha *= tm.alpha;
-  const air = ['jet', 'bomber', 'heli'].includes(s.type);
+  const air = ['jet', 'bomber', 'heli', 'stealth'].includes(s.type);
   for (let i = n - 1; i >= 0; i--) {
     let d = head, side = 0;
     if (s.formation === 'pairs') { d -= Math.floor(i / 2) * gap; side = i % 2 ? 1 : -1; }
@@ -1187,7 +1242,7 @@ function drawEventDots(ctx, L, tm, o, phase) {
 // ================================================================= portrait badge
 function shapePath(ctx, shape, x, y, r) {
   ctx.beginPath();
-  if (shape === 'circle') ctx.arc(x, y, r, 0, 7);
+  if (shape === 'circle' || shape === 'bubble') ctx.arc(x, y, r, 0, 7);
   else if (shape === 'square') ctx.rect(x - r, y - r, r * 2, r * 2);
   else if (shape === 'shield') { ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y - r); ctx.lineTo(x + r, y + r * 0.2); ctx.quadraticCurveTo(x + r, y + r * 0.8, x, y + r * 1.15); ctx.quadraticCurveTo(x - r, y + r * 0.8, x - r, y + r * 0.2); ctx.closePath(); }
   else { for (let i = 0; i < 8; i++) { const a = Math.PI / 8 + (i * Math.PI) / 4; const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); }
@@ -1204,7 +1259,7 @@ function drawPortrait(ctx, L, tm, o) {
   ctx.save(); ctx.globalAlpha *= tm.alpha * (L.anim === 'fade' && !tm.edit ? u : 1);
   if (s.leader) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6 * unit; ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(cx, cy); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p[0], p[1], 3 * unit, 0, 7); ctx.fill(); }
   ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14 * unit; ctx.shadowOffsetY = 3 * unit;
-  shapePath(ctx, s.shape, cx, cy, R * 1.12); ctx.fillStyle = s.ring || '#2a0d0d'; ctx.fill();
+  shapePath(ctx, s.shape, cx, cy, R * (s.shape === 'bubble' ? 1.0 : 1.12)); ctx.fillStyle = s.shape === 'bubble' ? 'rgba(255,255,255,0.35)' : s.ring || '#2a0d0d'; ctx.fill();
   ctx.shadowColor = 'transparent';
   ctx.save(); shapePath(ctx, s.shape, cx, cy, R); ctx.clip();
   const im = s.media && imageFor(s.media);
@@ -1221,6 +1276,11 @@ function drawPortrait(ctx, L, tm, o) {
   if (+s.tint > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = hexA(s.tintColor || '#c8202a', clamp(+s.tint, 0, 1)); ctx.fillRect(cx - R, cy - R, R * 2, R * 2); ctx.globalCompositeOperation = 'source-over'; }
   ctx.restore();
   shapePath(ctx, s.shape, cx, cy, R); ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1 * unit; ctx.stroke();
+  if (s.shape === 'bubble') {
+    ctx.lineWidth = 5 * unit; ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.beginPath(); ctx.arc(cx, cy, R * 1.04, 0, 7); ctx.stroke();
+    const g = ctx.createLinearGradient(cx, cy - R, cx, cy); g.addColorStop(0, 'rgba(255,255,255,0.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx - R * 0.15, cy - R * 0.55, R * 0.6, R * 0.32, -0.3, 0, 7); ctx.fill();
+  }
   if (s.name) {
     const fs = 14 * unit * (+s.size || 1) * Math.min(1, k);
     ctx.font = `800 ${fs}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1250,3 +1310,6 @@ export function drawCarto(ctx, L, tm, o, phase) {
     default: break;
   }
 }
+
+// shared helpers for cartofx2.js
+export const H = { clamp, easeOut, ease, D2R, UI, hexA, hashStr, rng, rr, haversine, prog, parseLL, polysOf, linesOf, inPolys, bboxOf, labelPoint, pathPolys, off, track, shade, symbolPath, drawSymbol, silhouette, merc, dest, setMap: (m) => { lastMap = m || lastMap; }, splat };
