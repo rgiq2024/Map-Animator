@@ -30,6 +30,7 @@ import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, l
 import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
 import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
+import { openModelBuilder, MF_PRESETS, clone as mfClone } from './modelflow.js';
 import { MODES as TR_MODES, lineModel, transitState, parseStations, osmRoutesInView, osmRoute, osmTracks, routeOnNetwork, roadRoute, geocode as trGeocodeName, ETIHAD_RAIL } from './transit.js';
 import { cdseDayFrame } from './livesat.js';
 import { thermalFilter } from './hudplus.js';
@@ -1889,6 +1890,21 @@ export function createEditor() {
   $('#add-hudpack')?.addEventListener('click', vizHandler);
   $('#add-story')?.addEventListener('click', vizHandler);
   $('#add-shapes')?.addEventListener('click', vizHandler);
+  $('#add-holo')?.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.add !== 'modelflow') { vizHandler(e); return; }
+    cancelDrawing();
+    const key = b.dataset.mf;
+    const L = newLayer('modelflow', null, { start: newStart() });
+    const P = MF_PRESETS[key] || (key === 'classic' ? MF_PRESETS.flood : null);
+    L.style.graph = P ? mfClone(P.graph) : { nodes: [], edges: [] };
+    if (b.dataset.theme) L.style.theme = b.dataset.theme;
+    L.name = P ? `Model: ${P.name}` : 'Model builder';
+    addLayer(L);
+    if (!P) openMF(L);
+    else toast('Model builder added — “Open the model builder” in its settings to drag in tools and connect them', 4600);
+  });
   // mouse wheel over the video zooms the picture of a selected match-cut picture page
   stage.addEventListener('wheel', (e) => {
     const L = selLayer && layerById(selLayer);
@@ -2017,6 +2033,7 @@ export function createEditor() {
       if (L.kind === 'matchcut') h += highlightPanel(L);
       if (L.kind === 'objdetect') h += detectPanel(L);
       if (L.kind === 'transit') h += transitPanel(L);
+      if (L.kind === 'modelflow') h += `<h5>Diagram</h5><p class="hint-line">${(L.style.graph?.nodes || []).length} nodes · ${(L.style.graph?.edges || []).length} connections</p><div class="btn-row"><button class="btn sm primary" data-act="mfOpen">⧉ Open the model builder (drag &amp; drop)</button></div>`;
       if (L.kind === 'collision' && L.geom?.type === 'LineString') {
         h += `<h5>Place the track</h5>
           <div class="btn-row"><button class="btn sm primary" data-act="colSnap">🛤 Snap to the real railway</button></div>
@@ -2051,6 +2068,17 @@ export function createEditor() {
     for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
     o[ks.at(-1)] = v;
   }
+  // ---------------------------------------------------------------- model builder
+  function openMF(L) {
+    pushUndo();
+    let tmr = 0;
+    openModelBuilder(L, (G) => {
+      L.style.graph = G;
+      clearTimeout(tmr);
+      tmr = setTimeout(() => { commitLayers(); repaint(); }, 120);
+    }, (G) => { L.style.graph = G; commitLayers(); renderLayerEditor(); repaint(); });
+  }
+
   // ---------------------------------------------------------------- transit lines
   let trBusy = '', trRoutes = null, trRoutesFor = '';
   const lineOf = (L) => (L.geom?.type === 'LineString' ? L.geom.coordinates : L.geom?.type === 'MultiLineString' ? L.geom.coordinates[0] : null);
@@ -2846,6 +2874,7 @@ export function createEditor() {
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
     }
     if (a === 'smLoad') $('#file-sm').click();
+    if (a === 'mfOpen') openMF(L);
     if (a === 'trFind') trFindRoutes(L);
     if (a === 'trPick' && Array.isArray(trRoutes)) trPick(L, trRoutes[+btn.dataset.i]);
     if (a === 'trGeo') trGeocode(L);

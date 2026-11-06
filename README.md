@@ -100,6 +100,23 @@ Rendering happens frame by frame: for each frame the map waits until all tiles a
 - ***Camera tour:*** keyframes for the country, then the whole line, then a tilted close-up of each station as the vehicle arrives, then the line again.
 - **Example:** *Etihad Rail (UAE)* has the 11 announced passenger stations: Al Sila, Al Dhannah, Al Mirfa, Mezaira’a, Madinat Zayed, Mohamed Bin Zayed City, Al Faya, Jumeirah Golf Estates, University City, Al Dhaid and Al Hilal (Fujairah). The station positions are approximate.
 
+### Holograms and model-builder diagrams
+
+*Add → Holograms & model builder.*
+
+- **Holograms:** floating glass panels in real perspective. **Turn** and **lean** them like a screen or a table top, drag them anywhere, and set the colour, accent, glow, flicker, scan lines and glass darkness. Choose light or normal blending (light is best over your own video, *Add → Video*). They materialise, unfold or glitch in.
+  - **Variants:**
+    - **globe** on a projector, with land dots, orbit rings with satellites and a marker at the map centre;
+    - **map of this place**: the map under the frame turned into a hologram, with a grid, sweep and target;
+    - **chart**, **ring gauges**, **3D network**, **info card** (`Label | value` lines, `{lat}` `{lon}` `{time}`), **3D terrain**;
+    - a **dashboard** of several panels.
+  - Land outline: Natural Earth via world-atlas (public domain).
+- **Model builder diagram:** a GIS workflow (inputs → tools → outputs) like ArcGIS ModelBuilder or Velocity, with white node cards and icons, ports, animated dashed connectors and live event rates (`29.8 e/s`).
+  - **Animations:** builds up step by step; runs tool by tool, with a highlight box, spinner and ✓; or flows.
+  - **Looks:** light cards, dark, classic ModelBuilder (ovals and boxes) and holographic.
+  - ***Open the model builder*** for the drag-and-drop editor: drag inputs, 40 tools and outputs from the palette onto the canvas, drag from a node's right ● to another node to connect, then rename it, change its type, set a rate badge, duplicate it, Delete it, auto-lay it out, zoom and pan.
+  - **Examples:** real-time bus alerts, flood risk, wildfire alerts, ship detection (AI), site suitability.
+
 ## Tutorials
 
 `tutorials.html` (linked from the top bar, the home page and Help) has step-by-step guides for the workflow and a card for every element in *Layers → Add* — an example frame, its settings panel, how to place it, its animations and the settings you can change, with search. Pictures are in `assets/tutorials/`.

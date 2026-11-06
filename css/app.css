@@ -1000,3 +1000,27 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 .all-badge button:hover { background: rgba(255,255,255,.26); }
 .all-snap { position: absolute; z-index: 25; pointer-events: none; transition-property: opacity, transform, clip-path, filter; transition-timing-function: ease-in-out; }
 #tl-all.active { color: var(--accent); border-color: rgba(255,107,53,.6); background: rgba(255,107,53,.1); }
+
+/* ---------------------------------------------------------------- model builder (drag & drop) */
+.mfb { position: fixed; inset: 0; z-index: 9000; background: rgba(4, 6, 10, 0.72); display: grid; place-items: center; padding: 18px; }
+.mfb-win { width: min(1680px, 100%); height: min(960px, 100%); display: grid; grid-template-columns: 230px minmax(0, 1fr) 250px; grid-template-rows: auto minmax(0, 1fr);
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+.mfb-top { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.mfb-top b { font-size: 15px; }
+.mfb-tip { color: var(--ink-3); font-size: 12px; flex: 1; min-width: 200px; }
+.mfb-top select { width: auto; flex: none; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 8px; }
+.mfb-pal { overflow: auto; padding: 10px; border-right: 1px solid var(--line); background: var(--bg-2); }
+.mfb-pal h6 { margin: 12px 2px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+.mfb-search { width: 100%; box-sizing: border-box; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
+.mfb-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; cursor: grab; font-size: 12.5px; user-select: none; }
+.mfb-item:hover { background: var(--panel-3); }
+.mfb-item canvas { width: 28px; height: 28px; background: #fff; border-radius: 6px; flex: none; }
+.mfb-item[hidden] { display: none; }
+.mfb-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.mfb-cv { position: absolute; inset: 0; touch-action: none; }
+.mfb-props { padding: 12px; border-left: 1px solid var(--line); overflow: auto; background: var(--bg-2); }
+.mfb-props h6 { margin: 0 0 10px; font-size: 13px; }
+.mfb-props label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); margin-bottom: 10px; }
+.mfb-props input:not([type=checkbox]), .mfb-props select { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
+.mfb-props .mfb-chk { display: flex; align-items: center; gap: 6px; }
+@media (max-width: 900px) { .mfb-win { grid-template-columns: 150px minmax(0, 1fr); } .mfb-props { display: none; } }
