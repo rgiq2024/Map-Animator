@@ -155,6 +155,30 @@ Rendering happens frame by frame: for each frame the map waits until all tiles a
 
 Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `assets/geo/`. Districts: © OpenStreetMap contributors. Earthquakes: USGS.
 
+### Weather forecast (TV weather graphics)
+
+*Add → 🌦 Weather forecast* gathers everything for weather shows:
+- **TV weather graphics:**
+  - **Title bars**: white with logo, title, day and time, and an optional rain → snow or wind-gust scale (CBS style); dark with a rainfall-mm strip (News 5); or a red tab (7 News).
+  - **City values**: big numbers ("10.0 mi", "24") over the cities, with the name in a dark strip. They pop in or count up.
+  - **Gust / temperature map**: smoothly interpolated (inverse-distance) from your station values, with a terrain-like texture and moving wind arrows. It can be clipped to an area.
+  - **City forecast cards**: name tab, low in black, high in red and an animated weather icon; or icons with temperatures.
+  - **High / low discs**: arrows turning around them.
+  - **Live USGS earthquakes** and **location pills**.
+- **Maps, radar & satellite** (the earlier weather tools): cyclone tracks, pressure systems with isobars, fronts, live weather, live satellite, live radar, NEXRAD history, 3D storm cells, temperature / rain / wind / humidity fields, forecast panels and warnings.
+
+### Rotating globes
+
+*Add → 🌍 Rotating globes*:
+- **Realistic Earth in space**: NASA Blue Marble by day and city lights on the night side, atmosphere, sun flare and stars, drawn with WebGL.
+- **Night Earth** with glowing city lights.
+- **Glowing hologram globe** with arcs.
+- **Sci-fi HUD globe** with rings and a countdown.
+- **Neon world globe**.
+- **Places and arcs**: add places with teal labels and glowing great-circle arcs (from a hub, or "From > To"), plus an orbit ring.
+- **Animations**: it keeps turning, turns to the first place, or comes in from far away.
+- **Placement**: the globe fills the frame with space; turn that off to float it over the map or your video.
+
 ## Tutorials
 
 `tutorials.html` (linked from the top bar, the home page and Help) has step-by-step guides for the workflow and a card for every element in *Layers → Add* — an example frame, its settings panel, how to place it, its animations and the settings you can change, with search. Pictures are in `assets/tutorials/`.

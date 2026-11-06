@@ -1665,6 +1665,7 @@ export function createEditor() {
     const b = e.target.closest('[data-add]');
     if (!b) return;
     const kind = b.dataset.add;
+    if (['wxbar', 'wxvalues', 'wxheat', 'wxcards', 'wxsystem', 'quakes', 'leader'].includes(kind)) { cartoAdd(e); return; }
     if (kind === 'forecast') {
       cancelDrawing();
       const L = newLayer('forecast', null, { start: newStart() });
@@ -1899,7 +1900,7 @@ export function createEditor() {
     if (!names.length) { setTimeout(fillCountryPicker, 500); return; }
     sel.insertAdjacentHTML('beforeend', `<optgroup label="Groups">${Object.keys(CF_GROUPS).map((g) => `<option value="${g.toUpperCase()}">${g.toUpperCase()}</option>`).join('')}</optgroup><optgroup label="Countries">${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`);
   })();
-  $('#add-carto')?.addEventListener('click', (e) => {
+  const cartoAdd = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     const k = b.dataset.add;
@@ -1917,6 +1918,7 @@ export function createEditor() {
     if (!LAYER_KINDS[k]?.geom) {
       const L = newLayer(k, null, { start: newStart() });
       if (st) Object.assign(L.style, st);
+      if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
       if (b.dataset.name) L.name = b.dataset.name;
       if (pick && k === 'spotlight' && L.style.source !== 'layer') L.name = `Spotlight: ${pick}`;
       const lastPoly = [...(scene().layers || [])].reverse().find((x) => /Polygon/.test(x.geom?.type || ''));
@@ -1938,7 +1940,9 @@ export function createEditor() {
     startAdd(k);
     pendingName = b.dataset.name || null;
     showHint({ photopin: 'Click the place for the photo pin — then choose the photo in its settings', leader: 'Click the place the label points to', spokes: 'Click the home / base — then add the places in its settings', lights: 'Click along the runway — then press Finish', fireplume: 'Click the site', missiles: 'Click the launch site, then the target — then press Finish', bigarrow: 'Click along the arrow’s path — then press Finish', inset: 'Click the place to zoom into — then drag the box where you want it', rangerings: 'Click the base the rings are measured from', territory: 'Click around the area under control — then press Finish', units: 'Click the path the units drive along — then press Finish', blast: 'Click where the explosion is', portrait: 'Click the place the portrait belongs to' }[k] || 'Click on the map');
-  });
+  };
+  $('#add-carto')?.addEventListener('click', cartoAdd);
+  $('#add-globes')?.addEventListener('click', cartoAdd);
   $('#add-holo')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -2170,6 +2174,8 @@ export function createEditor() {
     if (fmt === 'places') { const cat = String(L.style.cats || '').split('\n')[0]?.split('|')[0]?.trim() || 'Place'; line = `${cat} | ${ll[0]}, ${ll[1]} | ${q}`; }
     if (fmt === 'pois') line = `${q} | ${ll[0]}, ${ll[1]} | pin | #1d6fa5`;
     if (fmt === 'coords') line = `${ll[0]}, ${ll[1]}`;
+    if (fmt === 'values') line = `${q} | ${ll[0]}, ${ll[1]} | 0`;
+    if (fmt === 'cards') line = `${q} | ${ll[0]}, ${ll[1]} | 15 | 25 | sunny`;
     setPath(L, path, cur ? `${cur}\n${line}` : line);
     commitLayers(); renderLayerEditor(); repaint();
     toast(`Added ${q}`, 1800);

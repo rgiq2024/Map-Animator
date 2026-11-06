@@ -29,6 +29,8 @@ import { drawGeoVideo } from './videofx.js';
 import { OD_KINDS, OD_ANIMS, OD_DEFAULTS, OD_FORMS, OD_SET, odPhases, drawObjDetect } from './objdetect.js';
 import { RC_KINDS, RC_ANIMS, RC_DEFAULTS, RC_FORMS, RC_SET, rcPhases, drawRecon } from './recon.js';
 import { TR_KINDS, TR_ANIMS, TR_DEFAULTS, TR_FORMS, TR_SET, trPhases, drawTransit } from './transit.js';
+import { TW_KINDS, TW_ANIMS, TW_DEFAULTS, TW_FORMS, TW_SET, twPhases, drawTvWeather } from './tvweather.js';
+import { GL_KINDS, GL_ANIMS, GL_DEFAULTS, GL_FORMS, GL_SET, glPhases, drawGlobe3d } from './globefx.js';
 import { CF2_KINDS, CF2_ANIMS, CF2_DEFAULTS, CF2_FORMS, CF2_SET, cf2Phases, drawCarto2 } from './cartofx2.js';
 import { CF_KINDS, CF_ANIMS, CF_DEFAULTS, CF_FORMS, CF_SET, cfPhases, drawCarto } from './cartofx.js';
 import { HO_KINDS, HO_ANIMS, HO_DEFAULTS, HO_FORMS, HO_SET, hoPhases, drawHolo } from './holo.js';
@@ -64,6 +66,8 @@ export const FX_KINDS = {
   ...HO_KINDS,
   ...CF_KINDS,
   ...CF2_KINDS,
+  ...TW_KINDS,
+  ...GL_KINDS,
   ...MF_KINDS,
   geovideo: { name: 'Video on the map', icon: '📹', geom: 'image', desc: 'A drone or satellite video fitted onto the map by its four corners (georeferenced video)' },
   ...SF_KINDS,
@@ -114,6 +118,8 @@ export const FX_ANIMS = {
   ...HO_ANIMS,
   ...CF_ANIMS,
   ...CF2_ANIMS,
+  ...TW_ANIMS,
+  ...GL_ANIMS,
   ...MF_ANIMS,
   geovideo: { fade: 'Fade in', wipe: 'Wipe in', none: 'Cut in' },
   ...SF_ANIMS,
@@ -160,6 +166,8 @@ export const FX_DEFAULTS = {
   ...HO_DEFAULTS,
   ...CF_DEFAULTS,
   ...CF2_DEFAULTS,
+  ...TW_DEFAULTS,
+  ...GL_DEFAULTS,
   ...MF_DEFAULTS,
   geovideo: { anim: 'fade', duration: 10, style: { media: '', name: '', opacity: 1, crs: '3857', blend: 'normal', border: true, borderColor: '#ffffff', speed: 1, trim: 0, loop: true, dir: 'lr' } },
   ...SF_DEFAULTS,
@@ -213,6 +221,8 @@ export const FX_FORMS = {
   ...HO_FORMS,
   ...CF_FORMS,
   ...CF2_FORMS,
+  ...TW_FORMS,
+  ...GL_FORMS,
   ...MF_FORMS,
   geovideo: [['style.media', 'Video', 'video'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', screen: 'Screen (dark backgrounds, e.g. thermal / night video)', multiply: 'Multiply' }], ['style.speed', 'Playback speed', 'range', [0.25, 4, 0.05]], ['style.trim', 'Start the clip at (s)', 'number', 0.1], ['style.loop', 'Loop', 'switch'], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
   ...SF_FORMS,
@@ -1380,6 +1390,8 @@ export function drawFX(ctx, L, tm, o, phase) {
   if (HO_SET.has(L.kind)) { drawHolo(ctx, L, tm, o, phase); return; }
   if (CF_SET.has(L.kind)) { drawCarto(ctx, L, tm, o, phase); return; }
   if (CF2_SET.has(L.kind)) { drawCarto2(ctx, L, tm, o, phase); return; }
+  if (TW_SET.has(L.kind)) { drawTvWeather(ctx, L, tm, o, phase); return; }
+  if (GL_SET.has(L.kind)) { drawGlobe3d(ctx, L, tm, o, phase); return; }
   if (MF_SET.has(L.kind)) { drawModelFlow(ctx, L, tm, o, phase); return; }
   if (L.kind === 'geovideo') { if (phase === 'below') drawGeoVideo(ctx, L, tm, o); return; }
   if (SH_SET.has(L.kind)) { if (phase === 'captions' && frame) drawShape(ctx, L, tm, o); return; }
@@ -1461,6 +1473,8 @@ export function fxPhases(kind) {
   if (HO_SET.has(kind)) return hoPhases(kind);
   if (CF_SET.has(kind)) return cfPhases(kind);
   if (CF2_SET.has(kind)) return cf2Phases(kind);
+  if (TW_SET.has(kind)) return twPhases(kind);
+  if (GL_SET.has(kind)) return glPhases(kind);
   if (MF_SET.has(kind)) return mfPhases(kind);
   if (kind === 'geovideo') return ['below'];
   if (SH_SET.has(kind)) return shPhases(kind);
