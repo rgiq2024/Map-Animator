@@ -287,7 +287,7 @@ export const CF_DEFAULTS = {
     color: '#111111', dash: true, width: 1.4, iconSize: 1, labelSize: 1, base: true, angle: 40, spread: 38, iconColor: '#000000', labelColor: '#1a1a1a',
   } },
   territory: { anim: 'advance', duration: 5, style: { color: '#c8202a', opacity: 0.8, rough: 1, fringe: true, patches: true, dir: 'E', blend: 'multiply', outline: false } },
-  units: { anim: 'drive', duration: 8, style: { type: 'tank', count: 4, spacing: 1, size: 1, color: '#4c5a2b', formation: 'column', dust: true, shadow: true } },
+  units: { anim: 'drive', duration: 8, style: { type: 'tank', count: 4, spacing: 1, size: 1.6, color: '#4c5a2b', formation: 'column', dust: true, shadow: true } },
   blast: { anim: 'explode', duration: 2.4, style: { size: 1, color: '#101010', smoke: true, scorch: true, flash: true } },
   eventdots: { anim: 'appear', duration: 6, style: { source: 'layer', ref: '', countries: '', count: 260, clusters: 9, color: '#e0141e', heat: true, heatOpacity: 0.45, dotSize: 1, seed: 1, dir: 'E' } },
   portrait: { anim: 'pop', duration: 0.8, style: { media: '', shape: 'octagon', name: 'NAME', ring: '#2a0d0d', plate: '#0e0e0e', size: 1, dx: 60, dy: -70, leader: false, tint: 0.35, tintColor: '#c8202a' } },
