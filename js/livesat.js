@@ -16,6 +16,7 @@ export const SAT_PRODUCTS = {
   viirs: { name: 'NASA VIIRS true colour (daily, whole Earth)', src: 'gibs', layer: 'VIIRS_SNPP_CorrectedReflectance_TrueColor', daily: true },
   radar: { name: 'Weather radar (RainViewer, last 2 hours)', src: 'rainviewer' },
   custom: { name: 'Your own WMS layer…', src: 'wms' },
+  nexrad_past: { name: 'NEXRAD radar (USA) · any past date, 5-minute steps (Iowa Environmental Mesonet)', src: 'iem', minutes: 5 },
   // Sentinel (Copernicus) — by date
   s2_true: { name: 'Sentinel-2 · natural colour by date (Esri, no account)', src: 'esri_s2', rule: 'Natural Color with DRA', sentinel: 2 },
   s2_cir: { name: 'Sentinel-2 · colour infrared (vegetation red)', src: 'esri_s2', rule: 'Color Infrared with DRA', sentinel: 2 },
@@ -92,6 +93,20 @@ function wmsUrl(base, layer, time, v13 = true) {
 export async function satFrames(key, opts = {}) {
   const p = SAT_PRODUCTS[key] || SAT_PRODUCTS.meteosat_ir;
   if (p.sentinel) return sentinelFrames(p, opts);
+  if (p.src === 'iem') {
+    // US composite base reflectivity, archived every 5 minutes (WMS with TIME)
+    const step = Math.max(5, Math.round((+opts.step || 5) / 5) * 5);
+    const n = opts.mode === 'latest' ? 1 : Math.max(1, Math.min(48, Math.round(((+opts.hours || 1) * 60) / step)));
+    const end = new Date(opts.end || Date.now() - 10 * 60e3);
+    end.setUTCSeconds(0, 0); end.setUTCMinutes(Math.floor(end.getUTCMinutes() / 5) * 5);
+    const out = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(end.getTime() - i * step * 60e3);
+      const iso = d.toISOString().slice(0, 16) + ':00Z';
+      out.push({ url: wmsUrl('https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q-t.cgi', 'nexrad-n0q-wmst', iso, false), date: iso, label: `${iso.slice(11, 16)} UTC`, maxzoom: 10 });
+    }
+    return out;
+  }
   if (p.src === 'rainviewer') {
     const r = await fetch('https://api.rainviewer.com/public/weather-maps.json');
     if (!r.ok) throw new Error('Radar list unavailable');
@@ -122,7 +137,7 @@ export async function satFrames(key, opts = {}) {
   for (let i = n - 1; i >= 0; i--) { const d = new Date(end.getTime() - i * step * 60e3); out.push({ url: wmsUrl(base, layer, iso(d), v13), date: iso(d), label: label(d) }); }
   return out;
 }
-export const SAT_CREDITS = { gibs: 'NASA GIBS / NOAA', eumetsat: '© EUMETSAT', rainviewer: 'RainViewer', wms: '', esri_s2: 'Contains modified Copernicus Sentinel data · Esri', esri_s1: 'Contains modified Copernicus Sentinel data · Esri', eox: 'Sentinel-2 cloudless by EOX (Copernicus Sentinel data)', cdse: 'Contains modified Copernicus Sentinel data · Copernicus Data Space' };
+export const SAT_CREDITS = { gibs: 'NASA GIBS / NOAA', eumetsat: '© EUMETSAT', rainviewer: 'RainViewer', wms: '', esri_s2: 'Contains modified Copernicus Sentinel data · Esri', esri_s1: 'Contains modified Copernicus Sentinel data · Esri', eox: 'Sentinel-2 cloudless by EOX (Copernicus Sentinel data)', cdse: 'Contains modified Copernicus Sentinel data · Copernicus Data Space', iem: 'NOAA NEXRAD via Iowa Environmental Mesonet' };
 
 // ---------------------------------------------------------------- live weather for the cities on the map
 const WMO = (c, day) => {

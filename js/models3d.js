@@ -1,6 +1,7 @@
 // Real 3D models on the map: built-in vehicles, buildings and structures, realistic NASA models, your own
 // GLB/glTF files, train/vehicle collisions and a procedural 3D city — rendered with three.js inside a MapLibre
 // custom layer (so they tilt, rotate and export with the map). Lit with a studio environment and soft shadows.
+import { ALT3D } from './recon.js';
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
 import { DRACOLoader } from './vendor/three/loaders/DRACOLoader.js';
@@ -710,6 +711,8 @@ export class ModelLayer {
   setUnit(cssUnit) { this.cssUnit = cssUnit; }
 
   render(gl, args) {
+    // the camera matrix, for drawing things at an altitude on the 2D overlay (flight paths, storm cells)
+    ALT3D.main = args?.defaultProjectionData?.mainMatrix || null; ALT3D.map = this.map;
     if (!this.renderer || !this.state.length) return;
     const tr = this.map.transform;
     const zoom = this.map.getZoom();

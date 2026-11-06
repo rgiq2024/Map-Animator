@@ -131,7 +131,7 @@ export function createEditor() {
       center: [20, 30], zoom: 1.6,
       attributionControl: false,
       canvasContextAttributes: { preserveDrawingBuffer: true, antialias: true },
-      fadeDuration: 0, maxPitch: 70, doubleClickZoom: false,
+      fadeDuration: 0, maxPitch: 85, doubleClickZoom: false,
     });
     map.on('render', drawOverlay);
     floods = new TerrainFloods(map, (L) => { if (selLayer === L.id) renderLayerEditor(); rebuild(); save(); });
@@ -1690,6 +1690,16 @@ export function createEditor() {
       toast('Covers the view — drag its corners to change the area, or set Data to “Live now”', 4200);
       return;
     }
+    if (kind === 'pastradar') {
+      cancelDrawing();
+      const L = newLayer('timeseries', null, { start: newStart() });
+      const end = new Date(Date.now() - 3600e3);
+      Object.assign(L.style, { source: 'livesat', sat: 'nexrad_past', satMode: 'loop', hours: 1, step: 5, satEnd: end.toISOString().slice(0, 16), frames: [], opacity: 0.8, position: 'top-right', labelSize: 0.55, bar: true });
+      L.name = 'NEXRAD radar (past)';
+      addLayer(L);
+      toast('Set “Ends at” (UTC) to the time you need, then press Load — USA only', 5200);
+      return;
+    }
     if (kind === 'livesat' || kind === 'radar') {
       cancelDrawing();
       const L = newLayer('timeseries', null, { start: newStart() });
@@ -1871,7 +1881,7 @@ export function createEditor() {
     }
     pendingStyle = st;
     startAdd(k);
-    const tip = { zoomframe: 'Click the place the frame points to — then drag the frame where you want it', textcallout: 'Click the place the callout points to', tiles: 'Click around the area — then press Finish', vortex: 'Click the eye of the storm', vessel: 'Click the ship’s route — then press Finish', photocard: 'Click the place the picture belongs to', linecallout: 'Click the point the callout lines come from', detect: 'Click along the road — then press Finish', block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish' }[k];
+    const tip = { zoomframe: 'Click the place the frame points to — then drag the frame where you want it', textcallout: 'Click the place the callout points to', tiles: 'Click around the area — then press Finish', vortex: 'Click the eye of the storm', vessel: 'Click the ship’s route — then press Finish', photocard: 'Click the place the picture belongs to', linecallout: 'Click the point the callout lines come from', detect: 'Click along the road — then press Finish', block: 'Click the corners of the area for the block — then press Finish (tilt the camera to see its sides)', mesh: 'Click around the area for the network — then press Finish', flowlines: 'Click along the valley or river — then press Finish', fmv: 'Click the drone’s flight path — then press Finish', beams: 'Click the hub the beams shoot out from', viewshed: 'Click the observer point (zoom in on a city with buildings)', datapin: 'Click where the marker goes', smartmap: 'Click around the region — then press Finish', flightrecon: 'Click the ground track the aircraft flew, ending where it came down — then press Finish. Then type its time / altitude profile in the settings' }[k];
     if (tip) showHint(tip);
   };
   $('#add-viz')?.addEventListener('click', vizHandler);

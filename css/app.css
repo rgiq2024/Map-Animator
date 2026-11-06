@@ -114,8 +114,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .drop-veil.show { display: grid; }
 
 /* ======================= EDITOR ======================= */
-.editor { display: grid; grid-template-rows: auto auto 1fr auto; height: 100vh; height: 100dvh; background: var(--bg); }
-.ed-top { display: flex; align-items: center; gap: 18px; padding: 6px 16px; border-bottom: 1px solid var(--line); background: var(--bg-2); min-height: 56px; }
+.editor { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr auto; height: 100vh; height: 100dvh; background: var(--bg); }
+.ed-top { min-width: 0; display: flex; align-items: center; gap: 18px; padding: 6px 16px; border-bottom: 1px solid var(--line); background: var(--bg-2); min-height: 56px; }
 .ed-project { display: flex; flex-direction: column; min-width: 180px; padding-right: 18px; border-right: 1px solid var(--line); }
 .back { font-size: 12px; color: var(--ink-2); text-decoration: none; }
 .back:hover { color: var(--ink); }
