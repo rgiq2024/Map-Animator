@@ -203,7 +203,24 @@ function localFrame(coords) {
   const pts = coords.map(([x, y]) => [(x - lng0) * kx, -(y - lat0) * ky]);
   const cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-  return { anchor: [lng0, lat0], pts, cum, S: cum.at(-1) || 1 };
+  return { anchor: [lng0, lat0], pts, cum, S: cum.at(-1) || 1, kx, ky };
+}
+/** A lng/lat path measured in true metres (local scale per segment): { S, at(m) → [lng, lat] }. */
+function geoPath(cs) {
+  const cum = [0];
+  for (let i = 1; i < cs.length; i++) { const a = cs[i - 1], b = cs[i]; const kx = 111320 * Math.cos(((a[1] + b[1]) / 2) * D2R); cum.push(cum[i - 1] + Math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111320)); }
+  const S = cum.at(-1) || 1;
+  return {
+    S,
+    at(m) {
+      if (cs.length < 2) return cs[0] || [0, 0];
+      let lo = 1, hi = cs.length - 1;
+      const mm = clamp(m, 0, S);
+      while (lo < hi) { const md = (lo + hi) >> 1; if (cum[md] < mm) lo = md + 1; else hi = md; }
+      const a = cs[lo - 1], b = cs[lo], f = (mm - cum[lo - 1]) / (cum[lo] - cum[lo - 1] || 1);
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+    },
+  };
 }
 /** Point and unit tangent at distance m along the local path (extends straight past the ends). */
 function at(P, m) {
@@ -372,6 +389,7 @@ export function trainRun(st, D, t, appr = 450) {
 export function buildMovingTrain(L, shadowTex) {
   const s = L.style || {};
   const P = localFrame(L.geom.coordinates);
+  const G = geoPath(L.geom.coordinates);
   const root = new THREE.Group();
   const n = clamp(Math.round(+s.cars || 6), 2, 12);
   const CL = 25, pitch = CL + 0.9, k = Math.max(0.5, +s.size || 1);
@@ -387,15 +405,26 @@ export function buildMovingTrain(L, shadowTex) {
   }
   function update(tm, Lnow) {
     const D = Math.max(0.1, +Lnow.duration || 6);
-    const u = tm.edit ? 0.5 : clamp(tm.tau / D, 0, 1);
+    const u = tm.uOverride != null ? clamp(tm.uOverride, 0, 1) : tm.edit ? 0.5 : clamp(tm.tau / D, 0, 1);
     const len = n * pitch * k;
-    const nose = len + u * Math.max(0, P.S - len);
+    const long = G.S > 3000;
+    const S = long ? G.S : P.S;
+    // following a timetable: the middle of the train stops at the station; otherwise it runs end to end
+    const nose = tm.uOverride != null ? clamp(u * S + len / 2, len, Math.max(len, S)) : len + u * Math.max(0, S - len);
+    // long lines (tens–hundreds of km): measure in true metres and re-anchor at the train,
+    // so the flat local frame is exact where the train is (and matches the line's timetable)
+    let mid = null, kxm = 1;
+    if (long) { mid = G.at(nose - len / 2); kxm = 111320 * Math.cos(mid[1] * D2R); }
+    const loc = (m) => { const [x, y] = G.at(m); return { x: (x - mid[0]) * kxm, z: -(y - mid[1]) * 111320 }; };
+    rig.anchor = long ? mid : P.anchor;
     for (let i = 0; i < n; i++) {
-      const f = at(P, nose - i * pitch * k), b = at(P, nose - (i + 1) * pitch * k + 0.9 * k);
+      const mf = nose - i * pitch * k, mb = nose - (i + 1) * pitch * k + 0.9 * k;
+      const f = long ? loc(mf) : at(P, mf), b = long ? loc(mb) : at(P, mb);
       const cx = (f.x + b.x) / 2, cz = (f.z + b.z) / 2, yaw = Math.atan2(-(f.z - b.z), f.x - b.x);
       cars[i].h.position.set(cx, 0, cz); cars[i].h.rotation.set(0, yaw, 0);
       cars[i].sh.position.set(cx, 0.04, cz); cars[i].sh.rotation.set(0, yaw, 0);
     }
   }
-  return { obj: root, anchor: P.anchor, update, local: P };
+  const rig = { obj: root, anchor: P.anchor, update, local: P };
+  return rig;
 }

@@ -30,6 +30,7 @@ import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, l
 import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
 import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
+import { MODES as TR_MODES, lineModel, transitState, parseStations, osmRoutesInView, osmRoute, osmTracks, routeOnNetwork, roadRoute, geocode as trGeocodeName, ETIHAD_RAIL } from './transit.js';
 import { cdseDayFrame } from './livesat.js';
 import { thermalFilter } from './hudplus.js';
 import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
@@ -2015,6 +2016,7 @@ export function createEditor() {
       }
       if (L.kind === 'matchcut') h += highlightPanel(L);
       if (L.kind === 'objdetect') h += detectPanel(L);
+      if (L.kind === 'transit') h += transitPanel(L);
       if (L.kind === 'collision' && L.geom?.type === 'LineString') {
         h += `<h5>Place the track</h5>
           <div class="btn-row"><button class="btn sm primary" data-act="colSnap">🛤 Snap to the real railway</button></div>
@@ -2049,6 +2051,229 @@ export function createEditor() {
     for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
     o[ks.at(-1)] = v;
   }
+  // ---------------------------------------------------------------- transit lines
+  let trBusy = '', trRoutes = null, trRoutesFor = '';
+  const lineOf = (L) => (L.geom?.type === 'LineString' ? L.geom.coordinates : L.geom?.type === 'MultiLineString' ? L.geom.coordinates[0] : null);
+  $('#add-transit')?.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-add]');
+    if (!b) return;
+    const k = b.dataset.add;
+    let st = null;
+    try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
+    cancelDrawing();
+    const mk = (name, geom = null, extra = {}) => { const L = newLayer('transit', geom, { start: newStart() }); Object.assign(L.style, extra); L.name = name; return L; };
+    if (k === 'transit') { pendingStyle = st; startAdd('transit'); showHint('Click along the line from the first station to the last — then press Finish'); return; }
+    if (k === 'transitnames') {
+      const L = mk('Line from station names', null, { mode: 'rail', name: 'New line', stations: 'Station A\nStation B\nStation C', region: '' });
+      addLayer(L);
+      toast('Type the station names (one per line) and where to search, then press “Find stations & build the line”', 5600);
+      return;
+    }
+    if (k === 'transitetihad') {
+      const E = ETIHAD_RAIL;
+      const coords = E.stations.map(([, x, y]) => [x, y]);
+      const L = mk('Etihad Rail', { type: 'LineString', coordinates: coords }, { mode: E.mode, name: E.name, ref: E.ref, color: E.color, region: E.region, speed: E.speed, dwell: 1.4,
+        stations: E.stations.map(([n, x, y]) => `${n} | ${x}, ${y}`).join('\n') });
+      L.duration = 34;
+      addLayer(L);
+      flyToBounds(boundsOf(coords), 0.12);
+      toast('Etihad Rail: 11 announced stations (positions approximate). “Follow the real tracks” snaps it to OpenStreetMap railways; “Camera tour” zooms to each station.', 7000);
+      return;
+    }
+    if (k === 'transitosm') {
+      const L = mk('Pick a line…', null, { mode: 'rail', name: '', osmPick: true });
+      addLayer(L);
+      trFindRoutes(L);
+      return;
+    }
+    if (k === 'transittracks') {
+      const L = mk('Railway tracks (OSM)', null, { mode: 'rail', name: 'Railway network', stations: '', strip: false, badge: true, vehicle: false });
+      L.anim = 'draw';
+      addLayer(L);
+      trBusy = 'Loading railway tracks in view…'; renderLayerEditor();
+      try {
+        const lines = await osmTracks(viewBbox(), 'rail');
+        if (!lines.length) throw new Error('no railways in view');
+        L.geom = { type: 'MultiLineString', coordinates: lines.map((ln) => ln.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)])) };
+        toast(`${lines.length} railway pieces from OpenStreetMap`, 3600);
+      } catch (err) { toast(`Could not load railways: ${err.message || err}`, 4600); }
+      trBusy = ''; commitLayers(); renderLayerEditor(); repaint();
+      return;
+    }
+    if (k === 'transittour') {
+      const L = [...layersOf()].reverse().find((x) => x.kind === 'transit' && lineOf(x));
+      if (!L) { toast('Add a transit line first'); return; }
+      makeTransitTour(L);
+    }
+  });
+  const boundsOf = (cs) => { let w = 180, s2 = 90, e = -180, n = -90; for (const [x, y] of cs) { w = Math.min(w, x); e = Math.max(e, x); s2 = Math.min(s2, y); n = Math.max(n, y); } return [[w, s2], [e, n]]; };
+  function transitPanel(L) {
+    const s = L.style;
+    let h = '<h5>Build the line</h5>';
+    if (trBusy) h += `<p class="hint-line">⏳ ${esc(trBusy)}</p>`;
+    if (s.osmPick) {
+      h += '<p class="hint-line">Lines found in the current view (OpenStreetMap). Move / zoom the map and search again to find others.</p><div class="btn-row"><button class="btn sm" data-act="trFind">🔍 Search this view again</button></div>';
+      if (Array.isArray(trRoutes) && trRoutesFor === L.id) h += `<div class="wb-list">${trRoutes.slice(0, 80).map((r, i) => `<button class="wb-item" data-act="trPick" data-i="${i}" style="display:flex;gap:8px;align-items:center;width:100%;text-align:left"><span style="display:inline-grid;place-items:center;min-width:30px;height:22px;border-radius:5px;background:${esc(r.colour || TR_MODES[r.mode]?.color || '#555')};color:#fff;font-weight:800;font-size:11px">${esc(r.ref || TR_MODES[r.mode]?.icon || '')}</span><span>${esc(r.name)}<small class="muted"> · ${esc(TR_MODES[r.mode]?.name || r.route)}${r.operator ? ` · ${esc(r.operator)}` : ''}</small></span></button>`).join('') || '<p class="muted small">No lines found here.</p>'}</div>`;
+      return h;
+    }
+    h += '<div class="btn-row wrap">';
+    h += '<button class="btn sm primary" data-act="trGeo" title="Look up every station by its name (OpenStreetMap) and draw the line through them">📍 Find stations &amp; build the line</button>';
+    h += `<button class="btn sm" data-act="trSnap" title="Re-draw the line along the real ${['bus', 'brt'].includes(s.mode) ? 'roads' : s.mode === 'ferry' ? 'route' : 'railway tracks'} between your stations">🛤 Follow the real ${['bus', 'brt'].includes(s.mode) ? 'roads' : 'tracks'} (OSM)</button>`;
+    h += '<button class="btn sm" data-act="trVerts" title="Turn every point of the drawn line into a station">➕ Stations at the line’s points</button>';
+    h += '</div><div class="btn-row wrap">';
+    h += '<button class="btn sm" data-act="trTour" title="Keyframes: the country, then the whole line, then each station as the vehicle arrives">🎥 Camera tour: country → line → each station</button>';
+    if (['rail', 'hsr', 'metro', 'lightrail', 'tram'].includes(s.mode)) h += `<button class="btn sm" data-act="trTrain">${layersOf().some((x) => x.kind === 'model3d' && x.style.follow === L.id) ? '✓ 3D train added' : '🚄 Add a 3D train on this line'}</button>`;
+    h += '</div>';
+    const m = lineModel(L);
+    if (m.cs?.length > 1) {
+      const S = transitState(L, null);
+      h += `<p class="hint-line">${m.st.length} stations · ${Math.round(m.total / 1000)} km. ${m.st.length ? `Arrivals in the video: ${S.arrivals.map((a, i) => `${esc(m.st[i]?.name || '')} ${((+L.start || 0) + a.arrive).toFixed(1)} s`).slice(0, 14).join(' · ')}` : 'Add stations above (Name | lng, lat) or use “Stations at the line’s points”.'}</p>`;
+    } else h += '<p class="hint-line">No line yet: type the station names above and press “Find stations & build the line”, or draw it with the button in Add.</p>';
+    return h;
+  }
+  async function trFindRoutes(L) {
+    trBusy = 'Searching OpenStreetMap for lines in view…'; trRoutes = null; trRoutesFor = L.id; renderLayerEditor();
+    try { trRoutes = await osmRoutesInView(viewBbox()); if (!trRoutes.length) toast('No public-transport lines in view — zoom to a city or a railway', 4200); }
+    catch (err) { trRoutes = []; toast(`OpenStreetMap search failed: ${err.message || err}`, 4600); }
+    trBusy = ''; if (selLayer === L.id) renderLayerEditor();
+  }
+  async function trPick(L, r) {
+    trBusy = `Loading ${r.name}…`; renderLayerEditor();
+    try {
+      const d = await osmRoute(r.id);
+      if (d.coords.length < 2) throw new Error('this line has no track geometry in OpenStreetMap');
+      pushUndo();
+      L.geom = { type: 'LineString', coordinates: d.coords.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) };
+      Object.assign(L.style, { osmPick: false, mode: r.mode, name: r.name.replace(/\s*[:：].*$/, '') || r.name, ref: r.ref || '', color: /^#?[0-9a-f]{3,8}$/i.test(r.colour) ? (r.colour.startsWith('#') ? r.colour : `#${r.colour}`) : '', stations: d.stations.map((x) => `${x.name} | ${x.ll[0].toFixed(5)}, ${x.ll[1].toFixed(5)}`).join('\n') });
+      L.name = r.name;
+      L.duration = Math.max(16, Math.min(90, 4 + d.stations.length * 2.6));
+      flyToBounds(boundsOf(d.coords), 0.1);
+      toast(`${r.name}: ${d.stations.length} stations from OpenStreetMap`, 4200);
+    } catch (err) { toast(`Could not load the line: ${err.message || err}`, 4800); }
+    trBusy = ''; commitLayers(); renderLayerEditor(); repaint();
+  }
+  async function trGeocode(L) {
+    const list = parseStations(L.style.stations);
+    if (list.length < 2) { toast('Type at least two station names, one per line'); return; }
+    const b = map.getBounds();
+    const near = [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].map((v) => +v.toFixed(4));
+    let miss = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].ll) continue;
+      trBusy = `Finding ${list[i].name} (${i + 1}/${list.length})…`; renderLayerEditor();
+      const mode = L.style.mode;
+      const hint = ['bus', 'brt'].includes(mode) ? 'bus stop' : mode === 'ferry' ? 'ferry terminal' : 'station';
+      let ll = await trGeocodeName(`${list[i].name} ${hint}`, L.style.region, near).catch(() => null);
+      if (!ll) ll = await trGeocodeName(list[i].name, L.style.region, near).catch(() => null);
+      if (ll) list[i].ll = ll; else miss++;
+      await new Promise((r) => setTimeout(r, 1100)); // Nominatim: one request per second
+    }
+    const found = list.filter((x) => x.ll);
+    pushUndo();
+    L.style.stations = list.map((x) => (x.ll ? `${x.name} | ${x.ll[0]}, ${x.ll[1]}` : x.name)).join('\n');
+    if (found.length >= 2) {
+      L.geom = { type: 'LineString', coordinates: found.map((x) => x.ll) };
+      L.duration = Math.max(L.duration, 4 + found.length * 2.6);
+      flyToBounds(boundsOf(found.map((x) => x.ll)), 0.12);
+    }
+    trBusy = '';
+    toast(miss ? `${miss} station${miss === 1 ? '' : 's'} not found — add “| longitude, latitude” to ${miss === 1 ? 'it' : 'them'} by hand` : `All ${found.length} stations found — press “Follow the real tracks” to snap the line to the railway`, 5600);
+    commitLayers(); renderLayerEditor(); repaint();
+  }
+  async function trSnap(L) {
+    const m = lineModel(L);
+    const pts = m.st.length >= 2 ? m.st.map((x) => x.ll || x.pos) : (lineOf(L) || []);
+    if (pts.length < 2) { toast('Add stations or draw the line first'); return; }
+    const mode = L.style.mode || 'rail';
+    trBusy = 'Following the real route on OpenStreetMap…'; renderLayerEditor();
+    try {
+      let out = [];
+      if (mode === 'bus' || mode === 'brt') {
+        for (let i = 0; i < pts.length - 1; i += 24) { const r = await roadRoute(pts.slice(i, i + 25)); if (!r) throw new Error('no road route'); out = out.concat(out.length ? r.slice(1) : r); }
+      } else if (mode === 'ferry') { toast('Ferries follow the line you draw'); trBusy = ''; renderLayerEditor(); return; }
+      else {
+        const [[w, s2], [e, n]] = boundsOf(pts);
+        const pad = Math.max(0.05, Math.max(e - w, n - s2) * 0.08);
+        const lines = await osmTracks([w - pad, s2 - pad, e + pad, n + pad], mode);
+        if (!lines.length) throw new Error('no railway tracks found around the stations');
+        let gaps = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+          const piece = routeOnNetwork(lines, pts[i], pts[i + 1]) || (gaps++, [pts[i], pts[i + 1]]);
+          out = out.concat(out.length ? piece.slice(1) : piece);
+        }
+        if (gaps) toast(`${gaps} gap${gaps === 1 ? '' : 's'} in the OpenStreetMap tracks were bridged with a straight line (track not yet mapped or under construction)`, 6000);
+      }
+      if (out.length < 2) throw new Error('nothing found');
+      pushUndo();
+      // thin long lines a little (keep every point closer than ~25 m out)
+      const thin = [out[0]];
+      for (const p of out.slice(1)) if (Math.hypot(p[0] - thin.at(-1)[0], p[1] - thin.at(-1)[1]) > 0.00025) thin.push(p);
+      if (thin.at(-1) !== out.at(-1)) thin.push(out.at(-1));
+      L.geom = { type: 'LineString', coordinates: thin.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) };
+      for (const T of layersOf()) if (T.kind === 'model3d' && T.style.follow === L.id) T.geom = JSON.parse(JSON.stringify(L.geom));
+      toast(`The line now follows the real ${mode === 'bus' || mode === 'brt' ? 'roads' : 'tracks'} (${Math.round(lineModel(L).total / 1000)} km)`, 4200);
+    } catch (err) { toast(`Could not follow the real route: ${err.message || err}`, 5200); }
+    trBusy = ''; commitLayers(); renderLayerEditor(); repaint();
+  }
+  function trVerts(L) {
+    const cs = lineOf(L);
+    if (!cs || cs.length < 2) { toast('Draw the line first'); return; }
+    pushUndo();
+    const step = Math.max(1, Math.ceil(cs.length / 30));
+    const pick = cs.filter((_, i) => i % step === 0 || i === cs.length - 1);
+    L.style.stations = pick.map((p, i) => `Station ${i + 1} | ${p[0].toFixed(5)}, ${p[1].toFixed(5)}`).join('\n');
+    commitLayers(); renderLayerEditor(); repaint();
+    toast('Stations added at the line’s points — rename them in the list', 3600);
+  }
+  function trTrain(L) {
+    if (layersOf().some((x) => x.kind === 'model3d' && x.style.follow === L.id)) { toast('This line already has a 3D train'); return; }
+    const cs = lineOf(L);
+    if (!cs) return;
+    pushUndo();
+    const T = newLayer('model3d', { type: 'LineString', coordinates: JSON.parse(JSON.stringify(cs)) }, { start: L.start });
+    Object.assign(T.style, { source: 'builtin:hst', livery: L.style.mode === 'hsr' ? 'ave' : 'red', cars: ['metro', 'lightrail'].includes(L.style.mode) ? 4 : L.style.mode === 'tram' ? 3 : 6, sizeMode: 'real', size: 1, motion: 'move', follow: L.id, track: false });
+    T.name = `3D train · ${L.style.name || 'line'}`;
+    T.duration = L.duration; T.hold = L.hold;
+    L.style.train3d = true;
+    addLayer(T);
+    toast('3D train added — it stops at every station with the line. Zoom in (or use the camera tour) to see it on the real tracks.', 5600);
+  }
+  /** Camera keyframes: the country, the whole line, then each station as the vehicle arrives, then the line again. */
+  function makeTransitTour(L) {
+    const m = lineModel(L);
+    if (!m.cs || m.cs.length < 2) { toast('The line needs a route first'); return; }
+    if (L.anim !== 'run') L.anim = 'run';
+    pushUndo();
+    const sc = scene();
+    const fw = frame.w, fh = frame.h;
+    const view = (c, zoomRef, bearing = 0, pitch = 0) => ({ center: [+c[0].toFixed(6), +c[1].toFixed(6)], zoomRef: +zoomRef.toFixed(3), bearing: +bearing.toFixed(1), pitch });
+    const fit = (cs, pad) => { const f = fitCamera(boundsOf(cs), fw, fh, pad); return { c: f.center, z: zoomRefFor(f.zoom, fw) }; };
+    // leave ~3 s for the country → line overview: the vehicle waits at the first station meanwhile
+    const lead = 3.2 - (+L.start || 0);
+    if (lead > 0.6) { L.style.wait = +lead.toFixed(1); L.duration = +((+L.duration || 20) + lead).toFixed(1); for (const T of layersOf()) if (T.kind === 'model3d' && T.style.follow === L.id) T.duration = L.duration; }
+    const S = transitState(L, null);
+    const t0 = +L.start || 0;
+    // make room: country 0 → line, each station gets the vehicle's arrival time
+    const lineV = fit(m.cs, 0.1);
+    const countryV = { c: lineV.c, z: lineV.z - 1.6 };
+    const keys = [{ t: 0, ease: 'ease', view: view(countryV.c, countryV.z, 0, 0) }, { t: 1.6, ease: 'fly', view: view(lineV.c, lineV.z, 0, 35) }];
+    const zr = +L.style.tourZoom || 16.5;
+    S.arrivals.forEach((a, i) => {
+      const st = m.st[i];
+      if (!st) return;
+      const brg = (((st.heading || 0) - 35) % 360 + 540) % 360 - 180;
+      const ta = t0 + a.arrive, td = t0 + a.depart;
+      if (ta - 1.2 > keys.at(-1).t + 0.2) keys.push({ t: +(ta - 1.2).toFixed(2), ease: 'ease', view: view(st.pos, zr, brg, 58) });
+      keys.push({ t: +Math.max(ta + 0.05, td - 0.15).toFixed(2), ease: i < S.arrivals.length - 1 ? 'fly' : 'ease', view: view(st.pos, zr + 0.25, brg + 8, 60) });
+    });
+    keys.push({ t: +(t0 + (+L.duration || 20) + 1.2).toFixed(2), ease: 'ease', view: view(lineV.c, lineV.z, 0, 30) });
+    sc.camera.mode = 'keyframes';
+    sc.camera.keys = keys;
+    L.hold = 0;
+    save(); commitLayers(); renderLayerEditor(); repaint();
+    toast(`Camera tour: ${keys.length} keyframes — the country, the line, then each of the ${m.st.length} stations as the vehicle arrives. Drag the diamonds on the timeline to retime.`, 6400);
+  }
+
   // ---------------------------------------------------------------- AI object detection
   let odBusy = null, odPick = null;
   const odFmt = (m) => `${m.toFixed(m < 100 ? 1 : 0)} m`;
@@ -2621,6 +2846,13 @@ export function createEditor() {
       } catch (err) { toast(err.message || 'Could not load the imagery list', 4200); }
     }
     if (a === 'smLoad') $('#file-sm').click();
+    if (a === 'trFind') trFindRoutes(L);
+    if (a === 'trPick' && Array.isArray(trRoutes)) trPick(L, trRoutes[+btn.dataset.i]);
+    if (a === 'trGeo') trGeocode(L);
+    if (a === 'trSnap') trSnap(L);
+    if (a === 'trVerts') trVerts(L);
+    if (a === 'trTour') makeTransitTour(L);
+    if (a === 'trTrain') trTrain(L);
     if (a === 'odRun') runDetect(L);
     if (a === 'odPick') { if (odPick?.id === L.id) { odPick = null; renderLayerEditor(); } else startOdPick(L); }
     if (a === 'odDel' || a === 'odHide') { pushUndo(); const o = L.style.objects?.[+btn.dataset.i]; if (o) { if (a === 'odDel') L.style.objects.splice(+btn.dataset.i, 1); else o.hidden = !o.hidden; } renderLayerEditor(); commitLayers(); repaint(); }

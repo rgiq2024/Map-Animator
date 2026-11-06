@@ -85,6 +85,21 @@ Rendering happens frame by frame: for each frame the map waits until all tiles a
 - **Video on the map** — a drone / satellite / thermal clip warped onto the map by its four corners (move, rotate and stretch the corners like a georeferenced image). Exported frame-exact.
 - **Moving label** — text that follows a moving object or 3D model (plane taking off, ship, vehicle, missile path, the route arrow) with live `{speed}` `{alt}` `{heading}` `{lat}` `{lon}` `{dist}`; looks: tag, data box, target tracker, flag, plain text; optional dotted trail.
 
+### Railways, metro, tram, bus and ferry lines
+
+*Add → Transit & railways*. A **transit line** draws its route and runs a vehicle from station A to the last station, stopping at each one; the travel time between stations is shared by distance and each stop has a dwell.
+- **Line types:** railway, high-speed rail, metro, light rail, tram, bus, BRT and ferry. Each has its own track style, vehicle, colour and line badge (for example M1, T1, 12).
+- **Ways to build a line:**
+  - Draw it on the map.
+  - Type the station names (`Name` or `Name | lng, lat`) and press *Find stations & build the line*. Stations are found by name with OpenStreetMap Nominatim.
+  - Pick an existing line from **OpenStreetMap**: *Detect lines from OpenStreetMap* lists the route relations (train, subway, light rail, tram, bus, ferry), with their real geometry, stops, colour and number.
+- ***Follow the real tracks*** re-draws the line along the OSM railway between the stations (Overpass + shortest path on the track network). For buses it follows the roads (OSRM). Gaps where tracks aren't mapped are bridged.
+- ***All railway tracks in view (OSM)*** draws the whole railway network in the current view.
+- **Text and badges:** a moving label on the vehicle (`{name} · Next: {next}`, "Arriving · X"), station names, a line badge and a route strip with the stations.
+- **Close-ups:** when zoomed in, the line becomes **real 3D track** (ballast, sleepers and rails at real size). *Add a 3D train* puts a real-scale train on the tracks that follows the line's timetable and stops at every station.
+- ***Camera tour:*** keyframes for the country, then the whole line, then a tilted close-up of each station as the vehicle arrives, then the line again.
+- **Example:** *Etihad Rail (UAE)* has the 11 announced passenger stations: Al Sila, Al Dhannah, Al Mirfa, Mezaira’a, Madinat Zayed, Mohamed Bin Zayed City, Al Faya, Jumeirah Golf Estates, University City, Al Dhaid and Al Hilal (Fujairah). The station positions are approximate.
+
 ## Tutorials
 
 `tutorials.html` (linked from the top bar, the home page and Help) has step-by-step guides for the workflow and a card for every element in *Layers → Add* — an example frame, its settings panel, how to place it, its animations and the settings you can change, with search. Pictures are in `assets/tutorials/`.

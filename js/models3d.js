@@ -2,6 +2,7 @@
 // GLB/glTF files, train/vehicle collisions and a procedural 3D city — rendered with three.js inside a MapLibre
 // custom layer (so they tilt, rotate and export with the map). Lit with a studio environment and soft shadows.
 import { ALT3D } from './recon.js';
+import { transitFraction } from './transit.js';
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
 import { DRACOLoader } from './vendor/three/loaders/DRACOLoader.js';
@@ -516,6 +517,21 @@ export class ModelLayer {
         for (const t of tracks) { add('sl', t, 2.6); add('rl', t + 0.72, 0.16); add('rl', t - 0.72, 0.16); }
         continue;
       }
+      if (L.kind === 'transit' && s.track3d !== false) {
+        // transit lines: real double track for railways, single track for metro / tram, a road for buses
+        const md = s.mode || 'rail';
+        if (md === 'ferry') continue;
+        if (md === 'bus' || md === 'brt') { feats.push({ type: 'Feature', properties: { kind: 'road' }, geometry: L.geom }); continue; }
+        const lat = (L.geom.type === 'LineString' ? L.geom.coordinates[0] : L.geom.coordinates[0][0])[1] || 0;
+        const c = 1 / Math.cos(lat * D2R);
+        const tracks = md === 'rail' || md === 'hsr' ? [2.35, -2.35] : [0];
+        const mid = (Math.max(...tracks) + Math.min(...tracks)) / 2;
+        const add = (kind, off, w) => feats.push({ type: 'Feature', properties: { kind, off: -off * c, w: w * c }, geometry: L.geom });
+        add('fill', mid, Math.max(...tracks) - Math.min(...tracks) + 9);
+        add('bed', mid, Math.max(...tracks) - Math.min(...tracks) + 5.2);
+        for (const t of tracks) { add('sl', t, 2.6); add('rl', t + 0.72, 0.16); add('rl', t - 0.72, 0.16); }
+        continue;
+      }
       if (rail || road) feats.push({ type: 'Feature', properties: { kind: rail ? 'rail' : 'road' }, geometry: L.geom });
     }
     const key = JSON.stringify(feats);
@@ -688,8 +704,12 @@ export class ModelLayer {
         const air = ['jet', 'airliner', 'drone', 'quad', 'helicopter', 'missile', 'rocket', 'satellite', 'iss'].includes(s.sprite);
         altitude = air ? 30 : 0;
       } else if (role === 'rig' || role === 'trainmove') {
-        ll = it.rig.anchor; heading = 90; real = true; scale = 1;
-        it.rig.update(tm, L);
+        heading = 90; real = true; scale = 1;
+        // a 3D train can follow a transit line's timetable (stops at the stations)
+        const T = s.follow ? byId.get(s.follow) : null;
+        if (T && T.kind === 'transit') { const tt2 = layerTiming(T, t); it.rig.update({ ...tm, uOverride: tt2.edit ? null : transitFraction(T, tt2.tau) }, L); }
+        else it.rig.update(tm, L);
+        ll = it.rig.anchor; // read after update: a moving train re-anchors itself on long lines
       } else if (role === 'city') {
         ll = it.city.centre;
         real = true; scale = 1; heading = 90;
