@@ -117,6 +117,30 @@ Rendering happens frame by frame: for each frame the map waits until all tiles a
   - ***Open the model builder*** for the drag-and-drop editor: drag inputs, 40 tools and outputs from the palette onto the canvas, drag from a node's right ● to another node to connect, then rename it, change its type, set a rate badge, duplicate it, Delete it, auto-lay it out, zoom and pan.
   - **Examples:** real-time bus alerts, flood risk, wildfire alerts, ship detection (AI), site suitability.
 
+### Documentary map looks
+
+*Add → Documentary map looks:*
+- **Category markers + legend**: places as circles, triangles, squares, diamonds or stars by category (e.g. 12-inch / 8-inch / 6-inch fab, advanced backend), popping in one by one, with a legend.
+- **Zoom inset**: a framed close-up of a place in real satellite imagery (Esri World Imagery; streets / topo / grey canvases too, optional black & white). A leader line runs from a small square on the map, the box opens out of its corner, and category markers are drawn inside. Drag the box anywhere.
+- **Country spotlight**: pick countries by name (or groups: USSR, EU, GCC, NATO) or any boundary / area layer.
+  - **Looks:**
+    - colour inside with the world grey and dark (Austria);
+    - grey and bright inside (Paris arrondissements);
+    - a colour / flag fill with your emblem picture and inner borders (USSR);
+    - a colour tint;
+    - outline only.
+  - It also has a big name and black city tags.
+- **Locator mini-map**: the country's silhouette with a box showing the current view and the route.
+- **Elevation profile + trail stats**: the real elevation along the route or a line (AWS Terrain Tiles), growing as it is travelled. Two looks: a wide profile along the bottom with a title and length (Route des Grandes Alpes), or a corner runner / hiker / cyclist / car with a mini profile and distance counter (km / mi). Also totals (distance, climb, descent) and a glowing trail on the map.
+- **Range rings**: dotted rings at real distances (mi / km / nm) from a base, expanding one by one, with top-down aircraft silhouettes (fighter, twin-boom, bomber, jet, helicopter, missile) and "Range … Miles" labels.
+- **Front line / territory**: a controlled area with a ragged, patchy frontier and a lighter band, multiplied over the map. It advances in a direction or grows from the centre.
+- **Top-down units**: tanks, armoured carriers, trucks, artillery, jeeps, jets, bombers, helicopters and ships driving along a path in a column, pairs or wedge, with moving tracks, dust and shadows.
+- **Blast decal**: a flash, a black burst with debris, smoke, and a scorch mark that stays.
+- **Incident dots / heat**: clusters of red dots with a heat glow appearing over a country or area, at random or sweeping across.
+- **Portrait badge**: your photo in an octagon, circle, square or shield frame with a name plate and an optional colour tint and leader line.
+
+Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `assets/geo/`.
+
 ## Tutorials
 
 `tutorials.html` (linked from the top bar, the home page and Help) has step-by-step guides for the workflow and a card for every element in *Layers → Add* — an example frame, its settings panel, how to place it, its animations and the settings you can change, with search. Pictures are in `assets/tutorials/`.

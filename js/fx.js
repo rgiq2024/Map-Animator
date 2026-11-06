@@ -29,6 +29,7 @@ import { drawGeoVideo } from './videofx.js';
 import { OD_KINDS, OD_ANIMS, OD_DEFAULTS, OD_FORMS, OD_SET, odPhases, drawObjDetect } from './objdetect.js';
 import { RC_KINDS, RC_ANIMS, RC_DEFAULTS, RC_FORMS, RC_SET, rcPhases, drawRecon } from './recon.js';
 import { TR_KINDS, TR_ANIMS, TR_DEFAULTS, TR_FORMS, TR_SET, trPhases, drawTransit } from './transit.js';
+import { CF_KINDS, CF_ANIMS, CF_DEFAULTS, CF_FORMS, CF_SET, cfPhases, drawCarto } from './cartofx.js';
 import { HO_KINDS, HO_ANIMS, HO_DEFAULTS, HO_FORMS, HO_SET, hoPhases, drawHolo } from './holo.js';
 import { MF_KINDS, MF_ANIMS, MF_DEFAULTS, MF_FORMS, MF_SET, mfPhases, drawModelFlow } from './modelflow.js';
 
@@ -60,6 +61,7 @@ export const FX_KINDS = {
   ...RC_KINDS,
   ...TR_KINDS,
   ...HO_KINDS,
+  ...CF_KINDS,
   ...MF_KINDS,
   geovideo: { name: 'Video on the map', icon: '📹', geom: 'image', desc: 'A drone or satellite video fitted onto the map by its four corners (georeferenced video)' },
   ...SF_KINDS,
@@ -108,6 +110,7 @@ export const FX_ANIMS = {
   ...RC_ANIMS,
   ...TR_ANIMS,
   ...HO_ANIMS,
+  ...CF_ANIMS,
   ...MF_ANIMS,
   geovideo: { fade: 'Fade in', wipe: 'Wipe in', none: 'Cut in' },
   ...SF_ANIMS,
@@ -152,6 +155,7 @@ export const FX_DEFAULTS = {
   ...RC_DEFAULTS,
   ...TR_DEFAULTS,
   ...HO_DEFAULTS,
+  ...CF_DEFAULTS,
   ...MF_DEFAULTS,
   geovideo: { anim: 'fade', duration: 10, style: { media: '', name: '', opacity: 1, crs: '3857', blend: 'normal', border: true, borderColor: '#ffffff', speed: 1, trim: 0, loop: true, dir: 'lr' } },
   ...SF_DEFAULTS,
@@ -203,6 +207,7 @@ export const FX_FORMS = {
   ...RC_FORMS,
   ...TR_FORMS,
   ...HO_FORMS,
+  ...CF_FORMS,
   ...MF_FORMS,
   geovideo: [['style.media', 'Video', 'video'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', screen: 'Screen (dark backgrounds, e.g. thermal / night video)', multiply: 'Multiply' }], ['style.speed', 'Playback speed', 'range', [0.25, 4, 0.05]], ['style.trim', 'Start the clip at (s)', 'number', 0.1], ['style.loop', 'Loop', 'switch'], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
   ...SF_FORMS,
@@ -1368,6 +1373,7 @@ export function drawFX(ctx, L, tm, o, phase) {
   if (RC_SET.has(L.kind)) { drawRecon(ctx, L, tm, o, phase); return; }
   if (TR_SET.has(L.kind)) { drawTransit(ctx, L, tm, o, phase); return; }
   if (HO_SET.has(L.kind)) { drawHolo(ctx, L, tm, o, phase); return; }
+  if (CF_SET.has(L.kind)) { drawCarto(ctx, L, tm, o, phase); return; }
   if (MF_SET.has(L.kind)) { drawModelFlow(ctx, L, tm, o, phase); return; }
   if (L.kind === 'geovideo') { if (phase === 'below') drawGeoVideo(ctx, L, tm, o); return; }
   if (SH_SET.has(L.kind)) { if (phase === 'captions' && frame) drawShape(ctx, L, tm, o); return; }
@@ -1447,6 +1453,7 @@ export function fxPhases(kind) {
   if (RC_SET.has(kind)) return rcPhases(kind);
   if (TR_SET.has(kind)) return trPhases(kind);
   if (HO_SET.has(kind)) return hoPhases(kind);
+  if (CF_SET.has(kind)) return cfPhases(kind);
   if (MF_SET.has(kind)) return mfPhases(kind);
   if (kind === 'geovideo') return ['below'];
   if (SH_SET.has(kind)) return shPhases(kind);

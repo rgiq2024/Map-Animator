@@ -30,6 +30,7 @@ import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, l
 import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
 import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
+import { cartoReady, countriesByName } from './cartofx.js';
 import { openModelBuilder, MF_PRESETS, clone as mfClone } from './modelflow.js';
 import { MODES as TR_MODES, lineModel, transitState, parseStations, osmRoutesInView, osmRoute, osmTracks, routeOnNetwork, roadRoute, geocode as trGeocodeName, ETIHAD_RAIL } from './transit.js';
 import { cdseDayFrame } from './livesat.js';
@@ -1282,6 +1283,7 @@ export function createEditor() {
     if (d.replace) { const T = layerById(d.replace); cancelDrawing(); if (T) { T.geom = geom; selLayer = T.id; commitLayers(); renderLayerEditor(); repaint(); } return; }
     const L = newLayer(d.kind, geom, { start: newStart(), preset: d.preset });
     if (pendingStyle) { Object.assign(L.style, pendingStyle); pendingStyle = null; }
+    if (pendingName) { L.name = pendingName; pendingName = null; }
     if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
     if (L.kind === 'smartmap' && !(L.style.data || []).length) {
       const n = { rings: 40, reach: 24, halo: 24, circles: 60 }[L.style.mode] || 180;
@@ -1890,6 +1892,37 @@ export function createEditor() {
   $('#add-hudpack')?.addEventListener('click', vizHandler);
   $('#add-story')?.addEventListener('click', vizHandler);
   $('#add-shapes')?.addEventListener('click', vizHandler);
+  $('#add-carto')?.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const k = b.dataset.add;
+    let st = null;
+    try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
+    cancelDrawing();
+    if (!LAYER_KINDS[k]?.geom) {
+      const L = newLayer(k, null, { start: newStart() });
+      if (st) Object.assign(L.style, st);
+      if (b.dataset.name) L.name = b.dataset.name;
+      const lastPoly = [...(scene().layers || [])].reverse().find((x) => /Polygon/.test(x.geom?.type || ''));
+      if ((k === 'eventdots' || (k === 'spotlight' && L.style.source === 'layer')) && !L.style.ref) {
+        if (lastPoly) { L.style.ref = lastPoly.id; L.style.source = 'layer'; }
+        else { L.style.source = 'countries'; L.style.countries ||= k === 'eventdots' ? 'Ukraine' : 'France'; toast('No area layer yet — using a country. Add a Boundary or Area and pick it in the settings.', 5200); }
+      }
+      if (k === 'elevprofile') { L.start = 0; L.duration = Math.max(4, (scene().duration || 10)); }
+      if (k === 'catmarkers') toast('Edit the categories and places (Category | longitude, latitude) in the settings', 4200);
+      addLayer(L);
+      if (k === 'spotlight' && L.style.source === 'countries') {
+        let n = 0;
+        const fit = () => { const c = countriesByName(L.style.countries); if (!c) { if (n++ < 30) setTimeout(fit, 250); return; } if (!c.length) { toast('Country not found — check the name'); return; } let w = 180, s2 = 90, e2 = -180, n2 = -90; for (const x of c) { w = Math.min(w, x.bbox[0]); s2 = Math.min(s2, x.bbox[1]); e2 = Math.max(e2, x.bbox[2]); n2 = Math.max(n2, x.bbox[3]); } if (e2 - w < 120) flyToBounds([[w, s2], [e2, n2]], 0.12); repaint(); };
+        fit();
+      }
+      return;
+    }
+    pendingStyle = st;
+    startAdd(k);
+    pendingName = b.dataset.name || null;
+    showHint({ inset: 'Click the place to zoom into — then drag the box where you want it', rangerings: 'Click the base the rings are measured from', territory: 'Click around the area under control — then press Finish', units: 'Click the path the units drive along — then press Finish', blast: 'Click where the explosion is', portrait: 'Click the place the portrait belongs to' }[k] || 'Click on the map');
+  });
   $('#add-holo')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -1996,6 +2029,19 @@ export function createEditor() {
         else if (type === 'range') h += fRow(label, fRange(path, v, o[0], o[1], o[2]));
         else if (type === 'switch') h += fRow(label, fSw(path, v));
         else if (type === 'target') h += fRow(label, fSel(path, v || 'route', Object.fromEntries(movingTargets(scene()).map((x) => [x.id, x.name]))));
+        else if (type === 'layerref') {
+          const want = o || 'any';
+          const opts = want === 'line' ? { route: 'The route' } : { '': '— choose a layer —' };
+          for (const X of scene().layers || []) {
+            if (X === L || !X.geom) continue;
+            const gt = X.geom.type;
+            if (want === 'line' && !/LineString/.test(gt)) continue;
+            if (want === 'polygon' && !/Polygon/.test(gt)) continue;
+            if (want === 'point' && gt !== 'Point') continue;
+            opts[X.id] = X.name || X.kind;
+          }
+          h += fRow(label, fSel(path, v ?? (want === 'line' ? 'route' : ''), opts));
+        }
         else if (type === 'number') h += fRow(label, fNum(path, v, o || 1));
         else if (type === 'textarea') h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea></label>`;
         else if (type === 'image') {
@@ -2578,6 +2624,7 @@ export function createEditor() {
   // ---------------------------------------------------------------- georeferenced images, before/after, time series
   let geoPick = null;
   let pendingStyle = null;
+  let pendingName = null;
   const FRONT_TYPES_NAMES = { cold: 'Cold front', warm: 'Warm front', occluded: 'Occluded front', stationary: 'Stationary front', trough: 'Trough' };
   /** A quad filling part of the current video frame, with the picture's proportions (h / w). */
   function fitQuad(aspectHW = 0.66, frac = 0.6, cap = 0.8) {
@@ -4519,7 +4566,7 @@ export function createEditor() {
     try {
       const blob = await renderStill({
         map, width, height,
-        beforeFrame: (s2, m, tt) => seekScene(s2, tt, layerTiming),
+        beforeFrame: async (s2, m, tt) => { await seekScene(s2, tt, layerTiming); await cartoReady(); },
         prepareScene: async (s2) => { await applyLook(s2); await floods.sync(s2); models.clear(); await models.sync(s2); wayback.sync(s2); affected.sync(s2); twin.sync(s2); await preloadImages(s2); await preloadSignImages(s2.signs); await loadFonts(s2); await preloadBrand(project.brand); await document.fonts?.load?.(`400 24px "${project.brand?.font || 'Lexend'}"`).catch(() => {}); bldFactor = null; return buildScene(s2, frame.w, frame.h); },
         applyCamera: (m, tt) => { const c = m.cameraAt(tt); jumpCam(c, sc, tt); applyTimeEffects(tt, sc, m); },
         mapFilter: (s2, tt) => mapFilterAt(s2, tt),
@@ -4597,7 +4644,7 @@ export function createEditor() {
         mapFilter: (sc, tt) => mapFilterAt(sc, tt),
         background: spaceBg,
         mixAudio: (project.audio || []).some((t) => !t.muted) || hasSound(project) ? (d) => mixProject(project, d, soundEvents()) : null,
-        beforeFrame: (sc, m, t) => seekScene(sc, t, layerTiming),
+        beforeFrame: async (sc, m, t) => { await seekScene(sc, t, layerTiming); await cartoReady(); },
         prepareScene: async (sc) => {
           await applyLook(sc);
           floods.clear();
