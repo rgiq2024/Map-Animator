@@ -4478,6 +4478,8 @@ export function createEditor() {
       project = null;
     },
     get project() { return project; },
+    /** The video frame on screen (CSS px), e.g. for screenshots. */
+    get viewFrame() { if (!stage || !overlay || !frame) return null; const kk = overlay.width / stage.clientWidth; const r = stage.getBoundingClientRect(); return { x: r.left + frame.x / kk, y: r.top + frame.y / kk, w: frame.w / kk, h: frame.h / kk }; },
     get map() { return map; },
     startExport,
     importRoute,
