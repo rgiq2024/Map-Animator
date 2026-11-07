@@ -31,6 +31,8 @@ import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
 import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
 import { tourLength } from './globefx.js';
+import { parseTable, dataOf, readDataFiles } from './geodata.js';
+import { thematicBounds } from './thematic.js';
 import { cartoReady, countriesByName, countryNames, GROUPS as CF_GROUPS } from './cartofx.js';
 import { openModelBuilder, MF_PRESETS, clone as mfClone } from './modelflow.js';
 import { MODES as TR_MODES, lineModel, transitState, parseStations, osmRoutesInView, osmRoute, osmTracks, routeOnNetwork, roadRoute, geocode as trGeocodeName, ETIHAD_RAIL } from './transit.js';
@@ -1947,6 +1949,35 @@ export function createEditor() {
   };
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-globes')?.addEventListener('click', cartoAdd);
+  // cartography: thematic maps, graphs and map-layout elements (a button can add a whole layout at once)
+  $('#add-cartography')?.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.multi) {
+      let list = [];
+      try { list = JSON.parse(b.dataset.multi); } catch { list = []; }
+      cancelDrawing();
+      const t0 = newStart();
+      list.forEach((it, i) => {
+        const L = newLayer(it.k, null, { start: +(t0 + i * 0.15).toFixed(2) });
+        Object.assign(L.style, it.p || {});
+        if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
+        if (L.style.duration) { L.duration = +L.style.duration; delete L.style.duration; }
+        if (it.n) L.name = it.n;
+        addLayer(L);
+      });
+      toast(`Added ${list.length} layout elements — select one in the layer list to change it, or drag it on the video`, 4200);
+      return;
+    }
+    const before = (scene().layers || []).length;
+    cartoAdd(e);
+    const L = (scene().layers || [])[before];
+    if (L && (L.kind === 'thematic')) {
+      let n = 0;
+      const fit = () => { const bb = thematicBounds(L); if (bb.loading && n++ < 30) { setTimeout(fit, 250); return; } if (bb.bbox) { const [w, s2, e2, n2] = bb.bbox; flyToBounds([[Math.max(-180, w), Math.max(-60, s2)], [Math.min(180, e2), Math.min(78, n2)]], 0.08); } repaint(); };
+      fit();
+    }
+  });
   $('#add-holo')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -2073,9 +2104,24 @@ export function createEditor() {
           const opts = `<option value="">${names.length ? (o === 'one' ? '— choose a country —' : '— choose a country / group —') : 'Loading countries…'}</option>${o === 'one' ? '' : `<optgroup label="Groups">${Object.keys(CF_GROUPS).map((g) => `<option value="${g.toUpperCase()}">${g.toUpperCase()}</option>`).join('')}</optgroup>`}<optgroup label="Countries">${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`;
           h += `<label class="field"><span>${label}</span><input type="text" data-b="${path}" value="${esc(v || '')}" placeholder="e.g. Austria"><span class="cpick"><select data-cpick="${path}" data-mode="set">${opts}</select>${o === 'one' ? '' : `<select data-cpick="${path}" data-mode="add"><option value="">＋ add another…</option>${opts.replace(/<option value="">[^<]*<\/option>/, '')}</select>`}<button class="btn sm" data-act="cpZoom" data-field="${path}" title="Zoom the map to it">⌖</button></span></label>`;
         }
+        else if (type === 'field' || type === 'fields') {
+          const T = parseTable(dataOf(L.style || {}));
+          const numOnly = /^num/.test(o || ''), opt = /\?$/.test(o || '');
+          const list = numOnly ? T.numeric : T.fields;
+          if (type === 'field') {
+            const opts = {};
+            if (opt) opts[''] = '— none —';
+            else opts[''] = '— automatic —';
+            for (const f of list) opts[f] = f;
+            if (v && !(v in opts)) opts[v] = `${v} (not in the data)`;
+            h += fRow(label, fSel(path, v || '', opts));
+          } else {
+            h += `<label class="field"><span>${label}</span>${fText(path, v || '', list.slice(0, 3).join(', '))}<span class="field-chips">${list.slice(0, 30).map((f) => `<button class="chip-btn" data-act="addField" data-field="${path}" data-name="${esc(f)}">＋ ${esc(f)}</button>`).join('')}</span></label>`;
+          }
+        }
         else if (type === 'datafile') {
           const n = String(v || '').length;
-          h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5" placeholder="name,lat,lon,value\nDubai,25.2,55.27,10\n… or paste GeoJSON">${n > 20000 ? '' : esc(v || '')}</textarea>${n > 20000 ? `<small class="muted">${Math.round(n / 1024)} KB of data loaded — load another file to replace it, or</small> <button class="btn sm" data-act="dfClear" data-field="${path}">clear it</button>` : ''}<span class="cpick"><label class="btn sm">📂 Load a CSV / GeoJSON file<input type="file" hidden accept=".csv,.txt,.tsv,.json,.geojson" data-dfile="${path}"></label></span></label>`;
+          h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5" placeholder="name,lat,lon,value\nDubai,25.2,55.27,10\n… or paste GeoJSON">${n > 20000 ? '' : esc(v || '')}</textarea>${n > 20000 ? `<small class="muted">${Math.round(n / 1024)} KB of data loaded — load another file to replace it, or</small> <button class="btn sm" data-act="dfClear" data-field="${path}">clear it</button>` : ''}<span class="cpick"><label class="btn sm">📂 Load data file(s)<input type="file" hidden multiple accept=".csv,.txt,.tsv,.json,.geojson,.topojson,.kml,.kmz,.gpx,.zip,.shp,.dbf,.prj,.cpg,.shx" data-dfile="${path}"></label><small class="muted">CSV, GeoJSON, TopoJSON, KML/KMZ, GPX, shapefile (.zip, or .shp + .dbf + .prj together)</small></span></label>`;
         }
         else if (type === 'cities') {
           h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea><span class="cpick"><input type="search" data-cfind="${path}" data-fmt="${o || 'cities'}" placeholder="Find a city or place by name…"><button class="btn sm" data-act="cityFind" data-field="${path}" data-fmt="${o || 'cities'}">＋ Add</button></span></label>`;
@@ -2163,13 +2209,28 @@ export function createEditor() {
     if (!inp || !inp.files?.[0]) return;
     const L = layerById(selLayer);
     if (!L) return;
-    const f = inp.files[0];
-    if (f.size > 25e6) { toast('That file is too big (over 25 MB)'); return; }
-    const txt = await f.text();
+    const files = [...inp.files];
+    if (files.reduce((a, f) => a + f.size, 0) > 60e6) { toast('That file is too big (over 60 MB)'); return; }
+    let res;
+    try { res = await readDataFiles(files); } catch (err) { toast(err.message || 'Could not read that file', 5200); return; }
+    if (res.text.length > 12e6) { toast('That data is too big to keep in a project (over 12 MB after reading). Simplify it or keep fewer features.', 6500); return; }
     pushUndo();
-    setPath(L, inp.dataset.dfile, txt);
+    setPath(L, inp.dataset.dfile, res.text);
+    const T = parseTable(res.text);
+    if (L.kind === 'thematic' || L.kind === 'gchart') {
+      // pick sensible fields for the new data
+      const okF = (f) => !f || T.fields.includes(f);
+      for (const k of ['field', 'field2', 'catField', 'joinField', 'labelField', 'norm', 'x', 'y2', 'cat', 'size']) if (!okF(L.style[k])) L.style[k] = '';
+      if (L.style.y && !String(L.style.y).split(',').every((f) => T.fields.includes(f.trim()))) L.style.y = '';
+      if (L.style.fields && !String(L.style.fields).split(',').every((f) => T.fields.includes(f.trim()))) L.style.fields = '';
+    }
     commitLayers(); renderLayerEditor(); repaint();
-    toast(`Loaded ${f.name}`, 2200);
+    toast(`Loaded ${res.name} — ${T.rows.length} rows, ${T.fields.length} fields${res.note ? ` (${res.note})` : ''}`, 4200);
+    if (L.kind === 'thematic') {
+      let n = 0;
+      const fit = () => { const b = thematicBounds(L); if (b.loading && n++ < 30) { setTimeout(fit, 250); return; } if (b.bbox) { const [w, s2, e2, n2] = b.bbox; if (e2 - w > 0.0001 || n2 - s2 > 0.0001) flyToBounds([[Math.max(-180, w), Math.max(-80, s2)], [Math.min(180, e2), Math.min(84, n2)]], 0.1); } repaint(); };
+      fit();
+    }
   });
   $('#layer-editor')?.addEventListener('change', (e) => {
     const sel = e.target.closest('[data-cpick]');
@@ -3019,6 +3080,7 @@ export function createEditor() {
     if (a === 'mfOpen') openMF(L);
     if (a === 'cityFind') { const inp = btn.parentElement.querySelector('[data-cfind]'); cityFind(L, btn.dataset.field, btn.dataset.fmt, inp?.value.trim()); }
     if (a === 'cpZoom') zoomToCountries(getPath(L, btn.dataset.field));
+    if (a === 'addField') { const L = layerById(selLayer); if (!L) return; const cur = String(getPath(L, btn.dataset.field) || '').split(',').map((x) => x.trim()).filter(Boolean); if (!cur.includes(btn.dataset.name)) cur.push(btn.dataset.name); pushUndo(); setPath(L, btn.dataset.field, cur.join(', ')); commitLayers(); renderLayerEditor(); repaint(); return; }
     if (a === 'dfClear') { pushUndo(); setPath(L, btn.dataset.field, ''); commitLayers(); renderLayerEditor(); repaint(); }
     if (a === 'glTour') { pushUndo(); L.duration = Math.ceil(tourLength(L)); commitLayers(); renderLayerEditor(); repaint(); toast(`Layer length set to ${L.duration} s`); }
     if (a === 'trFind') trFindRoutes(L);

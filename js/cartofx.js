@@ -1312,4 +1312,4 @@ export function drawCarto(ctx, L, tm, o, phase) {
 }
 
 // shared helpers for cartofx2.js
-export const H = { clamp, easeOut, ease, D2R, UI, hexA, hashStr, rng, rr, haversine, prog, parseLL, polysOf, linesOf, inPolys, bboxOf, labelPoint, pathPolys, off, track, shade, symbolPath, drawSymbol, silhouette, merc, dest, setMap: (m) => { lastMap = m || lastMap; }, splat };
+export const H = { clamp, easeOut, ease, D2R, UI, hexA, hashStr, rng, rr, haversine, prog, parseLL, polysOf, linesOf, inPolys, bboxOf, labelPoint, pathPolys, off, track, shade, symbolPath, drawSymbol, silhouette, merc, dest, drawTiles, TILE_SRC, lineTarget, profileOf, countryAt, setMap: (m) => { lastMap = m || lastMap; }, splat };

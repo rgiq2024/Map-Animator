@@ -1065,3 +1065,7 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
   .ed-top-right .ns-t, #new-scene .ns-t { display: none; }
   .auth-chip .auth-me b { display: none; }
 }
+/* field chips (cartography / graphs) */
+.field-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chip-btn { border: 1px solid var(--line-2); background: var(--panel); color: var(--ink-2); border-radius: 999px; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+.chip-btn:hover { color: var(--ink); border-color: var(--accent); }

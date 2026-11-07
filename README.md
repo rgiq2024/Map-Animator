@@ -186,6 +186,24 @@ Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `asset
 - **Places and arcs**: places with labels, glowing great-circle arcs (from a hub, or "From > To"), and an orbit ring.
 - **Your data**: paste or load a CSV (`name, lat, lon, value`; the column order is found from the header) or GeoJSON. Points appear as ripples, glows, spikes (height = value), dots or pins, sized by value and optionally named. Lines and areas are drawn on the globe.
 
+### Cartography: thematic maps, graphs and map layout
+
+**Add → 🗺 Cartography** (the first section after “Draw or place”).
+
+- **Thematic maps** — choropleth, graduated colours, graduated symbols, proportional symbols, dot density,
+  bivariate (3 × 3 colours), unique values (categories) and heat map. Load your own data with **📂 Load data file(s)**:
+  CSV / TSV (with lat / lon columns, or a country-name column that is joined to country shapes), GeoJSON, TopoJSON,
+  KML / KMZ, GPX, or an Esri shapefile (a .zip, or .shp + .dbf + .prj picked together). Projected shapefiles in UTM /
+  Transverse Mercator, Lambert Conformal Conic or Web Mercator are re-projected to WGS 84 automatically.
+  Classification: quantile, equal interval, natural breaks (Jenks), standard deviation, rounded or manual breaks;
+  ColorBrewer, Viridis and diverging schemes; normalise by a second field; labels; animated reveal; own legend.
+- **Graphs** — bar, line, combo, pie / donut, histogram, box plot, scatter plot, scatter-plot matrix, data clock,
+  calendar heat chart, matrix heat chart, QQ plot and elevation profile (from data or from a line on the map).
+- **Map layout** — map title, legend (built from the thematic maps and map layers), north arrow / compass rose,
+  scale bar (with 1 : N ratio), coordinate grid / graticule, map frame and neatline (with paper margin), data source
+  and credits, projection and coordinate reference system, inset map, locator map, author and date, and an overview
+  map with the current extent. “Complete map layout” and “Atlas layout” add all of them at once.
+
 ## Tutorials
 
 `tutorials.html` (linked from the top bar, the home page and Help) has step-by-step guides for the workflow and a card for every element in *Layers → Add* — an example frame, its settings panel, how to place it, its animations and the settings you can change, with search. Pictures are in `assets/tutorials/`.

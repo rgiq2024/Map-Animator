@@ -30,6 +30,9 @@ import { OD_KINDS, OD_ANIMS, OD_DEFAULTS, OD_FORMS, OD_SET, odPhases, drawObjDet
 import { RC_KINDS, RC_ANIMS, RC_DEFAULTS, RC_FORMS, RC_SET, rcPhases, drawRecon } from './recon.js';
 import { TR_KINDS, TR_ANIMS, TR_DEFAULTS, TR_FORMS, TR_SET, trPhases, drawTransit } from './transit.js';
 import { TW_KINDS, TW_ANIMS, TW_DEFAULTS, TW_FORMS, TW_SET, twPhases, drawTvWeather } from './tvweather.js';
+import { TH_KINDS, TH_ANIMS, TH_DEFAULTS, TH_FORMS, TH_SET, thPhases, drawThematic } from './thematic.js';
+import { CH_KINDS, CH_ANIMS, CH_DEFAULTS, CH_FORMS, CH_SET, chPhases, drawChart as drawGChart } from './charts.js';
+import { ML_KINDS, ML_ANIMS, ML_DEFAULTS, ML_FORMS, ML_SET, mlPhases, drawLayout } from './maplayout.js';
 import { GL_KINDS, GL_ANIMS, GL_DEFAULTS, GL_FORMS, GL_SET, glPhases, drawGlobe3d } from './globefx.js';
 import { CF2_KINDS, CF2_ANIMS, CF2_DEFAULTS, CF2_FORMS, CF2_SET, cf2Phases, drawCarto2 } from './cartofx2.js';
 import { CF_KINDS, CF_ANIMS, CF_DEFAULTS, CF_FORMS, CF_SET, cfPhases, drawCarto } from './cartofx.js';
@@ -67,6 +70,9 @@ export const FX_KINDS = {
   ...CF_KINDS,
   ...CF2_KINDS,
   ...TW_KINDS,
+  ...TH_KINDS,
+  ...CH_KINDS,
+  ...ML_KINDS,
   ...GL_KINDS,
   ...MF_KINDS,
   geovideo: { name: 'Video on the map', icon: '📹', geom: 'image', desc: 'A drone or satellite video fitted onto the map by its four corners (georeferenced video)' },
@@ -119,6 +125,9 @@ export const FX_ANIMS = {
   ...CF_ANIMS,
   ...CF2_ANIMS,
   ...TW_ANIMS,
+  ...TH_ANIMS,
+  ...CH_ANIMS,
+  ...ML_ANIMS,
   ...GL_ANIMS,
   ...MF_ANIMS,
   geovideo: { fade: 'Fade in', wipe: 'Wipe in', none: 'Cut in' },
@@ -167,6 +176,9 @@ export const FX_DEFAULTS = {
   ...CF_DEFAULTS,
   ...CF2_DEFAULTS,
   ...TW_DEFAULTS,
+  ...TH_DEFAULTS,
+  ...CH_DEFAULTS,
+  ...ML_DEFAULTS,
   ...GL_DEFAULTS,
   ...MF_DEFAULTS,
   geovideo: { anim: 'fade', duration: 10, style: { media: '', name: '', opacity: 1, crs: '3857', blend: 'normal', border: true, borderColor: '#ffffff', speed: 1, trim: 0, loop: true, dir: 'lr' } },
@@ -222,6 +234,9 @@ export const FX_FORMS = {
   ...CF_FORMS,
   ...CF2_FORMS,
   ...TW_FORMS,
+  ...TH_FORMS,
+  ...CH_FORMS,
+  ...ML_FORMS,
   ...GL_FORMS,
   ...MF_FORMS,
   geovideo: [['style.media', 'Video', 'video'], ['style.opacity', 'Opacity', 'range', [0.05, 1, 0.01]], ['style.blend', 'Blend', 'select', { normal: 'Normal', screen: 'Screen (dark backgrounds, e.g. thermal / night video)', multiply: 'Multiply' }], ['style.speed', 'Playback speed', 'range', [0.25, 4, 0.05]], ['style.trim', 'Start the clip at (s)', 'number', 0.1], ['style.loop', 'Loop', 'switch'], ['style.dir', 'Wipe from', 'select', { lr: 'Left', rl: 'Right', tb: 'Top', bt: 'Bottom' }, (L) => L.anim === 'wipe'], ['style.border', 'Border', 'switch'], ['style.borderColor', 'Border colour', 'color', null, (L) => L.style.border]],
@@ -1391,6 +1406,9 @@ export function drawFX(ctx, L, tm, o, phase) {
   if (CF_SET.has(L.kind)) { drawCarto(ctx, L, tm, o, phase); return; }
   if (CF2_SET.has(L.kind)) { drawCarto2(ctx, L, tm, o, phase); return; }
   if (TW_SET.has(L.kind)) { drawTvWeather(ctx, L, tm, o, phase); return; }
+  if (TH_SET.has(L.kind)) { drawThematic(ctx, L, tm, o, phase); return; }
+  if (CH_SET.has(L.kind)) { if (phase === 'captions') drawGChart(ctx, L, tm, o); return; }
+  if (ML_SET.has(L.kind)) { drawLayout(ctx, L, tm, o, phase); return; }
   if (GL_SET.has(L.kind)) { drawGlobe3d(ctx, L, tm, o, phase); return; }
   if (MF_SET.has(L.kind)) { drawModelFlow(ctx, L, tm, o, phase); return; }
   if (L.kind === 'geovideo') { if (phase === 'below') drawGeoVideo(ctx, L, tm, o); return; }
@@ -1474,6 +1492,9 @@ export function fxPhases(kind) {
   if (CF_SET.has(kind)) return cfPhases(kind);
   if (CF2_SET.has(kind)) return cf2Phases(kind);
   if (TW_SET.has(kind)) return twPhases(kind);
+  if (TH_SET.has(kind)) return thPhases(kind);
+  if (CH_SET.has(kind)) return chPhases(kind);
+  if (ML_SET.has(kind)) return mlPhases(kind);
   if (GL_SET.has(kind)) return glPhases(kind);
   if (MF_SET.has(kind)) return mfPhases(kind);
   if (kind === 'geovideo') return ['below'];
