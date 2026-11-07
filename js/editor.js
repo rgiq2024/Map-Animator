@@ -30,6 +30,7 @@ import { SAT_PRODUCTS, SAT_CREDITS, satFrames, satForLongitude, visibleCities, l
 import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
 import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
+import { tourLength } from './globefx.js';
 import { cartoReady, countriesByName, countryNames, GROUPS as CF_GROUPS } from './cartofx.js';
 import { openModelBuilder, MF_PRESETS, clone as mfClone } from './modelflow.js';
 import { MODES as TR_MODES, lineModel, transitState, parseStations, osmRoutesInView, osmRoute, osmTracks, routeOnNetwork, roadRoute, geocode as trGeocodeName, ETIHAD_RAIL } from './transit.js';
@@ -1877,6 +1878,7 @@ export function createEditor() {
       const L = newLayer(k, null, { start: newStart() });
       if (st) Object.assign(L.style, st);
       if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
+      if (L.style.duration) { L.duration = +L.style.duration; delete L.style.duration; }
       if (b.dataset.name) L.name = b.dataset.name;
       if (L.kind === 'tracklabel' && !L.style.target) { const mv = movingTargets(scene()); L.style.target = mv.at(-1).id; L.style.name ||= (mv.at(-1).id === 'route' ? 'ROUTE' : String(mv.at(-1).name || '').toUpperCase()); L.duration = Math.max(L.duration, (layerById(L.style.target)?.duration || 0) + (layerById(L.style.target)?.start || 0) - L.start); }
       if (b.dataset.hold) L.hold = +b.dataset.hold;
@@ -2069,6 +2071,10 @@ export function createEditor() {
           const opts = `<option value="">${names.length ? (o === 'one' ? '— choose a country —' : '— choose a country / group —') : 'Loading countries…'}</option>${o === 'one' ? '' : `<optgroup label="Groups">${Object.keys(CF_GROUPS).map((g) => `<option value="${g.toUpperCase()}">${g.toUpperCase()}</option>`).join('')}</optgroup>`}<optgroup label="Countries">${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`;
           h += `<label class="field"><span>${label}</span><input type="text" data-b="${path}" value="${esc(v || '')}" placeholder="e.g. Austria"><span class="cpick"><select data-cpick="${path}" data-mode="set">${opts}</select>${o === 'one' ? '' : `<select data-cpick="${path}" data-mode="add"><option value="">＋ add another…</option>${opts.replace(/<option value="">[^<]*<\/option>/, '')}</select>`}<button class="btn sm" data-act="cpZoom" data-field="${path}" title="Zoom the map to it">⌖</button></span></label>`;
         }
+        else if (type === 'datafile') {
+          const n = String(v || '').length;
+          h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5" placeholder="name,lat,lon,value\nDubai,25.2,55.27,10\n… or paste GeoJSON">${n > 20000 ? '' : esc(v || '')}</textarea>${n > 20000 ? `<small class="muted">${Math.round(n / 1024)} KB of data loaded — load another file to replace it, or</small> <button class="btn sm" data-act="dfClear" data-field="${path}">clear it</button>` : ''}<span class="cpick"><label class="btn sm">📂 Load a CSV / GeoJSON file<input type="file" hidden accept=".csv,.txt,.tsv,.json,.geojson" data-dfile="${path}"></label></span></label>`;
+        }
         else if (type === 'cities') {
           h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea><span class="cpick"><input type="search" data-cfind="${path}" data-fmt="${o || 'cities'}" placeholder="Find a city or place by name…"><button class="btn sm" data-act="cityFind" data-field="${path}" data-fmt="${o || 'cities'}">＋ Add</button></span></label>`;
         }
@@ -2107,6 +2113,7 @@ export function createEditor() {
       if (L.kind === 'matchcut') h += highlightPanel(L);
       if (L.kind === 'objdetect') h += detectPanel(L);
       if (L.kind === 'transit') h += transitPanel(L);
+      if (L.kind === 'globe3d' && L.anim === 'tour') h += `<h5>Tour</h5><p class="hint-line">The tour needs about ${Math.ceil(tourLength(L))} s (turn first, then travel + stay at each place).</p><div class="btn-row"><button class="btn sm" data-act="glTour">⏱ Make the layer that long</button></div>`;
       if (L.kind === 'modelflow') h += `<h5>Diagram</h5><p class="hint-line">${(L.style.graph?.nodes || []).length} nodes · ${(L.style.graph?.edges || []).length} connections</p><div class="btn-row"><button class="btn sm primary" data-act="mfOpen">⧉ Open the model builder (drag &amp; drop)</button></div>`;
       if (L.kind === 'collision' && L.geom?.type === 'LineString') {
         h += `<h5>Place the track</h5>
@@ -2149,6 +2156,19 @@ export function createEditor() {
     const go = () => { const c = countriesByName(names); if (!c) { if (n++ < 30) setTimeout(go, 250); return; } if (!c.length) { toast('Country not found'); return; } let w = 180, s2 = 90, e2 = -180, n2 = -90; for (const x of c) { w = Math.min(w, x.bbox[0]); s2 = Math.min(s2, x.bbox[1]); e2 = Math.max(e2, x.bbox[2]); n2 = Math.max(n2, x.bbox[3]); } if (e2 - w < 150) flyToBounds([[w, s2], [e2, n2]], 0.12); };
     go();
   }
+  $('#layer-editor')?.addEventListener('change', async (e) => {
+    const inp = e.target.closest('[data-dfile]');
+    if (!inp || !inp.files?.[0]) return;
+    const L = layerById(selLayer);
+    if (!L) return;
+    const f = inp.files[0];
+    if (f.size > 25e6) { toast('That file is too big (over 25 MB)'); return; }
+    const txt = await f.text();
+    pushUndo();
+    setPath(L, inp.dataset.dfile, txt);
+    commitLayers(); renderLayerEditor(); repaint();
+    toast(`Loaded ${f.name}`, 2200);
+  });
   $('#layer-editor')?.addEventListener('change', (e) => {
     const sel = e.target.closest('[data-cpick]');
     if (!sel || !sel.value) return;
@@ -2997,6 +3017,8 @@ export function createEditor() {
     if (a === 'mfOpen') openMF(L);
     if (a === 'cityFind') { const inp = btn.parentElement.querySelector('[data-cfind]'); cityFind(L, btn.dataset.field, btn.dataset.fmt, inp?.value.trim()); }
     if (a === 'cpZoom') zoomToCountries(getPath(L, btn.dataset.field));
+    if (a === 'dfClear') { pushUndo(); setPath(L, btn.dataset.field, ''); commitLayers(); renderLayerEditor(); repaint(); }
+    if (a === 'glTour') { pushUndo(); L.duration = Math.ceil(tourLength(L)); commitLayers(); renderLayerEditor(); repaint(); toast(`Layer length set to ${L.duration} s`); }
     if (a === 'trFind') trFindRoutes(L);
     if (a === 'trPick' && Array.isArray(trRoutes)) trPick(L, trRoutes[+btn.dataset.i]);
     if (a === 'trGeo') trGeocode(L);
