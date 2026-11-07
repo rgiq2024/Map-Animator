@@ -1032,3 +1032,36 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 .carto-pick label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); }
 .carto-pick select { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
 .add-grid .add-sub { grid-column: 1 / -1; margin: 8px 2px 2px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+
+/* ---- scene bar: more room for scenes ---- */
+.ed-top { gap: 12px; position: relative; z-index: 40; }
+.ed-project { min-width: 0; padding-right: 12px; flex: none; }
+.project-name { width: 150px; }
+.ed-scenes { overflow: visible; gap: 6px; }
+.scene-tabs { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; scroll-behavior: auto; gap: 4px; padding: 2px 0; }
+.scene-tabs::-webkit-scrollbar { display: none; }
+.scene-tab { gap: 5px; padding: 4px 4px 4px 8px; font-size: 12.5px; flex: none; }
+.scene-tab svg.mini { display: none; }
+.scene-tab.active svg.mini { display: block; width: 28px; height: 14px; }
+.scene-tab b { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+.scene-tab small { font-size: 10px; }
+.scene-tab .menu-btn { padding: 0 3px; }
+.scene-scroll { flex: none; width: 22px; height: 28px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--panel); color: var(--ink-2); font-size: 16px; line-height: 1; cursor: pointer; padding: 0; }
+.scene-scroll:hover:not(:disabled) { color: var(--ink); border-color: var(--accent); }
+.scene-scroll:disabled { opacity: .35; cursor: default; }
+.scene-scroll[hidden] { display: none; }
+#new-scene { flex: none; white-space: nowrap; }
+.ed-top-right { flex: none; gap: 10px; }
+/* compact signed-in chip with a dropdown */
+.auth-chip { position: relative; display: inline-flex; align-items: center; }
+.auth-chip .auth-me { display: inline-flex; align-items: center; gap: 4px; max-width: 150px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--panel); color: var(--ink-2); font-size: 12px; padding: 3px 9px; cursor: pointer; white-space: nowrap; }
+.auth-chip .auth-me b { overflow: hidden; text-overflow: ellipsis; font-weight: 600; min-width: 0; }
+.auth-chip .auth-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; flex-direction: column; align-items: stretch; min-width: 190px; padding: 6px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.auth-chip.open .auth-menu { display: flex; }
+.auth-chip .auth-menu .auth-who { font-size: 11.5px; color: var(--ink-3); padding: 4px 8px 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px; word-break: break-all; }
+.auth-chip .auth-menu button { text-align: left; padding: 6px 8px; border-radius: 6px; }
+.auth-chip .auth-menu button:hover { background: var(--panel-3); }
+@media (max-width: 1280px) {
+  .ed-top-right .ns-t, #new-scene .ns-t { display: none; }
+  .auth-chip .auth-me b { display: none; }
+}

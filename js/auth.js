@@ -145,12 +145,15 @@ function addHeaderControls() {
   const make = () => {
     const w = document.createElement('span');
     w.className = 'auth-chip';
-    w.innerHTML = `<span title="Signed in">👤 <b>${esc(current.name)}</b></span>${current.role === 'admin' ? '<button class="link" data-auth="users" type="button">Users</button>' : ''}<button class="link" data-auth="password" type="button">Password</button><button class="link" data-auth="out" type="button">Sign out</button>`;
+    w.innerHTML = `<button class="auth-me" type="button" title="Signed in as ${esc(current.name)}" aria-haspopup="true">👤 <b>${esc(current.name)}</b> ▾</button><span class="auth-menu" role="menu"><span class="auth-who">${esc(current.name)}</span>${current.role === 'admin' ? '<button class="link" data-auth="users" type="button">Users</button>' : ''}<button class="link" data-auth="password" type="button">Password</button><button class="link" data-auth="out" type="button">Sign out</button></span>`;
     return w;
   };
   for (const host of document.querySelectorAll('.site-header nav, .ed-top-right')) if (!host.querySelector('.auth-chip')) host.prepend(make());
 }
 document.addEventListener('click', (e) => {
+  const me = e.target.closest('.auth-me');
+  for (const c of document.querySelectorAll('.auth-chip.open')) if (!me || !c.contains(me)) c.classList.remove('open');
+  if (me) { me.closest('.auth-chip').classList.toggle('open'); return; }
   const b = e.target.closest('[data-auth]');
   if (!b) return;
   const a = b.dataset.auth;

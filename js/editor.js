@@ -4465,6 +4465,17 @@ export function createEditor() {
     const d = pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map((p, i) => `${i ? 'L' : 'M'}${(3 + (p[0] - b[0][0]) * s + (28 - w * s) / 2).toFixed(1)} ${(13 - (p[1] - b[0][1]) * s - (10 - h * s) / 2).toFixed(1)}`).join('');
     return `<svg class="mini" viewBox="0 0 34 16"><path d="${d}" fill="none" stroke="${sc.look.lineColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   }
+  // scene bar: wheel scrolls sideways, arrows page through, the active tab stays in view
+  (() => {
+    const tabs = $('#scene-tabs');
+    const upd = () => { const l = $('#scene-left'), r = $('#scene-right'); if (!l || !r) return; const over = tabs.scrollWidth > tabs.clientWidth + 2; l.hidden = r.hidden = !over; l.disabled = tabs.scrollLeft <= 2; r.disabled = tabs.scrollLeft + tabs.clientWidth >= tabs.scrollWidth - 2; };
+    tabs.addEventListener('wheel', (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && tabs.scrollWidth > tabs.clientWidth) { e.preventDefault(); tabs.scrollLeft += e.deltaY; } }, { passive: false });
+    tabs.addEventListener('scroll', upd);
+    $('#scene-left')?.addEventListener('click', () => tabs.scrollBy({ left: -tabs.clientWidth * 0.7, behavior: 'smooth' }));
+    $('#scene-right')?.addEventListener('click', () => tabs.scrollBy({ left: tabs.clientWidth * 0.7, behavior: 'smooth' }));
+    new ResizeObserver(upd).observe(tabs);
+    window.__sceneBarUpd = upd;
+  })();
   function renderScenes() {
     $('#scene-tabs').innerHTML = project.scenes.map((sc, i) => `
       <div class="scene-tab ${i === sceneIdx ? 'active' : ''}" data-i="${i}" draggable="true" title="Drag to change the order">
@@ -4472,6 +4483,7 @@ export function createEditor() {
         <button class="menu-btn" data-menu="${i}" title="Scene options">⋯</button>${project.scenes.length > 1 ? `<button class="del-scene" data-delscene="${i}" title="Delete scene">✕</button>` : ''}
       </div>`).join('');
     updateSceneDurations();
+    requestAnimationFrame(() => { $(`#scene-tabs [data-i="${sceneIdx}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); window.__sceneBarUpd?.(); });
   }
   function updateSceneDurations() {
     if (!project) return;
