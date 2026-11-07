@@ -1921,6 +1921,8 @@ export function createEditor() {
       const L = newLayer(k, null, { start: newStart() });
       if (st) Object.assign(L.style, st);
       if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
+      if (L.style.duration) { L.duration = +L.style.duration; delete L.style.duration; }
+      if (k === 'globe3d' && L.anim === 'tour') L.duration = Math.ceil(tourLength(L));
       if (b.dataset.name) L.name = b.dataset.name;
       if (pick && k === 'spotlight' && L.style.source !== 'layer') L.name = `Spotlight: ${pick}`;
       const lastPoly = [...(scene().layers || [])].reverse().find((x) => /Polygon/.test(x.geom?.type || ''));
