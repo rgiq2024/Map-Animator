@@ -170,14 +170,21 @@ Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `asset
 ### Rotating globes
 
 *Add → 🌍 Rotating globes*:
-- **Realistic Earth in space**: NASA Blue Marble by day and city lights on the night side, atmosphere, sun flare and stars, drawn with WebGL.
-- **Night Earth** with glowing city lights.
-- **Glowing hologram globe** with arcs.
-- **Sci-fi HUD globe** with rings and a countdown.
-- **Neon world globe**.
-- **Places and arcs**: add places with teal labels and glowing great-circle arcs (from a hub, or "From > To"), plus an orbit ring.
-- **Animations**: it keeps turning, turns to the first place, or comes in from far away.
-- **Placement**: the globe fills the frame with space; turn that off to float it over the map or your video.
+- **Looks**
+  - **Shader looks (WebGL, NASA textures)**: realistic Earth (NASA Blue Marble by day, city lights on the night side), day only, night lights, black & white, flat cartoon.
+  - **Drawn looks**: transparent glass (the far side shows through), wireframe, glowing hologram, sci-fi HUD (rings and a countdown), neon, gold dots, blueprint.
+- **Settings**:
+  - sun intensity and direction, with the sun flare;
+  - city-light intensity;
+  - moving clouds (cover, drift speed);
+  - atmosphere glow (strength, colour);
+  - globe opacity (see-through over the map or a video);
+  - texture detail (high = sharper when zoomed in);
+  - space and stars;
+  - facing longitude and latitude, turning speed, size and position.
+- **Tour**: the globe turns first, then flies and zooms to every place in turn, with a pulsing marker and a label, staying a while at each. Set the turn time, travel time, stay time and zoom. *Make the layer that long* fits the layer to the tour.
+- **Places and arcs**: places with labels, glowing great-circle arcs (from a hub, or "From > To"), and an orbit ring.
+- **Your data**: paste or load a CSV (`name, lat, lon, value`; the column order is found from the header) or GeoJSON. Points appear as ripples, glows, spikes (height = value), dots or pins, sized by value and optionally named. Lines and areas are drawn on the globe.
 
 ## Tutorials
 
