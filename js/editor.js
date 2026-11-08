@@ -1949,6 +1949,13 @@ export function createEditor() {
   };
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-globes')?.addEventListener('click', cartoAdd);
+  // typography: callouts, titles and text — buttons with data-proxy run a button from another section
+  $('#add-typography')?.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.proxy) { document.querySelector(b.dataset.proxy)?.click(); return; }
+    cartoAdd(e);
+  });
   // cartography: thematic maps, graphs and map-layout elements (a button can add a whole layout at once)
   $('#add-cartography')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');

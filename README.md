@@ -186,6 +186,27 @@ Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `asset
 - **Places and arcs**: places with labels, glowing great-circle arcs (from a hub, or "From > To"), and an orbit ring.
 - **Your data**: paste or load a CSV (`name, lat, lon, value`; the column order is found from the header) or GeoJSON. Points appear as ripples, glows, spikes (height = value), dots or pins, sized by value and optionally named. Lines and areas are drawn on the globe.
 
+### Typography: callouts, titles and text
+
+**Add → Start here → Typography.**
+
+- **Callouts on the map** — 16 styles pinned to a place with a leader line: clean, outlined box, solid box, pill,
+  numbered badge, value card (e.g. 110 km/h), big label + ring, tagged, neon, counting number, percentage ring,
+  photo, corner bracket, title + paragraph, modern hatched frame and HUD corners. Drag the box anywhere.
+- **Titles & text on screen** — kinetic, stacked with colour bar, outline that fills, box wipe reveal, underlined,
+  kicker + big word, typewriter, cinematic, lower third, quote, counting number, heading + paragraph,
+  big number + title, highlighter marker and framed title. Five font families, letter spacing, nine positions.
+- **Measure** — dimension lines that show the measured distance (m / km / ft / mi / NM) or your own text.
+- **Sci-fi windows & camera overlays** — retinal scan, fingerprint, ID card, profile + data, and an airborne
+  camera (FLIR) overlay with live coordinates, heading, altitude, target, crosshair and a thermal map look.
+- **More titles & text** — shortcuts to the film titles, lower thirds, text on map, captions and text cards.
+
+### Finding layers
+
+The Add panel lists categories in five groups (Start here, Maps & data, Imagery & 3D, Motion graphics, Specialist).
+Open a category to see its items as a list; the back arrow returns to all categories. Search looks through
+every category, “Recently added” remembers your last six, and “/” opens quick add from anywhere.
+
 ### Cartography: thematic maps, graphs and map layout
 
 **Add → 🗺 Cartography** (the first section after “Draw or place”).

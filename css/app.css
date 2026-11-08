@@ -1069,3 +1069,63 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 .field-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .chip-btn { border: 1px solid var(--line-2); background: var(--panel); color: var(--ink-2); border-radius: 999px; font-size: 11px; padding: 2px 8px; cursor: pointer; }
 .chip-btn:hover { color: var(--ink); border-color: var(--accent); }
+
+/* =================================================================
+   Layer library (Add panel): category list → one category at a time
+   ================================================================= */
+:root { --accent-grad: linear-gradient(var(--accent), var(--accent)); }
+.btn.primary, .side-foot .btn.primary { box-shadow: none; }
+.play-btn, .sh-b.primary { box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.step-page[data-page="layers"] > h2 { font-size: 17px; letter-spacing: -.01em; margin-bottom: 2px; }
+.step-page[data-page="layers"] > .sub { font-size: 12.5px; margin: 0 0 12px; }
+.step-page.lib-mode .lp-search input { border-radius: 8px; background: var(--panel); }
+/* popular */
+.step-page.lib-mode .popular { gap: 5px; margin: 0 0 4px; }
+.step-page.lib-mode .popular .pop-l { font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: none; width: 100%; margin: 2px 0 2px 2px; }
+.step-page.lib-mode .popular button { border-radius: 6px; padding: 5px 9px; font-size: 12px; font-weight: 500; background: var(--panel); transform: none; }
+.step-page.lib-mode .popular button:hover { transform: none; background: var(--panel-2); border-color: var(--line-2); }
+/* home */
+.alib-glabel { font-size: 11px; font-weight: 600; color: var(--ink-3); margin: 18px 2px 6px; letter-spacing: .02em; }
+.alib-list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.alib-row { display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 11px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; color: var(--ink); }
+.alib-row:first-child { border-top: 0; }
+.alib-row:hover { background: var(--panel-2); }
+.alib-row:focus-visible, .alib-back:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.alib-ico { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; background: var(--panel-2); color: var(--ink-2); border: 1px solid var(--line); flex: none; }
+.alib-ico svg { width: 17px; height: 17px; }
+.alib-row:hover .alib-ico { color: var(--accent); }
+.alib-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.alib-txt b { font-size: 13px; font-weight: 600; }
+.alib-txt small { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alib-row em, .alib-head em { font-style: normal; font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.alib-chev { width: 14px; height: 14px; color: var(--ink-3); flex: none; }
+.alib-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.alib-chips button { border: 1px solid var(--line-2); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 5px 9px; font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alib-chips button:hover { background: var(--panel-2); }
+/* categories */
+.step-page.lib-mode .add-sec { display: none; border: 0; border-radius: 0; background: none; box-shadow: none; margin: 0; overflow: visible; }
+.step-page.lib-mode .add-sec.cur, .step-page.lib-mode.searching .add-sec:not(.hide) { display: block; }
+.step-page.lib-mode .add-sec > summary { display: none; }
+.step-page.lib-mode.searching .alib-home, .step-page.lib-mode.searching .popular { display: none; }
+.alib-head { display: flex; align-items: center; gap: 10px; position: sticky; top: -18px; z-index: 5; background: var(--bg-2); padding: 10px 0; margin: 0 0 2px; border-bottom: 1px solid var(--line); }
+.alib-head b { font-size: 14.5px; font-weight: 650; flex: 1; min-width: 0; }
+.alib-back { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line-2); background: var(--panel); display: grid; place-items: center; color: var(--ink); flex: none; padding: 0; }
+.alib-back svg { width: 16px; height: 16px; }
+.alib-back:hover { background: var(--panel-2); }
+.step-page.lib-mode.searching .alib-head { position: static; padding: 14px 0 6px; border-bottom: 0; }
+.step-page.lib-mode.searching .alib-back { display: none; }
+.step-page.lib-mode.searching .alib-head .alib-ico { width: 24px; height: 24px; }
+/* items: a clean list */
+.step-page.lib-mode .add-grid { display: flex; flex-direction: column; gap: 1px; padding: 4px 0 14px; margin: 0; }
+.step-page.lib-mode .add-grid button { flex-direction: row; justify-content: flex-start; align-items: center; text-align: left; gap: 10px; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; font-size: 13px; font-weight: 500; line-height: 1.25; color: var(--ink); box-shadow: none; transform: none; min-height: 38px; }
+.step-page.lib-mode .add-grid button:hover { background: var(--panel-2); color: var(--ink); box-shadow: none; transform: none; }
+.step-page.lib-mode .add-grid button.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.step-page.lib-mode .add-grid button i { width: 28px; height: 28px; line-height: 28px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; color: var(--ink-2); flex: none; filter: grayscale(1); opacity: .9; transform: none; display: grid; place-items: center; overflow: hidden; font-weight: 600; }
+.step-page.lib-mode .add-grid button:hover i { background: var(--panel); transform: none; color: var(--accent); filter: grayscale(.2); opacity: 1; }
+.step-page.lib-mode .add-grid .add-sub { margin: 14px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: none; color: var(--ink-3); }
+.step-page.lib-mode .add-grid .add-sub:first-child { margin-top: 6px; }
+.step-page.lib-mode .add-note { margin: 4px 8px 10px; }
+:root[data-theme="light"] .step-page.lib-mode .add-grid button { background: transparent; }
+:root[data-theme="light"] .step-page.lib-mode .add-grid button:hover { background: var(--panel-2); box-shadow: none; }
+:root[data-theme="light"] .step-page.lib-mode .add-sec { background: none; box-shadow: none; }
+:root[data-theme="light"] .alib-head { background: var(--bg-2); }

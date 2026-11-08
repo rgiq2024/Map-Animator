@@ -46,6 +46,11 @@ export const HUD_PLUS = {
 /** CSS filter for the map while a thermal HUD is on. */
 export function thermalFilter(scene, t, layerTiming) {
   for (const L of scene.layers || []) {
+    if (L.kind === 'flirhud' && !L.hidden && L.style?.thermal !== false) {
+      if (!layerTiming(L, t).visible) continue;
+      const base = 'grayscale(1) contrast(1.45) brightness(1.06)';
+      return L.style.polarity === 'black' ? `${base} invert(1)` : base;
+    }
     if (L.kind !== 'hud' || L.hidden) continue;
     const mf = L.style?.variant !== 'thermal' ? milFilter(L) : '';
     if (L.style?.variant !== 'thermal' && !mf) continue;
