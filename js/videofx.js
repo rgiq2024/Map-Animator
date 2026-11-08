@@ -18,11 +18,41 @@ export function videoFor(id) {
       v.url = URL.createObjectURL(blob);
       el.src = v.url;
       el.addEventListener('loadeddata', () => { v.ready = true; }, { once: true });
+      el.addEventListener('error', () => { v.error = true; }, { once: true });
       el.load();
     });
   }
   return v;
 }
+/**
+ * Keeps a clip in step with the timeline while previewing. While the timeline plays, the clip really plays
+ * (smooth, no per-frame seeking) and is only nudged when it drifts; when paused or scrubbing it is seeked once.
+ */
+export function syncVideo(v, target, rate = 1) {
+  const el = v?.el;
+  if (!el || !isFinite(target)) return;
+  const now = performance.now();
+  const last = v.lastT, lastAt = v.lastAt || 0;
+  v.lastT = target; v.lastAt = now;
+  // playing = the clip time moved forward at about the speed of the clock (slow machines draw fewer frames)
+  const wall = (now - lastAt) / 1000, dt = last == null ? 0 : target - last;
+  const playing = dt > 0 && wall < 2 && dt < wall * (rate || 1) * 1.8 + 0.15;
+  try {
+    if (playing) {
+      const r = Math.max(0.0625, Math.min(16, rate || 1));
+      if (Math.abs(el.playbackRate - r) > 0.001) el.playbackRate = r;
+      if (el.paused && !v.starting) { v.starting = true; el.play().catch(() => {}).finally(() => { v.starting = false; }); }
+      if (!el.seeking && Math.abs(el.currentTime - target) > 0.35) el.currentTime = target;
+    } else {
+      if (!el.paused) el.pause();
+      if (!el.seeking && Math.abs(el.currentTime - target) > 0.04) el.currentTime = target;
+    }
+  } catch { /* not seekable yet */ }
+}
+/** Pause every clip (the timeline was paused). */
+export function pauseAllVideos() { for (const v of vids.values()) { try { v.el.pause(); } catch { /* ignore */ } v.lastT = null; } }
+// pause clips the preview no longer asks for (playback stopped, layer hidden, scene changed)
+setInterval(() => { const now = performance.now(); for (const v of vids.values()) if (!v.el.paused && now - (v.lastAt || 0) > 2100) { try { v.el.pause(); } catch { /* ignore */ } } }, 250);
 const localTime = (L, tau, dur) => {
   const sp = +L.style.speed || 1;
   let t = Math.max(0, tau) * sp;
@@ -45,6 +75,7 @@ export async function seekScene(scene, t, layerTiming) {
     if (zf) { target = Math.max(0, tm.tau); if (L.style.loop !== false && dur > 0) target %= dur; target = Math.min(target, Math.max(0, dur - 0.04)); }
     else if (L.kind === 'video' || L.kind === 'geovideo') { target = Math.max(0, tm.tau) * (+L.style.speed || 1) + (+L.style.trim || 0); if (L.style.loop && dur > 0) target %= dur; target = Math.min(target, Math.max(0, dur - 0.04)); }
     else target = localTime(L, tm.tau, dur);
+    if (!v.el.paused) v.el.pause();
     if (Math.abs(v.el.currentTime - target) < 0.001) continue;
     jobs.push(new Promise((res) => { const to = setTimeout(res, 3000); v.el.addEventListener('seeked', () => { clearTimeout(to); res(); }, { once: true }); v.el.currentTime = target; }));
   }
@@ -65,7 +96,7 @@ export function drawVideoFx(ctx, L, tm, proj, unit, exact) {
   const el = v.el;
   if (!exact) {
     const target = tm.edit ? Math.min(0.6, (el.duration || 1) * 0.3) : localTime(L, tm.tau, el.duration || 0);
-    if (Math.abs(el.currentTime - target) > 0.08) { try { el.currentTime = target; } catch { /* not seekable yet */ } }
+    syncVideo(v, target, +s.speed || 1);
   }
   const ar = (el.videoWidth || 16) / (el.videoHeight || 9);
   const W = H * ar;
@@ -122,7 +153,7 @@ export function drawGeoVideo(ctx, L, tm, o) {
     ctx.setLineDash([6 * unit, 4 * unit]); ctx.strokeStyle = '#2d7ff9'; ctx.lineWidth = 2 * unit; ctx.stroke();
     const c = pts.reduce((acc, p) => [acc[0] + p[0] / 4, acc[1] + p[1] / 4], [0, 0]);
     ctx.fillStyle = '#fff'; ctx.font = `600 ${14 * unit}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(s.media ? 'Loading video…' : '📹 Choose a video in the layer settings', c[0], c[1]);
+    ctx.fillText(v?.error ? 'This video format cannot play in the browser — use MP4 (H.264) or WebM' : s.media ? 'Loading video…' : '📹 Choose a video in the layer settings', c[0], c[1]);
     ctx.restore();
     return;
   }
@@ -131,7 +162,7 @@ export function drawGeoVideo(ctx, L, tm, o) {
     let target = Math.max(0, tm.edit ? 0 : tm.tau) * (+s.speed || 1) + (+s.trim || 0);
     if (s.loop !== false && dur > 0) target %= dur;
     target = Math.min(target, Math.max(0, dur - 0.04));
-    if (Math.abs(v.el.currentTime - target) > 0.12) { try { v.el.currentTime = target; } catch { /* not seekable yet */ } }
+    syncVideo(v, target, +s.speed || 1);
   }
   const img = { ready: true, bmp: v.el, w: v.el.videoWidth, h: v.el.videoHeight };
   let clip = null;

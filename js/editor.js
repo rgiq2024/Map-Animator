@@ -17,7 +17,7 @@ import { drawDepthOfField, drawVignette, starfield } from './effects.js';
 import { FX_FORMS } from './fx.js';
 import { MC_EDIT, hlRects } from './storyfx.js';
 import { ModelLayer, BUILTIN_MODELS, inspectModelFile } from './models3d.js';
-import { seekScene, videoFor } from './videofx.js';
+import { seekScene, videoFor, pauseAllVideos } from './videofx.js';
 import { buildEvents, defaultSound, MUSIC, SFX_KINDS, hasSound } from './sfx.js';
 import { hitGizmo, gizmoDrag } from './gizmo.js';
 import { zoomSpeedAt } from './renderer.js';
@@ -4310,6 +4310,7 @@ export function createEditor() {
     const was = playing;
     playing = p;
     document.body.classList.toggle('is-playing', p);
+    if (!p) pauseAllVideos();
     if (p) { playStartNow = performance.now(); playStartTime = time; playStartOut = outOf(time); playFrom(project, sceneOffset() + playStartOut, tl?.state.rate || 1, soundEvents(), playAll ? Infinity : sceneOffset() + model.duration).catch(() => {}); }
     else if (was && !keepAudio) stopPlayback();
     if (!p && !keepAudio && playAll) endPlayAll();

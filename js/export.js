@@ -415,6 +415,7 @@ async function recordFallback(o, canvas, ctx) {
 }
 
 async function seekVideo(el, t) {
+  if (!el.paused) el.pause();
   if (Math.abs(el.currentTime - t) < 0.001 && el.readyState >= 2) return;
   await new Promise((res) => { const to = setTimeout(res, 2000); el.addEventListener('seeked', () => { clearTimeout(to); res(); }, { once: true }); el.currentTime = t; });
 }

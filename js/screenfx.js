@@ -2,7 +2,7 @@
 // camera shake, focus pull) and your own videos placed on screen (full frame or picture-in-picture).
 import { drawHologram, drawCrosses, drawLensFlare } from './vizfx.js';
 import { placeAt } from './place.js';
-import { videoFor } from './videofx.js';
+import { videoFor, syncVideo } from './videofx.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (u) => 0.5 - 0.5 * Math.cos(Math.PI * clamp(u, 0, 1));
@@ -378,7 +378,7 @@ export function drawVideoLayer(ctx, L, tm, o) {
   if (v?.ready) {
     if (!o.exact) {
       const target = videoTime(L, tm, v.el.duration || 0);
-      if (Math.abs(v.el.currentTime - target) > 0.08) { try { v.el.currentTime = target; } catch { /* not ready */ } }
+      syncVideo(v, target, +s.speed || 1);
     }
     // cover
     const vr = (v.el.videoWidth || 16) / (v.el.videoHeight || 9), br = W / H;
@@ -389,7 +389,7 @@ export function drawVideoLayer(ctx, L, tm, o) {
   } else {
     ctx.fillStyle = 'rgba(20,24,30,0.85)'; ctx.fillRect(x, y, W, H);
     ctx.fillStyle = '#fff'; ctx.font = `600 ${14 * unit}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(s.media ? 'Loading video…' : 'Choose a video', x + W / 2, y + H / 2);
+    ctx.fillText(v?.error ? 'Can’t play this format — use MP4 (H.264) or WebM' : s.media ? 'Loading video…' : 'Choose a video', x + W / 2, y + H / 2);
   }
   ctx.restore();
   if (!full && +s.border > 0) { ctx.strokeStyle = s.borderColor || '#ffffff'; ctx.lineWidth = +s.border * unit; rr(ctx, x, y, W, H, rad); ctx.stroke(); }

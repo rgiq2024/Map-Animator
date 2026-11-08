@@ -4,7 +4,7 @@
 import { placeAt } from './place.js';
 import { imageFor } from './geoimage.js';
 import { drawMapCrop } from './vizfx.js';
-import { videoFor } from './videofx.js';
+import { videoFor, syncVideo } from './videofx.js';
 import { videoTime } from './screenfx.js';
 
 const UI = '"Inter","Segoe UI",system-ui,sans-serif';
@@ -681,7 +681,7 @@ function zoomFrame(ctx, L, tm, o, drawMapCrop, videoFor, videoTime) {
     const v = s.clip ? videoFor(s.clip) : null;
     const im = !v && s.media ? imageFor(s.media) : null;
     if (v?.ready) {
-      if (!o.exact) { const target = videoTime({ style: { speed: 1, loop: s.loop !== false } }, tm, v.el.duration || 0); if (Math.abs(v.el.currentTime - target) > 0.08) { try { v.el.currentTime = target; } catch { /* not ready */ } } }
+      if (!o.exact) { const target = videoTime({ style: { speed: 1, loop: s.loop !== false } }, tm, v.el.duration || 0); syncVideo(v, target, 1); }
       cover(v.el.videoWidth || 16, v.el.videoHeight || 9, (x, y, w, h) => { try { ctx.drawImage(v.el, x, y, w, h); } catch { /* frame not ready */ } });
     } else if (im?.bmp) cover(im.bmp.width, im.bmp.height, (x, y, w, h) => ctx.drawImage(im.bmp, x, y, w, h));
     else {
