@@ -33,6 +33,8 @@ import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect
 import { tourLength } from './globefx.js';
 import { parseTable, dataOf, readDataFiles } from './geodata.js';
 import { thematicBounds } from './thematic.js';
+import { openTracker } from './vtracker.js';
+import { VIDEO_RECTS } from './screenfx.js';
 import { cartoReady, countriesByName, countryNames, GROUPS as CF_GROUPS } from './cartofx.js';
 import { openModelBuilder, MF_PRESETS, clone as mfClone } from './modelflow.js';
 import { MODES as TR_MODES, lineModel, transitState, parseStations, osmRoutesInView, osmRoute, osmTracks, routeOnNetwork, roadRoute, geocode as trGeocodeName, ETIHAD_RAIL } from './transit.js';
@@ -1762,6 +1764,8 @@ export function createEditor() {
     startAdd(kind);
   });
   // titles, TV news, effects and videos (screen layers)
+  // shortcut buttons that run a button from another section
+  document.addEventListener('click', (e) => { const b = e.target.closest('.add-grid button[data-proxy]'); if (b && !b.closest('#add-typography')) document.querySelector(b.dataset.proxy)?.click(); });
   for (const sel of ['#add-titles', '#add-effects']) $(sel).addEventListener('click', (e) => {
     const b = e.target.closest('[data-add]');
     if (!b) return;
@@ -1949,12 +1953,31 @@ export function createEditor() {
   };
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-globes')?.addEventListener('click', cartoAdd);
+  // tracked callouts: link to a video layer and open the "pick the subject" window
+  function openVTracker(L) {
+    const vids = (scene().layers || []).filter((x) => x.kind === 'video' && x.style?.media);
+    let Lv = vids.find((x) => x.id === L.style.video);
+    if (!Lv && vids.length) { Lv = vids[vids.length - 1]; L.style.video = Lv.id; commitLayers(); renderLayerEditor(); }
+    if (!Lv) { toast('Add a video first (Add → Motion graphics → Effects & video → Video), then pick the subject', 5200); return; }
+    openTracker({
+      mediaId: Lv.style.media, videoName: Lv.style.name || Lv.name, t0: VIDEO_RECTS.get(Lv.id)?.vt || 0, track: L.style.track || [], box: +L.style.trackBox || 0.08, toast,
+      onDone: (track, info, box) => { pushUndo(); L.style.track = track; L.style.trackInfo = info; if (box) L.style.trackBox = box; commitLayers(); renderLayerEditor(); repaint(); },
+    });
+  }
   // typography: callouts, titles and text — buttons with data-proxy run a button from another section
   $('#add-typography')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.proxy) { document.querySelector(b.dataset.proxy)?.click(); return; }
+    const before = (scene().layers || []).length;
     cartoAdd(e);
+    const L = (scene().layers || [])[before];
+    if (L?.kind === 'vtrack') {
+      // put it on the clip under the playhead, and start the tracker
+      const vids = (scene().layers || []).filter((x) => x.kind === 'video' && x.style?.media);
+      if (vids.length) { L.style.video = vids[vids.length - 1].id; const Lv = vids[vids.length - 1]; L.start = Lv.start; commitLayers(); renderLayerEditor(); openVTracker(L); }
+      else toast('Tracked callout added — now add your video (Effects & video → Video) and press “Pick the subject & track”', 6000);
+    }
   });
   // cartography: thematic maps, graphs and map-layout elements (a button can add a whole layout at once)
   $('#add-cartography')?.addEventListener('click', (e) => {
@@ -2095,6 +2118,7 @@ export function createEditor() {
           const want = o || 'any';
           const opts = want === 'line' ? { route: 'The route' } : { '': '— choose a layer —' };
           for (const X of scene().layers || []) {
+            if (/^kind:/.test(want)) { if (X !== L && X.kind === want.slice(5)) opts[X.id] = X.name || X.kind; continue; }
             if (X === L || !X.geom) continue;
             const gt = X.geom.type;
             if (want === 'line' && !/LineString/.test(gt)) continue;
@@ -2110,6 +2134,10 @@ export function createEditor() {
           const names = countryNames();
           const opts = `<option value="">${names.length ? (o === 'one' ? '— choose a country —' : '— choose a country / group —') : 'Loading countries…'}</option>${o === 'one' ? '' : `<optgroup label="Groups">${Object.keys(CF_GROUPS).map((g) => `<option value="${g.toUpperCase()}">${g.toUpperCase()}</option>`).join('')}</optgroup>`}<optgroup label="Countries">${names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('')}</optgroup>`;
           h += `<label class="field"><span>${label}</span><input type="text" data-b="${path}" value="${esc(v || '')}" placeholder="e.g. Austria"><span class="cpick"><select data-cpick="${path}" data-mode="set">${opts}</select>${o === 'one' ? '' : `<select data-cpick="${path}" data-mode="add"><option value="">＋ add another…</option>${opts.replace(/<option value="">[^<]*<\/option>/, '')}</select>`}<button class="btn sm" data-act="cpZoom" data-field="${path}" title="Zoom the map to it">⌖</button></span></label>`;
+        }
+        else if (type === 'vtrack') {
+          const n = Array.isArray(v) ? v.length : 0;
+          h += `<div class="field"><span>${label}</span><div class="btn-row"><button class="btn sm primary" data-act="vtrackOpen">🎯 ${n ? 'Re-track the subject…' : 'Pick the subject & track…'}</button></div><span class="muted small">${n ? esc(L.style.trackInfo || `${n} points`) : 'Click the person or object once — it is followed through the clip.'}</span></div>`;
         }
         else if (type === 'field' || type === 'fields') {
           const T = parseTable(dataOf(L.style || {}));
@@ -3087,6 +3115,7 @@ export function createEditor() {
     if (a === 'mfOpen') openMF(L);
     if (a === 'cityFind') { const inp = btn.parentElement.querySelector('[data-cfind]'); cityFind(L, btn.dataset.field, btn.dataset.fmt, inp?.value.trim()); }
     if (a === 'cpZoom') zoomToCountries(getPath(L, btn.dataset.field));
+    if (a === 'vtrackOpen') { const L = layerById(selLayer); if (L) openVTracker(L); return; }
     if (a === 'addField') { const L = layerById(selLayer); if (!L) return; const cur = String(getPath(L, btn.dataset.field) || '').split(',').map((x) => x.trim()).filter(Boolean); if (!cur.includes(btn.dataset.name)) cur.push(btn.dataset.name); pushUndo(); setPath(L, btn.dataset.field, cur.join(', ')); commitLayers(); renderLayerEditor(); repaint(); return; }
     if (a === 'dfClear') { pushUndo(); setPath(L, btn.dataset.field, ''); commitLayers(); renderLayerEditor(); repaint(); }
     if (a === 'glTour') { pushUndo(); L.duration = Math.ceil(tourLength(L)); commitLayers(); renderLayerEditor(); repaint(); toast(`Layer length set to ${L.duration} s`); }

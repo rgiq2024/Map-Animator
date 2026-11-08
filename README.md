@@ -193,6 +193,8 @@ Country outlines: Natural Earth 1:50m via world-atlas (public domain), in `asset
 - **Callouts on the map** — 16 styles pinned to a place with a leader line: clean, outlined box, solid box, pill,
   numbered badge, value card (e.g. 110 km/h), big label + ring, tagged, neon, counting number, percentage ring,
   photo, corner bracket, title + paragraph, modern hatched frame and HUD corners. Drag the box anywhere.
+- **Callouts that follow your video** — add a video, then a tracked callout: click the person or object once and it
+  is tracked through the whole clip (forwards and backwards, right in the browser); the callout follows it.
 - **Titles & text on screen** — kinetic, stacked with colour bar, outline that fills, box wipe reveal, underlined,
   kicker + big word, typewriter, cinematic, lower third, quote, counting number, heading + paragraph,
   big number + title, highlighter marker and framed title. Five font families, letter spacing, nine positions.

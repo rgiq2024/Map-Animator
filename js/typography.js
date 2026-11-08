@@ -5,6 +5,7 @@
 import { placeAt, CUSTOM_POS } from './place.js';
 import { H } from './cartofx.js';
 import { imageFor } from './geoimage.js';
+import { VIDEO_RECTS } from './screenfx.js';
 
 const { clamp, easeOut, UI, hexA, rr, prog, haversine } = H;
 const FONTS = {
@@ -35,12 +36,14 @@ export const TY_TITLE_LOOKS = {
 export const TY_KINDS = {
   tcallout: { name: 'Callout', icon: '⌐', geom: 'point', desc: 'A label pinned to a place with a leader line — 16 styles: clean, boxed, pill, badge, value card, ring, photo, neon, HUD…' },
   ttitle: { name: 'Typographic title', icon: 'Aa', geom: null, desc: 'Titles and text on screen — kinetic, stacked, outline, box reveal, lower third, quote, counter, paragraph…' },
+  vtrack: { name: 'Tracked callout (video)', icon: '🎯', geom: null, desc: 'A callout that follows a moving person or object in your video clip — pick the subject once, it is tracked through the clip' },
   measure: { name: 'Dimension line', icon: '↔', geom: 'line', desc: 'A measuring line between two points with the distance (m, km, ft, mi) or your own text' },
   scanui: { name: 'Scan window', icon: '◎', geom: null, desc: 'Sci-fi windows: retinal scan, fingerprint, ID card or profile, with scanning animation' },
   flirhud: { name: 'Airborne camera overlay', icon: '⌖', geom: null, desc: 'Police / military helicopter camera text: live coordinates, heading, altitude, target, crosshair, thermal look' },
 };
 export const TY_ANIMS = {
   tcallout: { draw: 'Point → line → box → text', pop: 'Pop in', fade: 'Fade in', none: 'Shown' },
+  vtrack: { draw: 'Point → line → box → text', pop: 'Pop in', fade: 'Fade in', none: 'Shown' },
   ttitle: { in: 'Animate in', fade: 'Fade in', none: 'Shown' },
   measure: { grow: 'Grows from the middle', draw: 'Draws left to right', fade: 'Fade in', none: 'Shown' },
   scanui: { open: 'Window opens + scans', fade: 'Fade in', none: 'Shown' },
@@ -50,6 +53,11 @@ export const TY_DEFAULTS = {
   tcallout: { anim: 'draw', duration: 1.4, style: {
     look: 'clean', title: 'Clean callout', sub: 'Modern clean design', text: 'Short paragraph of text that explains what is at this place.', tag: 'Premiere', value: '110', unit: 'km/h', decimals: 0, prefix: '', suffix: '',
     media: '', accent: '#ffd23f', ink: '#ffffff', box: '#ffffff', leader: 'straight', end: 'square', dx: 170, dy: -110, size: 1, font: 'display', upper: true, shadow: true,
+  } },
+  vtrack: { anim: 'draw', duration: 1.2, style: {
+    look: 'bracket', title: 'Change the world', sub: 'By being yourself', text: '', tag: 'Speed', value: '24', unit: 'km/h', decimals: 0, prefix: '', suffix: '',
+    media: '', accent: '#ffd23f', ink: '#ffffff', box: '#ffffff', leader: 'straight', end: 'dot', dx: 140, dy: -120, size: 1, font: 'cond', upper: true, shadow: true,
+    video: '', track: [], trackInfo: '', smooth: 3, hideLost: true,
   } },
   ttitle: { anim: 'in', duration: 1.2, style: {
     look: 'kinetic', text: 'Your title here', sub: 'A short line under the title', kicker: 'Chapter one', body: 'Write a paragraph here. Keep it short — two or three lines read best on video.',
@@ -120,6 +128,13 @@ export const TY_FORMS = {
     ['style.color', 'Text colour', 'color'], ['style.alert', 'Alert colour', 'color'], ['style.size', 'Text size', 'range', [0.5, 2, 0.05]],
   ],
 };
+TY_FORMS.vtrack = [
+  ['style.video', 'Video layer', 'layerref', 'kind:video'],
+  ['style.track', 'Subject', 'vtrack'],
+  ['style.smooth', 'Smoothing', 'range', [0, 8, 1]],
+  ['style.hideLost', 'Hide where the subject was lost', 'switch'],
+  ...TY_FORMS.tcallout.filter((f) => !['style.media'].includes(f[0]) || true),
+];
 export const TY_SET = new Set(Object.keys(TY_KINDS));
 export const tyPhases = (k) => (k === 'measure' ? ['above'] : ['captions']);
 
@@ -150,6 +165,7 @@ const corners = (ctx, x, y, w, h, l, col, lw) => { ctx.strokeStyle = col; ctx.li
 
 export function drawTypography(ctx, L, tm, o) {
   if (L.kind === 'tcallout') return drawCallout(ctx, L, tm, o);
+  if (L.kind === 'vtrack') return drawTracked(ctx, L, tm, o);
   if (L.kind === 'ttitle') return drawTitle(ctx, L, tm, o);
   if (L.kind === 'measure') return drawMeasure(ctx, L, tm, o);
   if (L.kind === 'scanui') return drawScan(ctx, L, tm, o);
@@ -305,10 +321,46 @@ function calloutBox(ctx, L, o, kText) {
     }
   }
 }
-function drawCallout(ctx, L, tm, o) {
-  if (L.geom?.type !== 'Point') return;
+/** Where the tracked subject is at video time t: [x, y, confidence] in 0…1 video coordinates. */
+export function trackAt(track, t, smooth = 0) {
+  if (!Array.isArray(track) || !track.length) return null;
+  let lo = 0, hi = track.length - 1;
+  if (t <= track[0][0]) return track[0].slice(1);
+  if (t >= track[hi][0]) return track[hi].slice(1);
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (track[m][0] <= t) lo = m; else hi = m; }
+  const A = track[lo], B = track[hi], f = (t - A[0]) / (B[0] - A[0] || 1);
+  let x = A[1] + (B[1] - A[1]) * f, y = A[2] + (B[2] - A[2]) * f;
+  if (smooth > 0) {
+    let sx = 0, sy = 0, sw = 0;
+    for (let k = Math.max(0, lo - smooth); k <= Math.min(track.length - 1, hi + smooth); k++) { const w = 1 / (1 + Math.abs(track[k][0] - t) * 8); sx += track[k][1] * w; sy += track[k][2] * w; sw += w; }
+    x = x * 0.4 + (sx / sw) * 0.6; y = y * 0.4 + (sy / sw) * 0.6;
+  }
+  return [x, y, Math.min(A[3] ?? 1, B[3] ?? 1)];
+}
+function drawTracked(ctx, L, tm, o) {
+  const s = L.style;
+  const R = s.video && VIDEO_RECTS.get(s.video);
+  const Lv = (o.scene?.layers || []).find((x) => x.id === s.video);
+  if (!R || !Lv || Lv.hidden || !R.ready || performance.now() - R.at > 1500) {
+    if (tm.edit && o.frame) { ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.font = `600 ${13 * o.unit}px ${UI}`; const t = !Lv ? 'Tracked callout: choose a video layer in its settings' : 'Tracked callout: the video is not on screen yet'; const w = ctx.measureText(t).width + 20 * o.unit; ctx.fillRect(o.frame.x + 20 * o.unit, o.frame.y + o.frame.h - 50 * o.unit, w, 28 * o.unit); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(t, o.frame.x + 30 * o.unit, o.frame.y + o.frame.h - 36 * o.unit); ctx.restore(); }
+    return;
+  }
+  const pt = trackAt(s.track, R.vt, +s.smooth || 0);
+  if (!pt) {
+    if (tm.edit) { ctx.save(); ctx.fillStyle = '#ffd23f'; ctx.font = `600 ${13 * o.unit}px ${UI}`; ctx.fillText('Open “Pick the subject & track” in the callout settings', R.x + 12 * o.unit, R.y + 24 * o.unit); ctx.restore(); }
+    return;
+  }
+  if (s.hideLost !== false && pt[2] < 0.3) return;
+  const cx = R.x + R.W / 2, cy = R.y + R.H / 2;
+  let px = R.x + (R.W - R.dw) / 2 + pt[0] * R.dw, py = R.y + (R.H - R.dh) / 2 + pt[1] * R.dh;
+  px = cx + (px - cx) * R.sc; py = cy + (py - cy) * R.sc;
+  if (px < R.x - 2 || px > R.x + R.W + 2 || py < R.y - 2 || py > R.y + R.H + 2) return;
+  drawCallout(ctx, L, { ...tm, alpha: tm.alpha * Math.min(1, R.alpha ?? 1) }, o, [px, py]);
+}
+function drawCallout(ctx, L, tm, o, at = null) {
+  if (!at && L.geom?.type !== 'Point') return;
   const s = L.style, u = o.unit * (+s.size || 1), fr = o.frame;
-  const p = o.proj(L.geom.coordinates);
+  const p = at || o.proj(L.geom.coordinates);
   if (!isFinite(p[0])) return;
   const raw = tm.edit || L.anim === 'none' ? 1 : prog(L, tm);
   const anim = L.anim || 'draw';
@@ -321,6 +373,14 @@ function drawCallout(ctx, L, tm, o) {
   let bx = p[0] + (+s.dx || 0) * o.unit, by = p[1] + (+s.dy || 0) * o.unit;
   if ((+s.dx || 0) < 0) bx -= B.w;
   if (B.center) { bx -= B.w / 2; by -= B.h / 2; } else if ((+s.dy || 0) < 0) by -= B.h; else by -= 0;
+  // keep the box on screen: flip it to the other side of the point when it would leave the frame
+  if (fr && !B.center && !s.pos_box) {
+    const ddx = (+s.dx || 0) * o.unit, ddy = (+s.dy || 0) * o.unit;
+    if (bx + B.w > fr.x + fr.w - 8 && ddx > 0) bx = p[0] - ddx - B.w;
+    else if (bx < fr.x + 8 && ddx < 0) bx = p[0] - ddx;
+    if (by < fr.y + 8 && ddy < 0) by = p[1] - ddy;
+    else if (by + B.h > fr.y + fr.h - 8 && ddy > 0) by = p[1] - ddy - B.h;
+  }
   ctx.save(); const [ddx, ddy] = placeAt(ctx, L, fr, bx, by, B.w, B.h, { key: 'box' }); ctx.restore();
   bx += ddx; by += ddy;
   // where the leader meets the box

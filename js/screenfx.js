@@ -344,6 +344,8 @@ function hexA(hex, a) {
 }
 
 // ---------------------------------------------------------------- your videos on screen
+/** video layer id → where its picture was drawn last ({ x, y, W, H, dw, dh, sc, vt }) */
+export const VIDEO_RECTS = new Map();
 export function drawVideoLayer(ctx, L, tm, o) {
   const { frame: fr, unit } = o;
   const s = L.style;
@@ -367,7 +369,13 @@ export function drawVideoLayer(ctx, L, tm, o) {
     if (L.anim === 'pop') sc = 0.6 + 0.4 * (1 + 2.7 * (u - 1) ** 3 + 1.7 * (u - 1) ** 2);
   }
   ctx.save();
-  if (!full) placeAt(ctx, L, fr, x, y, W, H);
+  const [pdx, pdy] = full ? [0, 0] : placeAt(ctx, L, fr, x, y, W, H);
+  {
+    // remember where the picture is on screen and which video time is shown (tracked callouts follow it)
+    const vw = v?.ready ? v.el.videoWidth || 16 : 16, vh = v?.ready ? v.el.videoHeight || 9 : 9, vr = vw / vh, br = W / H;
+    let dw = W, dh = H; if (vr > br) dw = H * vr; else dh = W / vr;
+    VIDEO_RECTS.set(L.id, { x: x + pdx, y: y + pdy, W, H, dw, dh, sc, alpha: a, ready: !!v?.ready, vt: v?.ready ? videoTime(L, tm, v.el.duration || 0) : 0, at: performance.now() });
+  }
   ctx.globalAlpha *= a;
   ctx.translate(x + W / 2, y + H / 2); ctx.scale(sc, sc); ctx.translate(-(x + W / 2), -(y + H / 2));
   const rad = full ? 0 : (+s.radius ?? 10) * unit;
