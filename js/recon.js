@@ -127,6 +127,15 @@ function pathAt(cs, seg, f) {
 // smooth the drawn track a little (Chaikin) so turns look flown
 function smooth(cs, n = 2) { let p = cs; for (let k = 0; k < n; k++) { const q = [p[0]]; for (let i = 0; i < p.length - 1; i++) { const a = p[i], b = p[i + 1]; q.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]); } q.push(p.at(-1)); p = q; } return p; }
 
+// ---------------------------------------------------------------- box colours
+const BOXES = {
+  dark: { box: 'rgba(4,10,18,0.55)', solid: 'rgba(8,10,14,0.88)', panel: 'rgba(2,6,10,0.9)', tag: 'rgba(0,0,0,0.72)', ink: '#ffffff', sub: 'rgba(255,255,255,0.7)', grid: 'rgba(255,255,255,0.12)', accent: null, warn: '#ff4d4d' },
+  blue: { box: 'rgba(14,78,214,0.9)', solid: 'rgba(14,78,214,0.94)', panel: 'rgba(9,48,140,0.93)', tag: '#1257d6', ink: '#ffffff', sub: 'rgba(255,255,255,0.82)', grid: 'rgba(255,255,255,0.22)', accent: '#ffffff', warn: '#ffd23f' },
+  white: { box: 'rgba(255,255,255,0.95)', solid: 'rgba(255,255,255,0.96)', panel: 'rgba(255,255,255,0.96)', tag: '#ffffff', ink: '#0b3d91', sub: 'rgba(11,61,145,0.72)', grid: 'rgba(11,61,145,0.16)', accent: '#1663e6', warn: '#d7263d' },
+};
+const TH = (s) => BOXES[s.boxes] || BOXES.dark;
+const ACC = (s) => TH(s).accent || s.color || '#7fe8ff';
+
 // ---------------------------------------------------------------- catalogue
 const POS = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right', ...CUSTOM_POS };
 export const RC_KINDS = {
@@ -143,7 +152,7 @@ export const RC_DEFAULTS = {
   flightrecon: { anim: 'fly', duration: 20, style: {
     callsign: 'N722BD', profile: DEF_PROFILE, events: DEF_EVENTS, tz: 'ET', ampm: true, diveAt: '12:48:15', heightScale: 1.25,
     color: '#7fe8ff', glow: true, future: 'faint', drop: true, groundTrack: true, plane: true, planeSize: 1, streak: false,
-    callouts: true, quote: true, quoteLabel: 'ATC AUDIO', panel: true, panelPos: 'bottom-left', timer: true, badge: true, tag: 'RECONSTRUCTION', title: '', credits: '', impact: true, impactSize: 1, units: 'ft',
+    callouts: true, quote: true, quoteLabel: 'ATC AUDIO', panel: true, panelPos: 'bottom-left', timer: true, badge: true, tag: 'RECONSTRUCTION', title: '', credits: '', impact: true, impactSize: 1, units: 'ft', boxes: 'dark', impactLabel: '', impactSub: '', impactAlways: false,
   } },
   stormcells: { anim: 'grow', duration: 8, style: { cells: 9, top: 12000, seed: 1, coreLabel: 'STORM CORE · about 55 dBZ', legend: true, legendPos: 'bottom-right', note: '', opacity: 0.55, drift: 0.4, heightScale: 1.25 } },
 };
@@ -163,11 +172,14 @@ export const RC_FORMS = {
     ['style.timer', '“+0:51 since the dive began” timer', 'switch'], ['style.badge', 'REAL TIME / SLOW MOTION badge', 'switch'],
     ['style.tag', 'Tag (top left)', 'text'], ['style.title', 'Title (top centre)', 'text'], ['style.credits', 'Sources line (bottom)', 'text'],
     ['style.impact', 'Impact flash at the end', 'switch'], ['style.impactSize', 'Flash size', 'range', [0.3, 3, 0.05], (L) => L.style.impact !== false],
+    ['style.impactLabel', 'Impact label (e.g. Impacted Location — empty = none)', 'text'], ['style.impactSub', 'Second line (empty = the coordinates)', 'text', null, (L) => !!L.style.impactLabel],
+    ['style.impactAlways', 'Show the impact label from the start', 'switch', null, (L) => !!L.style.impactLabel],
+    ['style.boxes', 'Box colours', 'select', { dark: 'Dark boxes, white text', blue: 'Blue boxes, white text', white: 'White boxes, blue text' }],
   ],
   stormcells: [
     ['style.cells', 'Number of cells', 'range', [1, 30, 1]], ['style.top', 'Cloud tops (ft)', 'range', [2000, 50000, 500]], ['style.heightScale', 'Height exaggeration', 'range', [1, 6, 0.05]],
     ['style.opacity', 'Opacity', 'range', [0.1, 1, 0.01]], ['style.drift', 'Slow drift / boil', 'range', [0, 2, 0.05]], ['style.seed', 'Variation', 'range', [1, 50, 1]],
-    ['style.coreLabel', 'Core label (empty = none)', 'text'], ['style.legend', 'Legend (light · heavy · downpour · core)', 'switch'], ['style.legendPos', 'Legend position', 'select', POS, (L) => L.style.legend],
+    ['style.coreLabel', 'Core label (empty = none)', 'text'], ['style.boxes', 'Box colours', 'select', { dark: 'Dark boxes, white text', blue: 'Blue boxes, white text', white: 'White boxes, blue text' }], ['style.legend', 'Legend (light · heavy · downpour · core)', 'switch'], ['style.legendPos', 'Legend position', 'select', POS, (L) => L.style.legend],
     ['style.note', 'Note under the legend', 'text', null, (L) => L.style.legend],
   ],
 };
@@ -315,11 +327,12 @@ function drawFlight(ctx, L, tm, o, phase) {
       ctx.font = `700 ${15 * unit}px ${UI}`;
       const w2 = ctx.measureText(e.text).width;
       const w = Math.max(w1, w2) + 22 * unit;
-      ctx.fillStyle = 'rgba(4,10,18,0.55)'; ctx.fillRect(x, y - 4 * unit, w, 42 * unit);
-      ctx.fillStyle = s.color || '#7fe8ff'; ctx.fillRect(x, y - 4 * unit, 3 * unit, 42 * unit);
+      const th = TH(s);
+      ctx.fillStyle = th.box; ctx.fillRect(x, y - 4 * unit, w, 42 * unit);
+      ctx.fillStyle = ACC(s); ctx.fillRect(x, y - 4 * unit, 3 * unit, 42 * unit);
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.font = `600 ${11 * unit}px ${MONO}`; ctx.fillStyle = s.color || '#7fe8ff'; ctx.fillText(tline, x + 12 * unit, y);
-      ctx.font = `700 ${15 * unit}px ${UI}`; ctx.fillStyle = '#fff'; ctx.fillText(e.text, x + 12 * unit, y + 15 * unit);
+      ctx.font = `600 ${11 * unit}px ${MONO}`; ctx.fillStyle = th.accent ? th.sub : s.color || '#7fe8ff'; ctx.fillText(tline, x + 12 * unit, y);
+      ctx.font = `700 ${15 * unit}px ${UI}`; ctx.fillStyle = th.ink; ctx.fillText(e.text, x + 12 * unit, y + 15 * unit);
       ctx.restore();
     }
   }
@@ -329,8 +342,8 @@ function drawFlight(ctx, L, tm, o, phase) {
   if (s.tag) {
     ctx.font = `700 ${14 * unit}px ${UI}`;
     const w = ctx.measureText(s.tag).width + 22 * unit;
-    ctx.fillStyle = 'rgba(0,0,0,0.72)'; ctx.fillRect(left + 34 * unit, top + 30 * unit, w, 28 * unit);
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(s.tag, left + 45 * unit, top + 44.5 * unit);
+    ctx.fillStyle = TH(s).tag; ctx.fillRect(left + 34 * unit, top + 30 * unit, w, 28 * unit);
+    ctx.fillStyle = TH(s).ink; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(s.tag, left + 45 * unit, top + 44.5 * unit);
   }
   if (s.title) {
     ctx.font = `700 ${16 * unit}px ${UI}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -343,7 +356,7 @@ function drawFlight(ctx, L, tm, o, phase) {
       const k = tm.edit ? 1 : clamp((now - ev.t) / 0.4, 0, 1) * clamp((7 - (now - ev.t)) / 0.6, 0, 1);
       ctx.save(); ctx.globalAlpha *= k;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `700 ${11.5 * unit}px ${UI}`; ctx.fillStyle = s.color || '#7fe8ff';
+      ctx.font = `700 ${11.5 * unit}px ${UI}`; ctx.fillStyle = s.boxes === 'white' ? '#9cc3ff' : s.color || '#7fe8ff';
       ctx.fillText(`${ev.who ? `${ev.who.toUpperCase()}  ·  ` : ''}${String(s.quoteLabel || '').toUpperCase()}`.split('').join(String.fromCharCode(8202)), left + W / 2, top + 78 * unit);
       ctx.font = `700 ${30 * unit}px ${UI}`; ctx.fillStyle = '#fff';
       ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * unit;
@@ -369,6 +382,16 @@ function drawFlight(ctx, L, tm, o, phase) {
     ctx.fillText(txt, left + W - 34 * unit, top + 108 * unit);
     ctx.font = `600 ${12.5 * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillText(`SINCE THE DIVE BEGAN · ${fmtClock(dive, false)} ${s.tz || ''}`.trim(), left + W - 34 * unit, top + 128 * unit);
+  }
+  // impact label
+  if (s.impactLabel && (ended || s.impactAlways || tm.edit)) {
+    const ip = projA(cs.at(-1), 0);
+    if (isFinite(ip[0])) {
+      const end = cs.at(-1);
+      const sub = s.impactSub || `${Math.abs(end[1]).toFixed(6)}° ${end[1] >= 0 ? 'N' : 'S'}, ${Math.abs(end[0]).toFixed(6)}° ${end[0] >= 0 ? 'E' : 'W'}`;
+      const k = tm.edit || s.impactAlways ? 1 : clamp((tm.tau - videoAtClock(rows, rows.t1, D) - 0.6) / 0.8, 0, 1);
+      if (k > 0) impactPin(ctx, L, ip, s.impactLabel, sub, k, unit, fr, o);
+    }
   }
   // telemetry panel
   if (s.panel !== false) telemetry(ctx, L, o, rows, now, unit, fr);
@@ -413,49 +436,79 @@ function impactFlash(ctx, x, y, ft, u, fr, a) {
   ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(x, y, 70 * u, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
+/** A pinned "Impacted Location" label: pulsing rings at the point, a leader line and a box. */
+function impactPin(ctx, L, p, title, sub, k, unit, fr, o) {
+  const s = L.style, th = s.boxes === 'dark' || !s.boxes ? BOXES.blue : TH(s);
+  ctx.save();
+  ctx.globalAlpha *= clamp(k * 1.4, 0, 1);
+  const ph = ((o.time || 0) % 1.6) / 1.6;
+  for (const q of [ph, (ph + 0.5) % 1]) { ctx.beginPath(); ctx.arc(p[0], p[1], (8 + 34 * q) * unit, 0, Math.PI * 2); ctx.strokeStyle = `rgba(255,255,255,${0.8 * (1 - q)})`; ctx.lineWidth = 2 * unit; ctx.stroke(); }
+  ctx.beginPath(); ctx.arc(p[0], p[1], 7 * unit, 0, Math.PI * 2); ctx.fillStyle = '#1663e6'; ctx.fill(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5 * unit; ctx.stroke();
+  ctx.font = `800 ${17 * unit}px ${UI}`; const tw = ctx.measureText(title).width;
+  ctx.font = `600 ${11.5 * unit}px ${MONO}`; const sw = ctx.measureText(sub).width;
+  const W = Math.max(tw, sw) + 34 * unit, H = 52 * unit;
+  let bx = p[0] + 70 * unit, by = p[1] - 120 * unit;
+  if (fr && bx + W > fr.x + fr.w - 20 * unit) bx = p[0] - 70 * unit - W;
+  if (fr && by < fr.y + 150 * unit) by = p[1] + 60 * unit;
+  ctx.save(); const [dx, dy] = placeAt(ctx, L, fr, bx, by, W, H, { key: 'impact' }); ctx.restore();
+  bx += dx; by += dy;
+  const ax = bx + (p[0] < bx ? 0 : W), ay = by + H / 2;
+  const lk = clamp(k * 2, 0, 1);
+  ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0] + (ax - p[0]) * lk, p[1] + (ay - p[1]) * lk); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.6 * unit; ctx.stroke();
+  if (k > 0.4) {
+    ctx.globalAlpha *= clamp((k - 0.4) / 0.4, 0, 1);
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 10 * unit;
+    ctx.fillStyle = th.solid; ctx.fillRect(bx, by, W, H); ctx.shadowBlur = 0;
+    ctx.fillStyle = th.accent || '#ffffff'; ctx.fillRect(bx, by, 5 * unit, H);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = `800 ${17 * unit}px ${UI}`; ctx.fillStyle = th.ink; ctx.fillText(title, bx + 17 * unit, by + 19 * unit);
+    ctx.font = `600 ${11.5 * unit}px ${MONO}`; ctx.fillStyle = th.sub; ctx.fillText(sub, bx + 17 * unit, by + 38 * unit);
+  }
+  ctx.restore();
+}
 function telemetry(ctx, L, o, rows, now, unit, fr) {
-  const s = L.style;
+  const s = L.style, th = TH(s);
   const W = 340 * unit, H = 205 * unit, m = 26 * unit;
   const pos = s.panelPos || 'bottom-left';
   const x = pos.includes('right') ? fr.x + fr.w - m - W : fr.x + m, y = pos.includes('top') ? fr.y + m + 70 * unit : fr.y + fr.h - m - H - 40 * unit;
   ctx.save();
   placeAt(ctx, L, fr, x, y, W, H, { key: 'panel' });
-  ctx.fillStyle = 'rgba(2,6,10,0.9)'; ctx.fillRect(x, y, W, H);
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1 * unit; ctx.strokeRect(x, y, W, H);
+  ctx.fillStyle = th.panel; ctx.fillRect(x, y, W, H);
+  ctx.strokeStyle = th.grid; ctx.lineWidth = 1 * unit; ctx.strokeRect(x, y, W, H);
   const t = Math.min(now, rows.t1);
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#fff';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = th.ink;
   ctx.font = `700 ${31 * unit}px ${MONO}`;
   ctx.fillText(`${fmtClock(t, s.ampm !== false)} ${s.tz || ''}`.trim(), x + 14 * unit, y + 42 * unit, W - 28 * unit);
   const alt = Math.max(0, interp(rows, t, 'alt'));
   const d = 1.5;
   const rate = ((interp(rows, t - d, 'alt') - interp(rows, t + d, 'alt')) / (2 * d)) * 60; // ft per minute, + = descending
   const mtr = s.units === 'm';
-  ctx.font = `600 ${9.5 * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = `600 ${9.5 * unit}px ${UI}`; ctx.fillStyle = th.sub;
   ctx.fillText(`ALTITUDE${s.dataLabel ? ` (${s.dataLabel})` : ''}`, x + 14 * unit, y + 64 * unit);
   ctx.fillText(`${rate >= 0 ? 'DESCENT' : 'CLIMB'} RATE${s.dataLabel ? ` (${s.dataLabel})` : ''}`, x + 170 * unit, y + 64 * unit);
-  ctx.font = `700 ${21 * unit}px ${MONO}`; ctx.fillStyle = '#fff';
+  ctx.font = `700 ${21 * unit}px ${MONO}`; ctx.fillStyle = th.ink;
   ctx.fillText(mtr ? `${Math.round(alt * FT).toLocaleString('en')} m` : `${Math.round(alt).toLocaleString('en')} ft`, x + 14 * unit, y + 90 * unit);
   const rv = Math.abs(rate);
-  ctx.fillStyle = rate > 6000 ? '#ff4d4d' : '#fff';
+  ctx.fillStyle = rate > 6000 ? th.warn : th.ink;
   const rtxt = mtr ? Math.round(rv * FT).toLocaleString('en') : Math.round(rv).toLocaleString('en');
   ctx.fillText(rtxt, x + 170 * unit, y + 90 * unit);
   const rw = ctx.measureText(rtxt).width;
-  ctx.font = `500 ${10 * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillText(mtr ? 'm/min' : 'ft/min', x + 174 * unit + rw, y + 90 * unit);
+  ctx.font = `500 ${10 * unit}px ${UI}`; ctx.fillStyle = th.sub; ctx.fillText(mtr ? 'm/min' : 'ft/min', x + 174 * unit + rw, y + 90 * unit);
   // chart
   const cx = x + 44 * unit, cy = y + 104 * unit, cw = W - 60 * unit, ch = 72 * unit;
   const maxAlt = Math.max(...rows.map((r) => r.alt), 1000);
   const top = Math.ceil(maxAlt / 10000) * 10000;
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1 * unit;
-  ctx.font = `500 ${8.5 * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = th.grid; ctx.lineWidth = 1 * unit;
+  ctx.font = `500 ${8.5 * unit}px ${UI}`; ctx.fillStyle = th.sub; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   for (const v of [0, top / 2, top]) { const yy = cy + ch - (v / top) * ch; ctx.beginPath(); ctx.moveTo(cx, yy); ctx.lineTo(cx + cw, yy); ctx.stroke(); ctx.fillText(v ? `${Math.round(v / 1000)}k ft` : '0', cx - 5 * unit, yy); }
   const X = (tt) => cx + ((tt - rows.t0) / Math.max(1, rows.t1 - rows.t0)) * cw, Y = (v) => cy + ch - (clamp(v, 0, top) / top) * ch;
   ctx.beginPath(); for (let i = 0; i <= 80; i++) { const tt = rows.t0 + ((rows.t1 - rows.t0) * i) / 80; i ? ctx.lineTo(X(tt), Y(interp(rows, tt, 'alt'))) : ctx.moveTo(X(tt), Y(interp(rows, tt, 'alt'))); }
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1 * unit; ctx.stroke();
+  ctx.strokeStyle = th.grid; ctx.lineWidth = 1 * unit; ctx.stroke();
   ctx.beginPath(); for (let i = 0; i <= 80; i++) { const tt = rows.t0 + ((t - rows.t0) * i) / 80; i ? ctx.lineTo(X(tt), Y(interp(rows, tt, 'alt'))) : ctx.moveTo(X(tt), Y(interp(rows, tt, 'alt'))); }
-  ctx.strokeStyle = s.color || '#7fe8ff'; ctx.lineWidth = 2 * unit; ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.moveTo(X(t), cy); ctx.lineTo(X(t), cy + ch); ctx.stroke();
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X(t), Y(alt), 3.5 * unit, 0, Math.PI * 2); ctx.fill();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = `500 ${8.5 * unit}px ${UI}`;
+  ctx.strokeStyle = s.boxes === 'white' ? '#1663e6' : s.boxes === 'blue' ? '#9fd0ff' : s.color || '#7fe8ff'; ctx.lineWidth = 2 * unit; ctx.stroke();
+  ctx.strokeStyle = th.sub; ctx.beginPath(); ctx.moveTo(X(t), cy); ctx.lineTo(X(t), cy + ch); ctx.stroke();
+  ctx.fillStyle = th.ink; ctx.beginPath(); ctx.arc(X(t), Y(alt), 3.5 * unit, 0, Math.PI * 2); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = th.sub; ctx.font = `500 ${8.5 * unit}px ${UI}`;
   ctx.fillText(fmtClock(rows.t0, false).slice(0, 5), X(rows.t0) + 14 * unit, cy + ch + 4 * unit);
   ctx.fillText(fmtClock(rows.t1, false).slice(0, 5), X(rows.t1) - 14 * unit, cy + ch + 4 * unit);
   ctx.restore();
@@ -541,9 +594,9 @@ function drawStorm(ctx, L, tm, o, phase) {
       ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(bx, by + 14 * unit); ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.2 * unit; ctx.stroke();
       ctx.font = `700 ${15 * unit}px ${UI}`;
       const w = ctx.measureText(s.coreLabel).width + 24 * unit;
-      ctx.fillStyle = 'rgba(8,10,14,0.88)'; ctx.fillRect(bx, by, w, 30 * unit);
+      ctx.fillStyle = TH(s).solid; ctx.fillRect(bx, by, w, 30 * unit);
       ctx.fillStyle = '#ff2a2a'; ctx.fillRect(bx, by, 4 * unit, 30 * unit);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(s.coreLabel, bx + 14 * unit, by + 15.5 * unit);
+      ctx.fillStyle = TH(s).ink; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(s.coreLabel, bx + 14 * unit, by + 15.5 * unit);
     }
   }
   if (s.legend && fr) {
@@ -551,12 +604,12 @@ function drawStorm(ctx, L, tm, o, phase) {
     const pos = s.legendPos || 'bottom-right';
     const x = pos.includes('right') ? fr.x + fr.w - m - W : fr.x + m, y = pos.includes('top') ? fr.y + m + 140 * unit : fr.y + fr.h - m - H - 40 * unit;
     placeAt(ctx, L, fr, x, y, W, H, { key: 'legend' });
-    ctx.fillStyle = 'rgba(4,8,12,0.82)'; ctx.fillRect(x, y, W, H);
+    ctx.fillStyle = TH(s).panel; ctx.fillRect(x, y, W, H);
     const bw = (W - 40 * unit) / 4;
     LEVELS.forEach(([name, colr], i) => {
       const xx = x + 14 * unit + i * (bw + 4 * unit);
       ctx.fillStyle = colr; ctx.fillRect(xx, y + 12 * unit, bw, 8 * unit);
-      ctx.fillStyle = '#fff'; ctx.font = `500 ${12 * unit}px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(name, xx, y + 38 * unit);
+      ctx.fillStyle = TH(s).ink; ctx.font = `500 ${12 * unit}px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(name, xx, y + 38 * unit);
     });
     if (s.note) { ctx.font = `500 ${11 * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.textAlign = 'right'; ctx.fillText(s.note, x + W, y + H + 14 * unit); }
   }

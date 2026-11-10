@@ -422,7 +422,7 @@ export function drawSeriesLabel(ctx, L, tm, frame, unit) {
   ctx.globalAlpha *= alpha;
   placeAt(ctx, L, frame, x, y, W, H);
   if (s.labelBox !== false) {
-    ctx.fillStyle = 'rgba(8,10,14,0.66)';
+    ctx.fillStyle = s.boxColor ? s.boxColor : 'rgba(8,10,14,0.66)';
     ctx.fillRect(x, y, W, H);
     ctx.fillStyle = acc; ctx.fillRect(x, y, 5 * unit, H);
   }

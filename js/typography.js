@@ -25,13 +25,13 @@ export const TY_CALLOUT_LOOKS = {
   clean: 'Clean — text over a line', box: 'Outlined box', solid: 'Solid white box', pill: 'Rounded pill + subtitle', badge: 'Numbered badge',
   speed: 'Value card (e.g. 110 km/h)', label: 'Big label + ring point', tagged: 'Tagged (yellow tag + white box)', neon: 'Neon cyan',
   counter: 'Counting number', ring: 'Percentage ring', photo: 'Photo + title', bracket: 'Corner bracket', paragraph: 'Title + paragraph',
-  modern: 'Modern frame (hatched)', hud: 'HUD corners',
+  modern: 'Modern frame (hatched)', hud: 'HUD corners', filled: 'Filled box (box + text colour)',
 };
 export const TY_TITLE_LOOKS = {
   kinetic: 'Kinetic — words rise in', stacked: 'Stacked with colour bar', outline: 'Outline that fills', boxreveal: 'Box wipe reveal',
   underline: 'Underlined', split: 'Kicker + big word', typewriter: 'Typewriter', cinematic: 'Cinematic (wide spacing)',
   lowerthird: 'Lower third (name + role)', quote: 'Quote', counter: 'Big counting number', paragraph: 'Heading + paragraph',
-  number: 'Big number + title (chapter)', marker: 'Highlighter marker', frame: 'Framed with corner ticks',
+  number: 'Big number + title (chapter)', marker: 'Highlighter marker', frame: 'Framed with corner ticks', facts: 'Fact card (label | value rows)',
 };
 export const TY_KINDS = {
   tcallout: { name: 'Callout', icon: '⌐', geom: 'point', desc: 'A label pinned to a place with a leader line — 16 styles: clean, boxed, pill, badge, value card, ring, photo, neon, HUD…' },
@@ -91,14 +91,15 @@ export const TY_FORMS = {
   ],
   ttitle: [
     ['style.look', 'Style', 'select', TY_TITLE_LOOKS],
-    ['style.kicker', 'Small line above', 'text', null, lk('split', 'number', 'stacked', 'paragraph', 'frame')],
+    ['style.kicker', 'Small line above', 'text', null, lk('split', 'number', 'stacked', 'paragraph', 'frame', 'facts')],
     ['style.text', 'Title (Enter = new line)', 'textarea', null, nlk('counter')],
     ['style.sub', 'Subtitle', 'text', null, nlk('paragraph')],
     ['style.body', 'Paragraph', 'textarea', null, lk('paragraph')],
+    ['style.body', 'Rows — “Label | value”, one per line', 'textarea', null, lk('facts')],
     ['style.value', 'Number', 'text', null, lk('counter', 'number')], ['style.prefix', 'Before the number', 'text', null, lk('counter')], ['style.suffix', 'After the number', 'text', null, lk('counter')], ['style.decimals', 'Decimals', 'number', null, lk('counter')],
     ['style.font', 'Font', 'select', FONT_NAMES], ['style.upper', 'CAPITALS', 'switch'], ['style.tracking', 'Letter spacing', 'range', [-0.05, 0.6, 0.01]],
     ['style.align', 'Alignment', 'select', { left: 'Left', center: 'Centre', right: 'Right' }],
-    ['style.color', 'Text colour', 'color'], ['style.accent', 'Accent', 'color'], ['style.bg', 'Box colour', 'color', null, lk('boxreveal', 'lowerthird', 'stacked', 'counter', 'paragraph', 'marker')],
+    ['style.color', 'Text colour', 'color'], ['style.accent', 'Accent', 'color'], ['style.bg', 'Box colour', 'color', null, lk('boxreveal', 'lowerthird', 'stacked', 'counter', 'paragraph', 'marker', 'facts')],
     ['style.shadow', 'Soft shadow', 'switch'],
     ['style.position', 'Position', 'select', POS9], ['style.size', 'Size', 'range', [0.3, 4, 0.05]],
   ],
@@ -199,6 +200,15 @@ function calloutBox(ctx, L, o, kText) {
         const col = solid ? '#111418' : look === 'neon' ? (acc === '#ffd23f' ? '#5ff4f4' : acc) : ink;
         const cx = x + w / 2;
         reveal(() => { ctx.beginPath(); ctx.rect(x, y, w * kText, h); ctx.clip(); tx(T, tf, cx, y + (S ? 19 : h / 2) * (S ? u : 1), col, 'center'); if (S) tx(S, sf, cx, y + 37 * u, solid ? '#41464f' : hexA(col.startsWith('#') ? col : '#ffffff', 0.8), 'center'); });
+      } };
+    }
+    case 'filled': {
+      ctx.font = font({ ...s, font: 'mono' }, 600, 10.5 * u); const msw = S ? ctx.measureText(S).width : 0;
+      const w = Math.max(tw, msw) + pad * 2.6 + 5 * u, h = (S ? 52 : 38) * u;
+      return { w, h, paint(x, y) {
+        ctx.fillStyle = box; ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = acc; ctx.fillRect(x, y, 5 * u, h);
+        reveal(() => { ctx.shadowColor = 'transparent'; ctx.beginPath(); ctx.rect(x, y, w * kText, h); ctx.clip(); tx(T, tf, x + pad + 5 * u, y + (S ? 19 : h / 2 / u) * u, ink); if (S) tx(S, font({ ...s, font: 'mono' }, 600, 10.5 * u), x + pad + 5 * u, y + 38 * u, hexA(ink, 0.85)); });
       } };
     }
     case 'pill': {
@@ -389,7 +399,7 @@ function drawCallout(ctx, L, tm, o, at = null) {
   let ax = left ? bx : bx + B.w, ay = B.center ? by + B.h / 2 : attachY;
   if (B.center) { const ang = Math.atan2(p[1] - (by + B.h / 2), p[0] - (bx + B.w / 2)); ax = bx + B.w / 2 + Math.cos(ang) * B.w / 2; ay = by + B.h / 2 + Math.sin(ang) * B.h / 2; }
   else if (!B.anchorBottom && (p[1] > by + B.h || p[1] < by) && Math.abs(p[0] - (bx + B.w / 2)) < B.w / 2) { ax = bx + B.w / 2; ay = p[1] > by ? by + B.h : by; }
-  const col = s.look === 'neon' || s.look === 'counter' || s.look === 'ring' ? (s.accent === '#ffd23f' ? '#5ff4f4' : s.accent) : s.box || '#ffffff';
+  const col = s.look === 'neon' || s.look === 'counter' || s.look === 'ring' ? (s.accent === '#ffd23f' ? '#5ff4f4' : s.accent) : s.look === 'filled' ? '#ffffff' : s.box || '#ffffff';
   if (s.leader !== 'none') {
     ctx.strokeStyle = col; ctx.lineWidth = 1.4 * u; ctx.lineCap = 'round';
     const pts = s.leader === 'elbow' && !B.center ? [[p[0], p[1]], [ax + (left ? -1 : 1) * Math.min(40 * u, Math.abs(p[0] - ax) * 0.5) * 0, ay], [ax, ay]] : [[p[0], p[1]], [ax, ay]];
@@ -449,11 +459,19 @@ function drawTitle(ctx, L, tm, o) {
   if (look === 'split' || look === 'number' || look === 'stacked' || look === 'frame') Hh += 26 * u;
   let body = [];
   if (look === 'paragraph') { ctx.font = font(s, 400, 17 * u); body = wrap(ctx, s.body, Math.max(360 * u, tw)); Hh = lh + 18 * u + body.length * 25 * u + (s.kicker ? 26 * u : 0); W = Math.max(tw, 360 * u); }
+  let rows = [];
+  if (look === 'facts') {
+    rows = String(s.body || '').split('\n').map((r) => r.split('|').map((v) => v.trim())).filter((r) => r[0]);
+    ctx.font = font(s, 600, 13 * u); const vw = 330 * u;
+    rows = rows.map((r) => { const ls = wrap(ctx, r[1] || '', vw); return { k: r[0], v: ls }; });
+    ctx.font = font(s, 800, 30 * u); const tw2 = ctx.measureText(lines[0] || '').width;
+    W = Math.max(tw2, 130 * u + vw); Hh = (s.kicker ? 22 * u : 0) + 44 * u + rows.reduce((a, r) => a + r.v.length * 19 * u + 9 * u, 0);
+  }
   if (look === 'counter') { ctx.font = font(s, 800, 96 * u); W = Math.max(ctx.measureText(`${s.prefix || ''}${numFmt(s.value, s.decimals)}${s.suffix || ''}`).width, sw); Hh = 104 * u + (s.sub ? 30 * u : 0); }
   if (look === 'number') { ctx.font = font(s, 800, 120 * u); const nw = ctx.measureText(String(s.value || '01')).width; ctx.font = tf; W = nw + 24 * u + Math.max(tw, sw); Hh = 130 * u; }
   if (look === 'lowerthird') { W = Math.max(tw, sw) + 60 * u; Hh = 92 * u; }
   if (look === 'quote') { ctx.font = tf; const qs = wrap(ctx, `${s.text || ''}`, 760 * u); lines.splice(0, lines.length, ...qs); tw = Math.max(...qs.map((t) => ctx.measureText(t).width)); W = Math.max(tw, sw) + 40 * u; Hh = qs.length * lh + 50 * u; }
-  const padB = ['boxreveal', 'stacked', 'paragraph', 'marker', 'frame', 'counter'].includes(look) ? 22 * u : 0;
+  const padB = ['boxreveal', 'stacked', 'paragraph', 'marker', 'frame', 'counter', 'facts'].includes(look) ? 22 * u : 0;
   W += padB * 2; Hh += padB * 2;
   const m = 60 * o.unit;
   let [x, y] = anchor(fr, s.position, W, Hh, m);
@@ -568,6 +586,25 @@ function drawTitle(ctx, L, tm, o) {
       ctx.font = tf; ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.globalAlpha *= seg(k, 0.25, 0.5); ctx.fillText(lines[0] || '', x + padB, yy); ctx.globalAlpha /= seg(k, 0.25, 0.5) || 1; yy += lh + 14 * u;
       ctx.font = font(s, 400, 17 * u); ctx.fillStyle = hexA(col, 0.88);
       body.forEach((t, i) => { ctx.save(); ctx.globalAlpha *= seg(k, 0.4 + i * 0.06, 0.6 + i * 0.06); ctx.fillText(t, x + padB, yy + i * 25 * u); ctx.restore(); });
+      break;
+    }
+    case 'facts': {
+      ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 16 * u;
+      const kb = ease3(seg(k, 0, 0.35));
+      ctx.fillStyle = hexA(bg, 0.95); ctx.fillRect(x, y, W, Hh * kb);
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = acc; ctx.fillRect(x, y, 5 * u, Hh * kb);
+      let yy = y + padB;
+      ctx.textAlign = 'left';
+      if (s.kicker) { ctx.font = font(s, 700, 11.5 * u); ctx.fillStyle = acc; ctx.globalAlpha *= seg(k, 0.25, 0.45); spaced(ctx, String(s.kicker).toUpperCase(), x + padB, yy, 0.16); ctx.globalAlpha /= seg(k, 0.25, 0.45) || 1; yy += 22 * u; }
+      ctx.font = font(s, 800, 30 * u); ctx.fillStyle = col; ctx.save(); ctx.globalAlpha *= seg(k, 0.3, 0.5); ctx.fillText(lines[0] || '', x + padB, yy); ctx.restore(); yy += 44 * u;
+      rows.forEach((r, i) => {
+        ctx.save(); ctx.globalAlpha *= seg(k, 0.4 + i * 0.07, 0.6 + i * 0.07);
+        ctx.font = font(s, 700, 10.5 * u); ctx.fillStyle = hexA(col, 0.72); ctx.fillText(String(r.k).toUpperCase(), x + padB, yy + 2 * u);
+        ctx.font = font(s, 600, 13 * u); ctx.fillStyle = col; r.v.forEach((ln, j) => ctx.fillText(ln, x + padB + 130 * u, yy + j * 19 * u));
+        ctx.restore();
+        yy += r.v.length * 19 * u + 9 * u;
+      });
       break;
     }
     case 'number': {
