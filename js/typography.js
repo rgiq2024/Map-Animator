@@ -25,7 +25,7 @@ export const TY_CALLOUT_LOOKS = {
   clean: 'Clean — text over a line', box: 'Outlined box', solid: 'Solid white box', pill: 'Rounded pill + subtitle', badge: 'Numbered badge',
   speed: 'Value card (e.g. 110 km/h)', label: 'Big label + ring point', tagged: 'Tagged (yellow tag + white box)', neon: 'Neon cyan',
   counter: 'Counting number', ring: 'Percentage ring', photo: 'Photo + title', bracket: 'Corner bracket', paragraph: 'Title + paragraph',
-  modern: 'Modern frame (hatched)', hud: 'HUD corners', filled: 'Filled box (box + text colour)',
+  modern: 'Modern frame (hatched)', hud: 'HUD corners', filled: 'Filled box (box + text colour)', glass: 'Modern glass card (tag chip + corner ticks)',
 };
 export const TY_TITLE_LOOKS = {
   kinetic: 'Kinetic — words rise in', stacked: 'Stacked with colour bar', outline: 'Outline that fills', boxreveal: 'Box wipe reveal',
@@ -78,7 +78,7 @@ export const TY_FORMS = {
   tcallout: [
     ['style.look', 'Style', 'select', TY_CALLOUT_LOOKS],
     ['style.title', 'Title', 'text', null, nlk('counter', 'ring')], ['style.sub', 'Second line', 'text', null, nlk('paragraph', 'label')],
-    ['style.text', 'Paragraph', 'textarea', null, lk('paragraph')], ['style.tag', 'Tag', 'text', null, lk('tagged', 'speed', 'counter')],
+    ['style.text', 'Paragraph', 'textarea', null, lk('paragraph')], ['style.tag', 'Tag', 'text', null, lk('tagged', 'speed', 'counter', 'glass')],
     ['style.value', 'Number / value', 'text', null, lk('speed', 'counter', 'ring', 'badge')], ['style.unit', 'Unit', 'text', null, lk('speed')],
     ['style.prefix', 'Before the number', 'text', null, lk('counter')], ['style.suffix', 'After the number', 'text', null, lk('counter')], ['style.decimals', 'Decimals', 'number', null, lk('counter')],
     ['style.media', 'Photo', 'image', null, lk('photo')],
@@ -200,6 +200,28 @@ function calloutBox(ctx, L, o, kText) {
         const col = solid ? '#111418' : look === 'neon' ? (acc === '#ffd23f' ? '#5ff4f4' : acc) : ink;
         const cx = x + w / 2;
         reveal(() => { ctx.beginPath(); ctx.rect(x, y, w * kText, h); ctx.clip(); tx(T, tf, cx, y + (S ? 19 : h / 2) * (S ? u : 1), col, 'center'); if (S) tx(S, sf, cx, y + 37 * u, solid ? '#41464f' : hexA(col.startsWith('#') ? col : '#ffffff', 0.8), 'center'); });
+      } };
+    }
+    case 'glass': {
+      const tagT = String(s.tag || '').toUpperCase(), cf = font({ ...s, font: 'mono' }, 700, 10 * u);
+      ctx.font = cf; const cw = tagT ? ctx.measureText(tagT).width + 14 * u : 0;
+      const tf2 = font(s, 700, 17 * u); ctx.font = tf2; const tw2 = ctx.measureText(T).width;
+      const sf2 = font(s, 500, 11.5 * u); ctx.font = sf2; const sw2 = S ? ctx.measureText(S).width : 0;
+      const w = Math.max(tw2, sw2, cw) + 26 * u, h = (tagT ? 26 : 10) * u + 24 * u + (S ? 18 : 0) * u + 8 * u;
+      return { w, h, paint(x, y) {
+        const light = /^#f/i.test(box);
+        ctx.save();
+        ctx.fillStyle = light ? 'rgba(255,255,255,0.95)' : hexA(box, 0.84); ctx.fillRect(x, y, w * (0.35 + 0.65 * kText), h);
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = hexA(light ? '#1663e6' : '#ffffff', 0.3); ctx.lineWidth = 1 * u; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+        const tc = light ? '#1663e6' : acc; const L2 = 9 * u;
+        ctx.strokeStyle = tc; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(x, y + L2); ctx.lineTo(x, y); ctx.lineTo(x + L2, y); ctx.moveTo(x + w - L2, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - L2); ctx.stroke();
+        let yy = y + 10 * u;
+        if (tagT) { ctx.fillStyle = tc; ctx.fillRect(x + 11 * u, yy, cw * Math.min(1, kText * 2), 16 * u); tx(tagT, cf, x + 18 * u, yy + 8.5 * u, light ? '#ffffff' : '#0b3d91', 'left', clamp(kText * 2 - 0.5, 0, 1)); yy += 26 * u; }
+        const n = Math.ceil(T.length * kText);
+        tx(T.slice(0, n), tf2, x + 12 * u, yy + 10 * u, light ? '#0b3d91' : ink);
+        if (S) tx(S, sf2, x + 12 * u, yy + 30 * u, light ? 'rgba(11,61,145,0.75)' : hexA(ink, 0.82), 'left', clamp(kText * 1.5 - 0.5, 0, 1));
+        ctx.restore();
       } };
     }
     case 'filled': {
@@ -399,7 +421,7 @@ function drawCallout(ctx, L, tm, o, at = null) {
   let ax = left ? bx : bx + B.w, ay = B.center ? by + B.h / 2 : attachY;
   if (B.center) { const ang = Math.atan2(p[1] - (by + B.h / 2), p[0] - (bx + B.w / 2)); ax = bx + B.w / 2 + Math.cos(ang) * B.w / 2; ay = by + B.h / 2 + Math.sin(ang) * B.h / 2; }
   else if (!B.anchorBottom && (p[1] > by + B.h || p[1] < by) && Math.abs(p[0] - (bx + B.w / 2)) < B.w / 2) { ax = bx + B.w / 2; ay = p[1] > by ? by + B.h : by; }
-  const col = s.look === 'neon' || s.look === 'counter' || s.look === 'ring' ? (s.accent === '#ffd23f' ? '#5ff4f4' : s.accent) : s.look === 'filled' ? '#ffffff' : s.box || '#ffffff';
+  const col = s.look === 'neon' || s.look === 'counter' || s.look === 'ring' ? (s.accent === '#ffd23f' ? '#5ff4f4' : s.accent) : s.look === 'filled' || s.look === 'glass' ? '#ffffff' : s.box || '#ffffff';
   if (s.leader !== 'none') {
     ctx.strokeStyle = col; ctx.lineWidth = 1.4 * u; ctx.lineCap = 'round';
     const pts = s.leader === 'elbow' && !B.center ? [[p[0], p[1]], [ax + (left ? -1 : 1) * Math.min(40 * u, Math.abs(p[0] - ax) * 0.5) * 0, ay], [ax, ay]] : [[p[0], p[1]], [ax, ay]];

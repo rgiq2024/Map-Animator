@@ -1,7 +1,7 @@
 // Names of the built-in 3D models (kept separate so menus don't need to load three.js).
 export const BUILTIN_MODELS = {
   // aircraft
-  jet: 'Fighter jet', bomber: 'Stealth bomber', cargoplane: 'Cargo plane (4 propellers)', airliner: 'Airliner', helicopter: 'Helicopter', drone: 'Drone (UAV)',
+  bizjet: 'Business jet (Learjet style)', jet: 'Fighter jet', bomber: 'Stealth bomber', cargoplane: 'Cargo plane (4 propellers)', airliner: 'Airliner', helicopter: 'Helicopter', drone: 'Drone (UAV)',
   nasa_globalhawk: 'Global Hawk drone · realistic (NASA)',
   // land
   hst: 'High-speed train · articulated (realistic)', train: 'Train (locomotive + coaches)', freight: 'Freight train', tram: 'Tram / metro', car: 'Car', bus: 'Bus', truck: 'Truck', tank: 'Tank',

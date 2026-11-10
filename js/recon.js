@@ -166,7 +166,9 @@ export const RC_FORMS = {
     ['style.heightScale', 'Height exaggeration', 'range', [1, 6, 0.05]],
     ['style.color', 'Path colour', 'color'], ['style.glow', 'Glow', 'switch'], ['style.future', 'Path ahead', 'select', { faint: 'Faint', hidden: 'Hidden', full: 'Full' }],
     ['style.drop', 'Line down to the ground', 'switch'], ['style.groundTrack', 'Track on the ground', 'switch'],
-    ['style.plane', 'Aircraft symbol', 'switch'], ['style.planeSize', 'Aircraft size', 'range', [0.4, 4, 0.05], (L) => L.style.plane !== false], ['style.streak', 'Bright streak (for a ground viewpoint)', 'switch'],
+    ['style.plane', 'Aircraft', 'switch'], ['style.model3d', 'Aircraft look', 'select', { 'builtin:bizjet': '3D business jet (Learjet style)', 'builtin:airliner': '3D airliner', 'builtin:jet': '3D fighter jet', 'builtin:cargoplane': '3D cargo plane', none: 'Flat white symbol' }, (L) => L.style.plane !== false],
+    ['style.livery', 'Aircraft stripe colour', 'color', null, (L) => L.style.plane !== false && (L.style.model3d ?? 'builtin:bizjet') !== 'none'],
+    ['style.calloutLook', 'Callout style', 'select', { modern: 'Modern (glass card, time chip, corner ticks)', classic: 'Classic (bar + text)' }, (L) => L.style.callouts !== false], ['style.planeSize', 'Aircraft size', 'range', [0.4, 4, 0.05], (L) => L.style.plane !== false], ['style.streak', 'Bright streak (for a ground viewpoint)', 'switch'],
     ['style.callouts', 'Callouts on the path', 'switch'], ['style.quote', 'Quote at the top while it is said', 'switch'], ['style.quoteLabel', 'Label above the quote', 'text', null, (L) => L.style.quote !== false],
     ['style.panel', 'Clock · altitude · descent rate panel', 'switch'], ['style.dataLabel', 'Data source after the numbers (e.g. GPS, ADS-B, est.)', 'text', null, (L) => L.style.panel !== false], ['style.panelPos', 'Panel position', 'select', POS, (L) => L.style.panel !== false], ['style.units', 'Altitude units', 'select', { ft: 'feet', m: 'metres' }],
     ['style.timer', '“+0:51 since the dive began” timer', 'switch'], ['style.badge', 'REAL TIME / SLOW MOTION badge', 'switch'],
@@ -279,11 +281,12 @@ function drawFlight(ctx, L, tm, o, phase) {
           ctx.beginPath(); ctx.moveTo(tail[0], tail[1]); ctx.lineTo(cur[0], cur[1]); ctx.stroke();
         }
       }
-      if (s.plane !== false) drawPlane(ctx, cur[0], cur[1], ang, 13 * unit * clamp(+s.planeSize || 1, 0.2, 6));
+      if (s.plane !== false && ((s.model3d ?? 'builtin:bizjet') === 'none' || !ALT3D.main)) drawPlane(ctx, cur[0], cur[1], ang, 13 * unit * clamp(+s.planeSize || 1, 0.2, 6));
       if (s.callsign) {
         ctx.shadowBlur = 0; ctx.font = `600 ${12.5 * unit}px ${UI}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 4 * unit;
-        ctx.fillText(s.callsign, cur[0] + 26 * unit, cur[1] - 22 * unit);
+        const ps = (s.model3d ?? 'builtin:bizjet') !== 'none' && ALT3D.main ? Math.max(1, (+s.planeSize || 1) * 1.4) : 1;
+        ctx.fillText(s.callsign, cur[0] + 26 * unit * ps, cur[1] - 22 * unit * Math.sqrt(ps));
       }
     }
     ctx.restore();
@@ -305,8 +308,10 @@ function drawFlight(ctx, L, tm, o, phase) {
   ctx.globalAlpha *= a;
   if (s.callouts !== false) {
     const used = [];
-    for (const e of eventsOf(s)) {
-      if (e.t > now) continue;
+    const said = eventsOf(s).filter((e) => e.t <= now);
+    const keep = (s.calloutLook || 'classic') === 'modern' && !tm.edit ? new Set(said.slice(-2)) : null;
+    for (const e of said) {
+      if (keep && !keep.has(e)) continue;
       const p = P3(e.t);
       if (!isFinite(p[0])) continue;
       const k = tm.edit ? 1 : clamp((now - e.t) / 0.6 + 0.2, 0, 1);
@@ -318,6 +323,7 @@ function drawFlight(ctx, L, tm, o, phase) {
         lift += 48 * unit;
       }
       used.push([p[0] - 4 * unit, p[1] - lift - 38 * unit, 230 * unit, 44 * unit]);
+      if ((s.calloutLook || 'classic') === 'modern') { modernCallout(ctx, s, e, p, lift, k, unit, fr, used); continue; }
       ctx.save(); ctx.globalAlpha *= k;
       ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1 * unit;
       ctx.beginPath(); ctx.moveTo(p[0], p[1] - 6 * unit); ctx.lineTo(p[0], p[1] - lift + 4 * unit); ctx.stroke();
@@ -401,6 +407,32 @@ function drawFlight(ctx, L, tm, o, phase) {
   }
   ctx.restore();
 }
+/** Where the aircraft is (for the 3D model): ll, altitude in metres, heading (° from north), pitch and roll. */
+export function flightPose(L, tm) {
+  const s = L.style;
+  const { rows, cs, seg } = flightModel(L);
+  if (rows.length < 2 || cs.length < 2) return null;
+  const D = Math.max(0.5, +L.duration || 20);
+  const tau = tm.edit ? D * 0.6 : clamp(tm.tau, 0, D);
+  const now = L.anim === 'none' ? rows.t1 : clockAt(rows, tau, D);
+  if (!tm.edit && now >= rows.t1 - 0.01) return null;
+  const hs = clamp(+s.heightScale || 1, 0.2, 10);
+  const posAt = (t) => pathAt(cs, seg, interp(rows, clamp(t, rows.t0, rows.t1), 'f'));
+  const altAt = (t) => Math.max(0, interp(rows, clamp(t, rows.t0, rows.t1), 'alt')) * FT * hs;
+  const dt = 2;
+  const a = posAt(now - dt), b = posAt(now + dt), p = posAt(now);
+  const k = Math.cos(p[1] * D2R);
+  const dx = (b[0] - a[0]) * k * M_PER_DEG, dy = (b[1] - a[1]) * M_PER_DEG;
+  const horiz = Math.max(1, Math.hypot(dx, dy));
+  const heading = (Math.atan2(dx, dy) / D2R + 360) % 360;
+  const pitch = clamp(Math.atan2(altAt(now + dt) - altAt(now - dt), horiz) / D2R, -70, 25);
+  // bank into turns
+  const c = posAt(now + dt * 2);
+  const h2 = Math.atan2((c[0] - p[0]) * k, c[1] - p[1]) / D2R, h1 = Math.atan2((p[0] - a[0]) * k, p[1] - a[1]) / D2R;
+  let turn = ((h2 - h1 + 540) % 360) - 180;
+  const roll = clamp(-turn * 1.6, -35, 35);
+  return { ll: p, altM: altAt(now), heading, pitch, roll };
+}
 /** Clock seconds per video second right now (for the badge). */
 function rateAt(rows, tau, D) { const d = 0.05; return Math.abs(clockAt(rows, tau + d, D) - clockAt(rows, Math.max(0, tau - d), D)) / (tau - d < 0 ? d + tau : 2 * d); }
 function videoAtClock(rows, t, D) { // inverse of clockAt (search)
@@ -434,6 +466,48 @@ function impactFlash(ctx, x, y, ft, u, fr, a) {
   const g2 = ctx.createRadialGradient(x, y, 0, x, y, 70 * u);
   g2.addColorStop(0, `rgba(255,190,90,${fk})`); g2.addColorStop(1, 'rgba(255,90,20,0)');
   ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(x, y, 70 * u, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+/** Modern radio callout: a leader that rises from the path, a glass card with a time chip, who said it and corner ticks. */
+function modernCallout(ctx, s, e, p, lift, k, unit, fr, used = []) {
+  const th = TH(s), acc = ACC(s);
+  const solid = s.boxes === 'white' ? 'rgba(255,255,255,0.96)' : s.boxes === 'blue' ? 'rgba(10,52,150,0.82)' : 'rgba(8,14,24,0.72)';
+  const ink = th.ink, sub = th.sub;
+  const kl = clamp(k * 2.2, 0, 1), kb = clamp((k - 0.35) / 0.4, 0, 1), kt = clamp((k - 0.55) / 0.45, 0, 1);
+  ctx.save();
+  // leader rises from the path; if the card would run into the title / quote area it hangs below instead
+  const below = fr && p[1] - lift + 8 * unit - 54 * unit < fr.y + 150 * unit;
+  let top = below ? p[1] + 70 * unit + 54 * unit : p[1] - lift + 8 * unit;
+  if (below) { const hit = (t) => used.some((r) => r.below && Math.abs(r.top - t) < 60 * unit && Math.abs(r.x - p[0]) < 420 * unit); while (hit(top)) top += 62 * unit; used.push({ below: true, top, x: p[0] }); }
+  ctx.strokeStyle = hexA('#ffffff', 0.85); ctx.lineWidth = 1.2 * unit;
+  const from = p[1] + (below ? 7 : -7) * unit, to = below ? top - 54 * unit : top;
+  ctx.beginPath(); ctx.moveTo(p[0], from); ctx.lineTo(p[0], from + (to - from) * kl); ctx.stroke();
+  ctx.beginPath(); ctx.arc(p[0], p[1], 7.5 * unit, 0, Math.PI * 2); ctx.strokeStyle = hexA('#ffffff', 0.6 * kl); ctx.stroke();
+  if (kb <= 0) { ctx.restore(); return; }
+  const tline = /^[^\d]/.test(e.raw) ? e.raw : fmtClock(e.t, false);
+  ctx.font = `700 ${10 * unit}px ${MONO}`; const cw = ctx.measureText(tline).width + 14 * unit;
+  ctx.font = `600 ${9.5 * unit}px ${UI}`; const ww = e.who ? ctx.measureText(e.who.toUpperCase()).width + 12 * unit : 0;
+  ctx.font = `700 ${16 * unit}px ${UI}`; const tw = ctx.measureText(e.text).width;
+  const W = Math.max(tw + 28 * unit, cw + ww + 30 * unit), H = 54 * unit;
+  const x = p[0] - 14 * unit, y = top - H;
+  ctx.globalAlpha *= kb;
+  ctx.translate(0, (1 - kb) * 10 * unit);
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 14 * unit; ctx.shadowOffsetY = 3 * unit;
+  ctx.fillStyle = solid; ctx.fillRect(x, y, W * (0.4 + 0.6 * kb), H);
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = hexA(s.boxes === 'white' ? '#1663e6' : '#ffffff', 0.35); ctx.lineWidth = 1 * unit; ctx.strokeRect(x + 0.5, y + 0.5, W - 1, H - 1);
+  // corner ticks
+  ctx.strokeStyle = s.boxes === 'white' ? '#1663e6' : '#ffffff'; ctx.lineWidth = 2 * unit; const L = 9 * unit;
+  ctx.beginPath(); ctx.moveTo(x, y + L); ctx.lineTo(x, y); ctx.lineTo(x + L, y); ctx.moveTo(x + W - L, y + H); ctx.lineTo(x + W, y + H); ctx.lineTo(x + W, y + H - L); ctx.stroke();
+  // time chip + who
+  ctx.globalAlpha *= 1;
+  ctx.fillStyle = s.boxes === 'white' ? '#1663e6' : acc; ctx.fillRect(x + 10 * unit, y + 9 * unit, cw, 16 * unit);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = `700 ${10 * unit}px ${MONO}`; ctx.fillStyle = s.boxes === 'white' ? '#ffffff' : s.boxes === 'blue' ? '#0b3d91' : '#06131c'; ctx.fillText(tline, x + 17 * unit, y + 17.5 * unit);
+  if (e.who) { ctx.font = `600 ${9.5 * unit}px ${UI}`; ctx.fillStyle = sub; ctx.fillText(e.who.toUpperCase().split('').join(String.fromCharCode(8202)), x + 18 * unit + cw, y + 17.5 * unit); }
+  ctx.font = `700 ${16 * unit}px ${UI}`; ctx.fillStyle = ink;
+  const n = Math.ceil(e.text.length * kt);
+  ctx.fillText(e.text.slice(0, n), x + 10 * unit, y + 39 * unit);
   ctx.restore();
 }
 /** A pinned "Impacted Location" label: pulsing rings at the point, a leader line and a box. */

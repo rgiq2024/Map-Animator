@@ -286,12 +286,12 @@
      "hold": 0,
      "anim": "draw",
      "style": {
-      "look": "filled",
+      "look": "glass",
       "title": "Austin-Bergstrom (AUS)",
       "sub": "Departed 10:37 a.m. ET",
       "accent": "#ffffff",
       "ink": "#ffffff",
-      "box": "#1257d6",
+      "box": "#0d47c9",
       "leader": "straight",
       "end": "ring",
       "dx": -40,
@@ -299,7 +299,8 @@
       "size": 0.85,
       "font": "sans",
       "upper": false,
-      "shadow": true
+      "shadow": true,
+      "tag": "Departure"
      }
     },
     {
@@ -318,10 +319,10 @@
      "hold": 0,
      "anim": "draw",
      "style": {
-      "look": "filled",
+      "look": "glass",
       "title": "North Eleuthera (ELH)",
       "sub": "Planned destination",
-      "accent": "#1257d6",
+      "accent": "#ffffff",
       "ink": "#0b3d91",
       "box": "#ffffff",
       "leader": "straight",
@@ -331,7 +332,8 @@
       "size": 0.85,
       "font": "sans",
       "upper": false,
-      "shadow": true
+      "shadow": true,
+      "tag": "Destination"
      }
     },
     {
@@ -350,10 +352,10 @@
      "hold": 0,
      "anim": "draw",
      "style": {
-      "look": "filled",
+      "look": "glass",
       "title": "Descent to FL350",
-      "sub": "Near Naples · ~12:36 p.m. ET",
-      "accent": "#1257d6",
+      "sub": "Near Naples",
+      "accent": "#ffffff",
       "ink": "#0b3d91",
       "box": "#ffffff",
       "leader": "straight",
@@ -363,7 +365,8 @@
       "size": 0.85,
       "font": "sans",
       "upper": false,
-      "shadow": true
+      "shadow": true,
+      "tag": "12:36 p.m. ET"
      }
     },
     {
@@ -382,12 +385,12 @@
      "hold": 0,
      "anim": "draw",
      "style": {
-      "look": "filled",
+      "look": "glass",
       "title": "Last ADS-B position",
-      "sub": "12:49:32 p.m. ET",
+      "sub": "Signal lost over Greenacres",
       "accent": "#ffffff",
       "ink": "#ffffff",
-      "box": "#1257d6",
+      "box": "#0d47c9",
       "leader": "straight",
       "end": "ring",
       "dx": 40,
@@ -395,7 +398,8 @@
       "size": 0.85,
       "font": "sans",
       "upper": false,
-      "shadow": true
+      "shadow": true,
+      "tag": "12:49:32 p.m. ET"
      }
     },
     {
@@ -414,12 +418,12 @@
      "hold": 0,
      "anim": "draw",
      "style": {
-      "look": "filled",
+      "look": "glass",
       "title": "Impacted Location",
       "sub": "26.632833° N, 80.113090° W",
       "accent": "#ffffff",
       "ink": "#ffffff",
-      "box": "#1257d6",
+      "box": "#0d47c9",
       "leader": "straight",
       "end": "ring",
       "dx": 150,
@@ -427,7 +431,8 @@
       "size": 1.1,
       "font": "sans",
       "upper": false,
-      "shadow": true
+      "shadow": true,
+      "tag": "Impact"
      }
     },
     {
@@ -673,7 +678,10 @@
       "impact": false,
       "impactSize": 1,
       "units": "ft",
-      "boxes": "blue"
+      "boxes": "blue",
+      "model3d": "builtin:bizjet",
+      "livery": "#1257d6",
+      "calloutLook": "modern"
      }
     },
     {
@@ -728,7 +736,7 @@
       "view": {
        "center": [
         -80.2,
-        26.585
+        26.625
        ],
        "zoomRef": 9.9,
        "bearing": -28,
@@ -741,7 +749,7 @@
       "view": {
        "center": [
         -80.165,
-        26.6
+        26.64
        ],
        "zoomRef": 10.3,
        "bearing": -45,
@@ -754,7 +762,7 @@
       "view": {
        "center": [
         -80.165,
-        26.6
+        26.64
        ],
        "zoomRef": 10.6,
        "bearing": -45,
@@ -774,7 +782,7 @@
      "geom": null,
      "start": 0,
      "duration": 36,
-     "hold": 4,
+     "hold": 0,
      "anim": "fade",
      "style": {
       "source": "livesat",
@@ -864,7 +872,7 @@
      },
      "start": 0,
      "duration": 3,
-     "hold": 4,
+     "hold": 0,
      "anim": "grow",
      "style": {
       "cells": 10,
@@ -957,7 +965,10 @@
       "units": "ft",
       "boxes": "blue",
       "impactLabel": "Impacted Location",
-      "impactSub": ""
+      "impactSub": "",
+      "model3d": "builtin:bizjet",
+      "livery": "#1257d6",
+      "calloutLook": "modern"
      }
     }
    ],
@@ -1079,7 +1090,7 @@
       "drop": false,
       "groundTrack": false,
       "plane": true,
-      "planeSize": 0.8,
+      "planeSize": 0.7,
       "streak": true,
       "callouts": false,
       "quote": false,
@@ -1095,7 +1106,10 @@
       "impact": true,
       "impactSize": 2.6,
       "units": "ft",
-      "boxes": "blue"
+      "boxes": "blue",
+      "model3d": "none",
+      "livery": "#1257d6",
+      "calloutLook": "modern"
      }
     }
    ],
@@ -1387,11 +1401,11 @@
      "hold": 0,
      "anim": "draw",
      "style": {
-      "look": "filled",
+      "look": "glass",
       "title": "Impacted Location",
       "sub": "26.632833° N, 80.113090° W",
       "text": "",
-      "tag": "",
+      "tag": "Impact",
       "value": "",
       "unit": "",
       "decimals": 0,
@@ -1400,7 +1414,7 @@
       "media": "",
       "accent": "#ffffff",
       "ink": "#ffffff",
-      "box": "#1257d6",
+      "box": "#0d47c9",
       "leader": "straight",
       "end": "ring",
       "dx": 150,
@@ -1427,7 +1441,7 @@
      "hold": 0,
      "anim": "draw",
      "style": {
-      "look": "filled",
+      "look": "glass",
       "title": "South Military Trail",
       "sub": "near Cresthaven Blvd · Greenacres, FL",
       "accent": "#ffffff",
@@ -1440,7 +1454,8 @@
       "size": 0.9,
       "font": "sans",
       "upper": false,
-      "shadow": true
+      "shadow": true,
+      "tag": "Road"
      }
     },
     {

@@ -1,7 +1,7 @@
 // Real 3D models on the map: built-in vehicles, buildings and structures, realistic NASA models, your own
 // GLB/glTF files, train/vehicle collisions and a procedural 3D city — rendered with three.js inside a MapLibre
 // custom layer (so they tilt, rotate and export with the map). Lit with a studio environment and soft shadows.
-import { ALT3D } from './recon.js';
+import { ALT3D, flightPose } from './recon.js';
 import { transitFraction } from './transit.js';
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/three/loaders/GLTFLoader.js';
@@ -98,7 +98,46 @@ function buildModel(kind, accent = '#ff3b30') {
   const grey = mat(0x9aa3ad), dark = mat(0x3c434a), white = mat(0xf2f4f6, { m: 0.2, r: 0.4 }), acc = mat(accent, { m: 0.2 });
   const glass = mat(0x1e5a8a, { m: 0.9, r: 0.1 });
   const add = (o, x = 0, y = 0, z = 0) => { o.position.set(x, y, z); G.add(o); return o; };
-  if (kind === 'jet') {
+  if (kind === 'bizjet') {
+    // Learjet 60-like business jet, real size in metres (17.9 m long, 13.3 m span): T-tail, rear engines, winglets
+    const body = mat(0xf4f6f8, { m: 0.25, r: 0.32 }), stripe = mat(accent, { m: 0.3, r: 0.4 }), stripe2 = mat(0xc9a227, { m: 0.5, r: 0.35 });
+    const win = mat(0x10161d, { m: 0.85, r: 0.12 }), metal = mat(0xb8c0c8, { m: 0.8, r: 0.3 }), black = mat(0x15181c, { m: 0.2, r: 0.6 });
+    const prof = [[0, 8.95], [0.22, 8.8], [0.42, 8.45], [0.6, 7.9], [0.74, 7.2], [0.84, 6.3], [0.9, 5.2], [0.92, 3.5], [0.92, -2.6], [0.88, -4.2], [0.78, -5.6], [0.6, -7.0], [0.38, -8.2], [0.16, -8.95], [0.02, -9.1]];
+    const fg = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 36); fg.rotateZ(-Math.PI / 2);
+    const fus = add(new THREE.Mesh(fg, body)); fus.scale.set(1, 1.05, 1);
+    // cockpit glass and cabin windows
+    const ws = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12, -Math.PI * 0.42, Math.PI * 0.84, Math.PI * 0.18, Math.PI * 0.3), win);
+    ws.rotation.z = -Math.PI / 2 + 0.25; ws.scale.set(0.93, 1.5, 0.93); add(ws, 6.05, 0.08, 0);
+    for (const sd of [-1, 1]) for (let i = 0; i < 7; i++) { const w = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 8), win); w.scale.set(1.1, 1, 0.25); add(w, 3.3 - i * 0.92, 0.22, sd * 0.905); }
+    // livery: two cheat lines and a gold pinstripe
+    for (const sd of [-1, 1]) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(12.6, 0.16, 0.03), stripe), -0.6, -0.12, sd * 0.925);
+      add(new THREE.Mesh(new THREE.BoxGeometry(12.6, 0.04, 0.03), stripe2), -0.6, 0.02, sd * 0.93);
+    }
+    // wings (low, swept), winglets
+    const wg = wing([[1.9, 0], [-0.2, 6.6], [-1.3, 6.6], [-1.6, 0], [-1.3, -6.6], [-0.2, -6.6]], 0.22, body); add(wg, 0, -0.58, 0);
+    for (const sd of [-1, 1]) {
+      const wl = wing([[-0.25, 0], [-0.95, 1.15], [-1.35, 1.15], [-1.3, 0]], 0.06, stripe); wl.rotation.x = -Math.PI / 2 * sd; add(wl, 0, -0.5, sd * 6.62);
+      add(new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.03, 0.08), metal), -0.55, -0.45, sd * 3.6); // flap track fairing hint
+    }
+    // rear engines with pylons, intakes and exhausts
+    for (const sd of [-1, 1]) {
+      const nac = add(cyl(0.48, 0.4, 2.7, body, 24), -4.75, 0.42, sd * 1.42);
+      add(new THREE.Mesh(new THREE.CircleGeometry(0.41, 20), black), -3.39, 0.42, sd * 1.42).rotation.y = Math.PI / 2;
+      add(new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.05, 8, 24), metal), -3.4, 0.42, sd * 1.42).rotation.y = Math.PI / 2;
+      add(cyl(0.34, 0.3, 0.35, metal, 20), -6.22, 0.42, sd * 1.42);
+      add(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.16, 0.6), body), -4.9, 0.42, sd * 0.95);
+      void nac;
+    }
+    // T-tail
+    const fin = wing([[-6.0, 0], [-8.55, 3.15], [-9.75, 3.15], [-9.05, 0]], 0.16, body); fin.rotation.x = -Math.PI / 2; add(fin, 0, 0.55, 0.08);
+    const finS = wing([[-6.9, 0.2], [-8.35, 2.0], [-8.75, 2.0], [-7.4, 0.2]], 0.17, stripe); finS.rotation.x = -Math.PI / 2; add(finS, 0, 0.55, 0.09);
+    add(wing([[-8.55, 0], [-9.45, 3.0], [-10.15, 3.0], [-10.05, 0], [-10.15, -3.0], [-9.45, -3.0]], 0.12, body), 0, 3.62, 0);
+    // belly fairing + beacon
+    add(new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), body), -0.2, -0.72, 0).scale.set(2.6, 0.32, 0.7);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(0xff2a2a, { e: 0xff2a2a, ei: 2 })), -1, 0.98, 0);
+    for (const sd of [-1, 1]) add(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), mat(sd > 0 ? 0x2aff6a : 0xff2a2a, { e: sd > 0 ? 0x2aff6a : 0xff2a2a, ei: 2 })), -1.3, -0.48, sd * 6.75);
+  } else if (kind === 'jet') {
     add(cyl(0.5, 0.75, 9, grey), 0, 0, 0);
     const nose = new THREE.Mesh(new THREE.ConeGeometry(0.5, 2.5, 16), grey); nose.rotation.z = -Math.PI / 2; add(nose, 5.7, 0, 0);
     add(new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), glass), 2.6, 0.45, 0).scale.set(2.2, 1, 1);
@@ -442,6 +481,7 @@ function jobsOf(scene) {
       out.push({ id: `${L.id}#b`, L, role: 'colB', source: s.modelB || 'builtin:train', color: s.colorB || '#2471a3' });
     } else if ((L.kind === 'bombing' || L.kind === 'trajectory' || L.kind === 'vehicle') && s.model3d && linesOf(L.geom)) out.push({ id: `${L.id}#v`, L, role: L.kind, source: s.model3d, color: s.color });
     else if (L.kind === 'city3d' && L.geom.type === 'Polygon') out.push({ id: `${L.id}#city`, L, role: 'city', source: 'city', color: '' });
+    else if (L.kind === 'flightrecon' && L.geom.type === 'LineString' && s.plane !== false && (s.model3d ?? 'builtin:bizjet') !== 'none') out.push({ id: `${L.id}#ac`, L, role: 'flight', source: s.model3d || 'builtin:bizjet', color: s.livery || '#1257d6' });
   }
   return out;
 }
@@ -703,6 +743,11 @@ export class ModelLayer {
         ll = q.ll; heading = q.heading;
         const air = ['jet', 'airliner', 'drone', 'quad', 'helicopter', 'missile', 'rocket', 'satellite', 'iss'].includes(s.sprite);
         altitude = air ? 30 : 0;
+      } else if (role === 'flight') {
+        const P = flightPose(L, tm);
+        if (!P) continue;
+        ({ ll, heading, pitch, roll } = P);
+        altitude = P.altM; scale = (+s.planeSize || 1) * 1.1; real = false; it.altReal = true;
       } else if (role === 'rig' || role === 'trainmove') {
         heading = 90; real = true; scale = 1;
         // a 3D train can follow a transit line's timetable (stops at the stations)
@@ -744,7 +789,7 @@ export class ModelLayer {
       const mpp = (40075016.686 * Math.cos(ll[1] * D2R)) / (512 * 2 ** zoom);
       const px = 70 * this.cssUnit * st.scale;
       const scale = st.real ? st.scale : (px * mpp) / (2 * it.radius);
-      const altM = st.real ? st.altitude : st.altitude * mpp * this.cssUnit;
+      const altM = st.real || it.altReal ? st.altitude : st.altitude * mpp * this.cssUnit;
       const modelMatrix = tr.getMatrixForModel(ll, altM);
       const M = new THREE.Matrix4().fromArray(args.defaultProjectionData.mainMatrix).multiply(new THREE.Matrix4().fromArray(modelMatrix));
       it.root.visible = true;
