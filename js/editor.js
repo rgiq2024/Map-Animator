@@ -53,7 +53,7 @@ import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
 import { fetchRailways, trackAlongRail } from './railsnap.js';
-import { defaultBrand, drawBranding, preloadBrand, loadBrandFonts } from './branding.js';
+import { setActiveBrand, defaultBrand, drawBranding, preloadBrand, loadBrandFonts } from './branding.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
 import { AffectedBuildings } from './hazards.js';
 import { TwinCity } from './twin.js';
@@ -306,6 +306,7 @@ export function createEditor() {
     }
     drawGradeWash(octx, { x: 0, y: 0, w: W, h: H }, scene().look.grade);
     const frameBoxes = [];
+    setActiveBrand(project.brand);
     hits = renderScene(octx, {
       map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: frameBoxes,
       edit: viewMode === 'edit' ? { step, activeLeg, selPoint, hoverPoint, selSign, selLayer, drawing, dpr: px } : null,
@@ -5051,7 +5052,7 @@ export function createEditor() {
           jumpCam(c, expScene, t);
           applyTimeEffects(t, expScene, m);
         },
-        drawOverlay: (ctx, gt) => drawBranding(ctx, project.brand, { x: 0, y: 0, w: width, h: height }, unit, gt),
+        drawOverlay: (ctx, gt) => { setActiveBrand(project.brand); drawBranding(ctx, project.brand, { x: 0, y: 0, w: width, h: height }, unit, gt); },
         drawFrame: (ctx, sc, m, t) => {
           const full = { x: 0, y: 0, w: width, h: height };
           const mc = map.getCanvas();

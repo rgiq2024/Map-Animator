@@ -8,6 +8,7 @@ import { placeAt, CUSTOM_POS } from './place.js';
 import { H, allCountries, countriesByName, countryAt } from './cartofx.js';
 import { imageFor } from './geoimage.js';
 import { newScene } from './scene.js';
+import { brandSafeArea } from './branding.js';
 
 const { clamp, easeOut, D2R, rr, merc, drawTiles, bboxOf, labelPoint } = H;
 let DISP = '"Archivo", Inter, system-ui, sans-serif';
@@ -104,7 +105,8 @@ export const BR_SHARED = ['headerText', 'headerOrg', 'headerBrand', 'headerRight
 /** { win:[x,y,w,h], ... } in frame fractions for a layout and frame aspect (w / h). */
 export function layoutBoxes(layout, aspect, hasThumbs = true, opt = {}) {
   // content area between the header (or logo band) and the ticker (or bottom margin)
-  const top = opt.header ? 0.1 : 0.15, bot = opt.ticker ? 0.078 : 0.035, H = 1 - top - bot;
+  // …and clear of the project's logo strip (opt.safe = { top, bottom } fractions taken by the logos)
+  const top = Math.max(opt.header ? 0.1 : 0.15, opt.safe?.top || 0), bot = Math.max(opt.ticker ? 0.078 : 0.035, opt.safe?.bottom || 0), H = 1 - top - bot;
   const R = (x, y, w, h) => [x, top + y * H, w, h * H];
   if (layout === 'end') return { end: true, top, bot };
   if (layout === 'intro') return { intro: true, top, bot };
@@ -458,7 +460,8 @@ function drawLogos(ctx, L, fr, u) {
   one(s.logo2, 'logo2', 'logo2Size', false);
 }
 function headerBar(ctx, L, fr, u, acc, k, scene) {
-  const s0 = L.style, s = s0.headerText === false ? { ...s0, headerOrg: false, headerBrand: false, headerRight: false } : s0, h = fr.h * 0.085, y = fr.y;
+  // the project's logo strip at the top takes the header row, so the header keeps only its background then
+  const s0 = L.style, s = s0.headerText === false || brandSafeArea(fr.w, fr.h).top > 0 ? { ...s0, headerOrg: false, headerBrand: false, headerRight: false } : s0, h = fr.h * 0.085, y = fr.y;
   ctx.save(); ctx.globalAlpha *= k;
   const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(3,8,16,0.96)'); g.addColorStop(1, 'rgba(5,12,24,0.92)');
   ctx.fillStyle = g; ctx.fillRect(fr.x, y, fr.w, h);
@@ -591,7 +594,7 @@ function drawFrameBody(ctx, L, tm, o) {
   };
   const BA = [side('before'), side('after')], BAL = [s.beforeLabel || 'Before', s.afterLabel || 'After'];
   const hasThumbs = !!(BA[0] || BA[1] || s.photos?.length);
-  const Bx = layoutBoxes(s.layout || 'A', aspect, hasThumbs, { header: s.header, ticker: s.tickerOn });
+  const Bx = layoutBoxes(s.layout || 'A', aspect, hasThumbs, { header: s.header, ticker: s.tickerOn, safe: brandSafeArea(fr.w, fr.h) });
   const P = (b) => [fr.x + b[0] * fr.w, fr.y + b[1] * fr.h, b[2] * fr.w, b[3] * fr.h];
   const k = tm.edit || L.anim === 'none' ? 1 : clamp(tm.tau / Math.max(0.2, +L.duration || 1), 0, 1);
   const kk = easeOut(k);

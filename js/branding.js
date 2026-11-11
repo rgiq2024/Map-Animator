@@ -59,6 +59,41 @@ function knockout(im) {
   knocked.set(im, out);
   return out;
 }
+// ---- where the logo strip ends, so layouts (briefing frames) can keep clear of it
+let activeBrand = null;
+export const setActiveBrand = (b) => { activeBrand = b || null; };
+const inkRows = new WeakMap();
+/** first and last row (0..1 of the strip height) that hold logo pixels, ignoring the see-through shading */
+function inkExtent(im) {
+  if (inkRows.has(im)) return inkRows.get(im);
+  let ext = [0, 1];
+  try {
+    const src = knockout(im);
+    const c = document.createElement('canvas'); c.width = Math.min(800, src.width); c.height = Math.max(1, Math.round(c.width * (src.height / src.width)));
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, c.width, c.height);
+    const p = g.getImageData(0, 0, c.width, c.height).data;
+    let first = -1, last = -1;
+    for (let y = 0; y < c.height; y++) { let n = 0; for (let x = 0; x < c.width; x++) if (p[(y * c.width + x) * 4 + 3] > 120) n++; if (n > 0) { if (first < 0) first = y; last = y; } }
+    if (last >= 0) ext = [first / c.height, (last + 1) / c.height];
+  } catch { /* keep the whole strip */ }
+  inkRows.set(im, ext);
+  return ext;
+}
+/** { top, bottom }: fractions of the frame height taken by the logo strip at the top / bottom (0 when off). */
+export function brandSafeArea(fw, fh) {
+  const b = activeBrand;
+  if (!b?.header || !fw || !fh) return { top: 0, bottom: 0 };
+  const im = headerImage(b);
+  if (!im) return { top: 0, bottom: 0 };
+  const iw = im.width || im.naturalWidth, ih = im.height || im.naturalHeight;
+  if (!iw || !ih) return { top: 0, bottom: 0 };
+  const k = clamp(+b.headerScale || 1, 0.4, 2), dh = fw * k * (ih / iw);
+  let ly = b.headerPlace === 'bottom' ? fh - dh - (b.lower ? fh * 0.152 : 0) : 0;
+  ly += (+b.headerY || 0) * fh;
+  const [e0, e1] = inkExtent(im);
+  const gap = fh * 0.02;
+  return b.headerPlace === 'bottom' ? { top: 0, bottom: Math.max(0, (fh - (ly + e0 * dh) + gap) / fh) } : { top: Math.max(0, (ly + e1 * dh + gap) / fh), bottom: 0 };
+}
 /** Resolves when the logo strip is ready to draw (for export). */
 export function preloadBrand(brand) {
   loadBrandFonts();
