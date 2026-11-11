@@ -35,7 +35,7 @@ export const BR_DEFAULTS = {
     date: '', place: '', country: '', event: '', eventIcon: 'alert', assessment: '', coords: '', sources: '',
     accent: '#35c8ff', bg: '#050b14', globe: true, before: null, after: null, photos: [], thumbZoom: 15, windowTag: true, scale: true,
     beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', beforeZoom: 1, afterZoom: 1, beforeX: 0, beforeY: 0, afterX: 0, afterY: 0,
-    theme: 'navy', logo: '', logo2: '', logoSize: 1, logo2Size: 1, slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'kenburns',
+    theme: 'navy', logo: '', logo2: '', logoSize: 1, logo2Size: 1, logoPlace: 'top', slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'kenburns',
     header: false, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
   } },
@@ -47,7 +47,8 @@ export const BR_FORMS = {
   briefing: [
     ['style.layout', 'Layout', 'select', LAYOUTS],
     ['style.theme', 'Theme', 'select', Object.fromEntries(Object.entries(BR_THEMES).map(([k, t]) => [k, t.name]))],
-    ['style._parts', 'Parts — untick to remove one', 'brparts'],
+    ['style._parts', 'Parts — untick to remove one', 'brparts', null, (L) => !L.style.only],
+    ['style._split', 'Make every part its own layer', 'brsplit', null, (L) => !L.style.only],
     ['style._here', 'Incident location (globe, locator, place tag)', 'brhere'],
     ['style.sync', 'Same text on every scene', 'switch'],
     ['style.slides', 'Photos (slideshow)', 'slides', null, (L) => L.style.layout === 'photos'],
@@ -55,8 +56,9 @@ export const BR_FORMS = {
     ['style.slideFx', 'Photo motion', 'select', { kenburns: 'Slow zoom (Ken Burns)', fade: 'Cross-fade only', slide: 'Slide across' }, (L) => L.style.layout === 'photos'],
     ['style.slideTitle', 'Photos — panel title', 'text', null, (L) => L.style.layout === 'photos'],
     ['style.header', 'Header bar (organisation · brand · briefing)', 'switch'],
-    ['style.logo', 'Logo (left of the header)', 'image', null, (L) => L.style.header], ['style.logoSize', 'Logo — size', 'range', [0.3, 4, 0.05], (L) => L.style.header && L.style.logo],
-    ['style.logo2', 'Second logo (right of the header)', 'image', null, (L) => L.style.header], ['style.logo2Size', 'Second logo — size', 'range', [0.3, 4, 0.05], (L) => L.style.header && L.style.logo2],
+    ['style.logo', 'Logo (left)', 'image'], ['style.logoSize', 'Logo — size', 'range', [0.3, 4, 0.05], (L) => !!L.style.logo],
+    ['style.logo2', 'Second logo (right)', 'image'],
+    ['style.logoPlace', 'Logos — place', 'select', { top: 'Top (header row)', bottom: 'Bottom (above the ticker)' }, (L) => L.style.logo || L.style.logo2], ['style.logo2Size', 'Second logo — size', 'range', [0.3, 4, 0.05], (L) => !!L.style.logo2],
     ['style.org', 'Header — organisation', 'text', null, (L) => L.style.header], ['style.unit', 'Header — unit', 'text', null, (L) => L.style.header], ['style.brand', 'Header — centre title', 'text', null, (L) => L.style.header],
     ['style.tickerOn', 'Breaking ticker at the bottom', 'switch'],
     ['style.tickerLabel', 'Ticker — label', 'text', null, (L) => L.style.tickerOn], ['style.ticker', 'Ticker — items (one per line)', 'textarea', null, (L) => L.style.tickerOn],
@@ -85,15 +87,15 @@ export const brPhases = (kind) => (kind === 'briefmark' ? ['captions'] : ['below
 /** text shared by every briefing frame of a project when “Same text on every scene” is on */
 /** the separate parts of each layout (each can be removed) */
 export const BR_PARTS = {
-  common: [['background', 'Background'], ['frame', 'Map window frame'], ['logo', 'Logo'], ['logo2', 'Second logo']],
+  common: [['background', 'Background'], ['frame', 'Map window frame'], ['logos', 'Logos'], ['header', 'Header bar'], ['ticker', 'Breaking ticker']],
   intro: [['introGlobe', 'Globe'], ['introTitle', 'Title block']],
   A: [['globe', 'Globe'], ['title', 'Title'], ['info', 'Info rows'], ['before', 'Before picture'], ['after', 'After picture'], ['tag', 'Place label on the map']],
-  B: [['header', 'Title'], ['locator', 'Locator map'], ['side', 'Before / after panel'], ['strip', 'Field strip'], ['tag', 'Place label'], ['scale', 'Scale bar'], ['north', 'North arrow']],
+  B: [['heading', 'Title'], ['locator', 'Locator map'], ['side', 'Before / after panel'], ['strip', 'Field strip'], ['tag', 'Place label'], ['scale', 'Scale bar'], ['north', 'North arrow']],
   full: [['titleBlock', 'Title block'], ['globe', 'Mini globe'], ['side', 'Before / after'], ['tag', 'Place label']],
   photos: [['slide', 'Photo'], ['strip', 'Thumbnails'], ['caption', 'Caption panel'], ['tag', 'Place label']],
   end: [['endTitle', 'Title'], ['endFields', 'Fields'], ['endSources', 'Sources']],
 };
-export const BR_SHARED = ['theme', 'logo', 'logo2', 'logoSize', 'logo2Size', 'title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
+export const BR_SHARED = ['theme', 'logoPlace', 'logo', 'logo2', 'logoSize', 'logo2Size', 'title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
 
 // ================================================================= geometry of the layouts (fractions of the frame)
 /** { win:[x,y,w,h], ... } in frame fractions for a layout and frame aspect (w / h). */
@@ -326,7 +328,7 @@ function locator(ctx, ll, country, x, y, w, h, u, acc, place) {
 // ---------------------------------------------------------------- tag inside the map window
 function windowTag(ctx, L, o, wx, wy, ww, wh, u, acc, align = 'right') {
   const s = L.style, ll = L.geom?.coordinates;
-  if (s.off_tag) return;
+  if (!partOn(s, 'tag')) return;
   const tag = String(s.tag || s.event || '').toUpperCase();
   const place = [s.place, s.country].filter(Boolean).join(', ').toUpperCase();
   const lines = [[tag, 800, 15], [place, 600, 11], [s.coords || '', 500, 10]].filter((l) => l[0]);
@@ -358,7 +360,7 @@ function windowTag(ctx, L, o, wx, wy, ww, wh, u, acc, align = 'right') {
   }
 }
 function scaleBar(ctx, o, ll, x, y, u, acc, L) {
-  if (L?.style.off_scale) return;
+  if (L && !partOn(L.style, 'scale')) return;
   if (!o.proj || !ll) return;
   u *= L.style.size_scale?.w || 1;
   ctx.save(); const [sdx, sdy] = placeAt(ctx, L, o.frame, x - 8 * u, y - 18 * u, 200 * u, 30 * u, { key: 'scale', resize: true, uniform: true }); ctx.restore();
@@ -377,6 +379,9 @@ function scaleBar(ctx, o, ll, x, y, u, acc, L) {
   ctx.fillText(nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, x + W + 6 * u, y + 3 * u);
 }
 
+/** is this part drawn by this layer? (split layers draw one part each; a whole frame draws every part not switched off) */
+export const partOn = (s, k) => (s.only ? s.only === k : !s[`off_${k}`]);
+
 // ---------------------------------------------------------------- star field (deep space theme)
 const STARS = Array.from({ length: 260 }, (_, i) => { const r = (n) => { const x = Math.sin(i * 127.1 + n * 311.7) * 43758.5453; return x - Math.floor(x); }; return [r(1), r(2), r(3), r(4)]; });
 function drawStars(ctx, fr, u, t) {
@@ -393,7 +398,7 @@ function drawStars(ctx, fr, u, t) {
 // ---------------------------------------------------------------- place tag (pin + place + coordinates) and north arrow
 function placeTag(ctx, L, o, x, y, u, acc) {
   const s = L.style;
-  if (s.off_tag) return;
+  if (!partOn(s, 'tag')) return;
   const place = [s.place, s.country].filter(Boolean).join(', ').toUpperCase();
   if (!place && !s.coords) return;
   ctx.font = `800 ${15 * u}px ${SANS}`; const w1 = ctx.measureText(place).width;
@@ -413,7 +418,7 @@ function placeTag(ctx, L, o, x, y, u, acc) {
   ctx.restore();
 }
 function northArrow(ctx, o, x, y, u, acc, L) {
-  if (L.style.off_north) return;
+  if (!partOn(L.style, 'north')) return;
   u *= L.style.size_north?.w || 1;
   ctx.save(); const [dx, dy] = placeAt(ctx, L, o.frame, x - 14 * u, y - 14 * u, 28 * u, 28 * u, { key: 'north', resize: true, uniform: true }); ctx.restore();
   x += dx; y += dy;
@@ -427,7 +432,26 @@ function northArrow(ctx, o, x, y, u, acc, L) {
 }
 
 // ---------------------------------------------------------------- header bar and breaking ticker
-function headerBar(ctx, L, fr, u, acc, k) {
+const logosShown = (L, scene) => (L.style.only ? (scene?.layers || []).some((l) => l.kind === 'briefing' && l.style.only === 'logos' && !l.hidden) : partOn(L.style, 'logos'));
+/** logos: left and right, in the header row (top) or the bottom band (above the ticker) */
+function drawLogos(ctx, L, fr, u) {
+  const s = L.style, place = s.logoPlace || 'top';
+  const bandH = fr.h * 0.085;
+  const yc = place === 'bottom' ? fr.y + fr.h - (s.tickerOn ? fr.h * 0.058 : 0) - bandH / 2 - 4 * u : fr.y + bandH / 2;
+  const one = (id, key, sizeKey, left) => {
+    const lg = id && imageFor(id);
+    if (!lg?.ready) { lg?.p?.then(() => lastMapRepaint()); return; }
+    const k = (+s[sizeKey] || 1) * (s[`size_${key}`]?.w || 1);
+    const lh = bandH * 0.62 * k, lw = Math.min(lh * (lg.w / lg.h), fr.w * 0.3), lhh = lw * (lg.h / lg.w);
+    let x = left ? fr.x + fr.w * 0.03 : fr.x + fr.w * 0.97 - lw;
+    if (!left && place === 'top' && s.header) { ctx.font = `700 ${8.5 * u}px ${SANS}`; x -= ctx.measureText(String(s.kicker || 'Geospatial intelligence briefing').toUpperCase()).width * 1.2 + 16 * u; }
+    const y = yc - lhh / 2;
+    ctx.save(); placeAt(ctx, L, fr, x, y, lw, lhh, { key, resize: true, uniform: true }); ctx.drawImage(lg.bmp, x, y, lw, lhh); ctx.restore();
+  };
+  one(s.logo, 'logo', 'logoSize', true);
+  one(s.logo2, 'logo2', 'logo2Size', false);
+}
+function headerBar(ctx, L, fr, u, acc, k, scene) {
   const s = L.style, h = fr.h * 0.085, y = fr.y;
   ctx.save(); ctx.globalAlpha *= k;
   const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(3,8,16,0.96)'); g.addColorStop(1, 'rgba(5,12,24,0.92)');
@@ -440,17 +464,9 @@ function headerBar(ctx, L, fr, u, acc, k) {
   ctx.strokeStyle = ag; ctx.lineWidth = 2 * u; ctx.shadowColor = acc; ctx.shadowBlur = 14 * u;
   ctx.beginPath(); ctx.ellipse(cx, y + h * 0.15, fr.w * 0.3, h * 0.95, 0, 0.05 * Math.PI, 0.95 * Math.PI); ctx.stroke();
   ctx.restore();
-  // left: logo + organisation
+  // left: organisation (moves right of the logo when the logo sits in the header row)
   let lx = fr.x + fr.w * 0.03;
-  const lg = s.logo && imageFor(s.logo);
-  if (lg?.ready && !s.off_logo) {
-    const k = (+s.logoSize || 1) * (s.size_logo?.w || 1);
-    const lh = h * 0.62 * k, lw = Math.min(lh * (lg.w / lg.h), fr.w * 0.3), lhh = lw * (lg.h / lg.w);
-    const ly = y + (h - lhh) / 2 - 1 * u;
-    ctx.save(); placeAt(ctx, L, fr, lx, ly, lw, lhh, { key: 'logo', resize: true, uniform: true }); ctx.drawImage(lg.bmp, lx, ly, lw, lhh); ctx.restore();
-    if (!s.pos_logo) lx += lw + 12 * u;
-  }
-  else lg?.p?.then(() => lastMapRepaint());
+  if (s.logo && (s.logoPlace || 'top') === 'top' && logosShown(L, scene)) { const lg = imageFor(s.logo); if (lg?.ready && !s.pos_logo) { const lh = h * 0.62 * (+s.logoSize || 1) * (s.size_logo?.w || 1); lx += Math.min(lh * (lg.w / lg.h), fr.w * 0.3) + 12 * u; } }
   caps(ctx, s.org || '', lx, y + h * 0.42, 10 * u, '#fff', 800, 0.08);
   ctx.font = `500 ${9 * u}px ${SANS}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'left'; ctx.fillText(s.unit || '', lx, y + h * 0.7);
   ctx.fillStyle = acc; ctx.fillRect(lx - 4 * u, y + h - 2 * u, 110 * u, 2 * u);
@@ -467,15 +483,6 @@ function headerBar(ctx, L, fr, u, acc, k) {
   ctx.font = `500 ${8.5 * u}px ${MONO}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'right';
   ctx.fillText(`BRIEFING${s.date ? ` · ${String(s.date).toUpperCase()}` : ''}`, rx, y + h * 0.7);
   ctx.fillStyle = acc; ctx.fillRect(rx - 106 * u, y + h - 2 * u, 110 * u, 2 * u);
-  const lg2 = s.logo2 && imageFor(s.logo2);
-  if (lg2?.ready && !s.off_logo2) {
-    ctx.font = `700 ${8.5 * u}px ${SANS}`;
-    const kw = ctx.measureText(String(s.kicker || 'Geospatial intelligence briefing').toUpperCase()).width * 1.2;
-    const k = (+s.logo2Size || 1) * (s.size_logo2?.w || 1);
-    const lh = h * 0.62 * k, lw = Math.min(lh * (lg2.w / lg2.h), fr.w * 0.3), lhh = lw * (lg2.h / lg2.w);
-    const x2 = rx - kw - 16 * u - lw, y2 = y + (h - lhh) / 2 - 1 * u;
-    ctx.save(); placeAt(ctx, L, fr, x2, y2, lw, lhh, { key: 'logo2', resize: true, uniform: true }); ctx.drawImage(lg2.bmp, x2, y2, lw, lhh); ctx.restore();
-  } else lg2?.p?.then(() => lastMapRepaint());
   ctx.restore();
 }
 let repaintMap = null;
@@ -552,8 +559,9 @@ export function drawBriefing(ctx, L, tm, o) {
   const s = L.style, u = fr.w / 1000, acc = s.accent || '#35c8ff';
   const k = tm.edit || L.anim === 'none' ? 1 : easeOut(clamp(tm.tau / 0.5, 0, 1));
   ctx.save(); ctx.globalAlpha *= tm.alpha;
-  if (s.header) headerBar(ctx, L, fr, u, acc, k);
-  if (s.tickerOn) tickerBar(ctx, L, fr, u, acc, k, o.time || 0);
+  if (s.header && partOn(s, 'header')) headerBar(ctx, L, fr, u, acc, k, o.scene);
+  if (s.tickerOn && partOn(s, 'ticker')) tickerBar(ctx, L, fr, u, acc, k, o.time || 0);
+  if ((s.logo || s.logo2) && partOn(s, 'logos')) { ctx.save(); ctx.globalAlpha *= tm.alpha * k; drawLogos(ctx, L, fr, u); ctx.restore(); }
   ctx.restore();
   [DISP, SANS, MONO, GLOBE_LOOK] = keep;
 }
@@ -586,7 +594,7 @@ function drawFrameBody(ctx, L, tm, o) {
   const sizeOf = (key) => ({ w: 1, h: 1, ...(s[`size_${key}`] || {}) });
   const sizeBox = (key, b) => { const S = sizeOf(key); return [b[0], b[1], b[2] * S.w, b[3] * S.h]; };
   const at = (key, b, box = false) => {
-    if (s[`off_${key}`]) { ctx.globalAlpha = 0; return [0, 0]; }
+    if (!partOn(s, key)) { ctx.globalAlpha = 0; return [0, 0]; }
     if (box) return placeAt(ctx, L, fr, b[0], b[1], b[2], b[3], { key, resize: true });
     const k = sizeOf(key).w;
     const r = placeAt(ctx, L, fr, b[0], b[1], b[2] * k, b[3] * k, { key, resize: true, uniform: true });
@@ -595,9 +603,12 @@ function drawFrameBody(ctx, L, tm, o) {
   };
   // ---- background chrome with the window cut out
   let win = Bx.win ? sizeBox('win', P(Bx.win)) : null;
-  if (win) { ctx.save(); const [wdx, wdy] = placeAt(ctx, L, fr, win[0], win[1], win[2], win[3], { key: 'win', resize: true, edge: true }); ctx.restore(); win = [win[0] + wdx, win[1] + wdy, win[2], win[3]]; }
+  if (win) {
+    if (!s.only || s.only === 'frame' || s.only === 'background') { ctx.save(); const [wdx, wdy] = placeAt(ctx, L, fr, win[0], win[1], win[2], win[3], { key: 'win', resize: true, edge: true }); ctx.restore(); win = [win[0] + wdx, win[1] + wdy, win[2], win[3]]; }
+    else if (s.pos_win) { const c = s.pos_win; win = [fr.x + c.x * fr.w - win[2] / 2, fr.y + c.y * fr.h - win[3] / 2, win[2], win[3]]; }
+  }
   const TH = BR_THEMES[s.theme] || BR_THEMES.navy;
-  const bgOn = !s.off_background;
+  const bgOn = partOn(s, 'background');
   if (bgOn) {
   ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h);
   if (win) rrAdd(ctx, win[0], win[1], win[2], win[3], 6 * u);
@@ -614,7 +625,7 @@ function drawFrameBody(ctx, L, tm, o) {
   // top hairline under the logo band
   if (!s.header) { ctx.strokeStyle = hexA(acc, 0.18); ctx.beginPath(); ctx.moveTo(fr.x + 0.03 * fr.w, fr.y + 0.15 * fr.h); ctx.lineTo(fr.x + 0.97 * fr.w, fr.y + 0.15 * fr.h); ctx.stroke(); }
   ctx.restore();
-  if (win && !s.off_frame) {
+  if (win && partOn(s, 'frame')) {
     ctx.strokeStyle = hexA(acc, 0.5); ctx.lineWidth = 1.2 * u; rr(ctx, win[0], win[1], win[2], win[3], 6 * u); ctx.stroke();
     brackets(ctx, win[0] - 3 * u, win[1] - 3 * u, win[2] + 6 * u, win[3] + 6 * u, u, acc, 18);
     // inner vignette
@@ -631,7 +642,7 @@ function drawFrameBody(ctx, L, tm, o) {
     // ---- intro: the title over the curve of a big globe
     const cx = fr.x + fr.w / 2;
     const R = fr.w * 0.42, gy = fr.y + fr.h * 1.02 + R * 0.35;
-    ctx.save(); ctx.globalAlpha *= stage(0); if (s.off_introGlobe) ctx.globalAlpha = 0;
+    ctx.save(); ctx.globalAlpha *= stage(0); if (!partOn(s, 'introGlobe')) ctx.globalAlpha = 0;
     const glow = ctx.createRadialGradient(cx, gy, R * 0.9, cx, gy, R * 1.12);
     glow.addColorStop(0, hexA(acc, 0.28)); glow.addColorStop(1, hexA(acc, 0)); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, gy, R * 1.12, 0, Math.PI * 2); ctx.fill();
     const G = ll && globeImage(ll[0], clamp(ll[1] - 28, -60, 60), Math.round(R / 8) * 8, '', acc);
@@ -717,7 +728,7 @@ function drawFrameBody(ctx, L, tm, o) {
     ctx.restore();
     // map inset
     ctx.save(); ctx.globalAlpha *= stage(1);
-    caps(ctx, s.locatorTitle && s.locatorTitle !== 'Location' ? s.locatorTitle : 'Location', win[0] + win[2] - 10 * u, win[1] + 18 * u, 9 * u, acc, 700, 0.2, 'right');
+    if (partOn(s, 'frame')) caps(ctx, s.locatorTitle && s.locatorTitle !== 'Location' ? s.locatorTitle : 'Location', win[0] + win[2] - 10 * u, win[1] + 18 * u, 9 * u, acc, 700, 0.2, 'right');
     if (s.windowTag !== false) placeTag(ctx, L, o, win[0] + 10 * u, win[1] + win[3] - 56 * u, u, acc);
     ctx.restore();
     // caption panel
@@ -746,7 +757,7 @@ function drawFrameBody(ctx, L, tm, o) {
   if (Bx.full) {
     // ---- full view: the map fills the frame; title block, mini globe and before / after sit over it
     const [wx, wy, ww, wh] = win;
-    ctx.save(); rr(ctx, wx, wy, ww, wh, 6 * u); ctx.clip();
+    ctx.save(); rr(ctx, wx, wy, ww, wh, 6 * u); ctx.clip(); if (!partOn(s, 'titleBlock')) ctx.globalAlpha = 0;
     const fade = ctx.createLinearGradient(0, wy + wh * 0.45, 0, wy + wh);
     fade.addColorStop(0, 'rgba(3,9,18,0)'); fade.addColorStop(1, 'rgba(3,9,18,0.88)');
     ctx.fillStyle = fade; ctx.fillRect(wx, wy + wh * 0.45, ww, wh * 0.55);
@@ -830,7 +841,7 @@ function drawFrameBody(ctx, L, tm, o) {
   if (Bx.portrait || s.layout === 'B') {
     // ---- header title
     const hb = P(Bx.header || Bx.title);
-    ctx.save(); ctx.globalAlpha *= stage(0); at('header', hb);
+    ctx.save(); ctx.globalAlpha *= stage(0); at('heading', hb);
     const [t1, sz] = fitFont(ctx, title.toUpperCase(), hb[2] * (Bx.portrait || s.header ? 1 : 0.62), (Bx.portrait ? 30 : 34) * u, 900, DISP, 0.45);
     ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t1, hb[0], hb[1] + sz * 1.0);
     if (sub) { ctx.font = `500 ${14 * u}px ${SANS}`; ctx.fillStyle = hexA(acc, 0.95); ctx.fillText(sub, hb[0], hb[1] + sz * 1.0 + 22 * u); }
@@ -1038,7 +1049,7 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
     const boxes = layoutBoxes(layout, aspect, !!(S.before || S.after || S.beforeMedia || S.afterMedia || S.photos?.length), { header: S.header, ticker: S.tickerOn });
     if (boxes.win && sc.camera?.keys?.length) sc.camera.keys = sc.camera.keys.map((key) => ({ ...key, view: viewIntoWindow(key.view, boxes.win, aspect) }));
     if (layout === 'end') { sc.look.grade = { preset: 'custom', brightness: 0.35, contrast: 1.1, saturation: 0.3, warmth: -0.3, fade: 0 }; }
-    sc.layers.unshift(lay);
+    sc.layers.unshift(...splitBriefing(lay));
   }
   story.brand = { ...(story.brand || {}), lower: false };
   if (info.geobrief) {
@@ -1049,7 +1060,7 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
     sc.camera = JSON.parse(JSON.stringify(first?.camera || sc.camera));
     if (sc.camera.mode === 'keyframes' && sc.camera.keys?.length) sc.camera.keys = [{ ...sc.camera.keys[0], t: 0 }, { ...sc.camera.keys[0], t: 5 }];
     sc.stillStart = 0; sc.stillEnd = 0.5;
-    sc.layers = [mk('intro')];
+    sc.layers = splitBriefing(mk('intro'));
     sc.transition = 'dissolve'; sc.transitionSeconds = 0.8;
     story.scenes.unshift(sc);
   }
@@ -1064,4 +1075,24 @@ export function newBriefingLayer(layout = 'A', style = {}, ll = null) {
     style: { ...JSON.parse(JSON.stringify(BR_DEFAULTS.briefing.style)), layout, ...style },
   };
 }
+/** Splits a whole briefing frame into one layer per part, so each part can be selected, hidden or deleted on its own. */
+export function splitBriefing(F) {
+  const S = F.style, lay = S.layout || 'A';
+  const list = [['background', 'Background']];
+  if (lay !== 'intro' && lay !== 'end') list.push(['frame', lay === 'photos' ? 'Map inset frame' : 'Map window frame']);
+  list.push(...(BR_PARTS[lay] || BR_PARTS.A).filter(([k]) => !S[`off_${k}`]));
+  if (S.header) list.push(['header', 'Header bar']);
+  list.push(['logos', 'Logos']);
+  if (S.tickerOn) list.push(['ticker', 'Breaking ticker']);
+  return list.map(([k, n]) => {
+    const c = JSON.parse(JSON.stringify(F));
+    c.id = `brief_${Math.random().toString(36).slice(2, 9)}`;
+    c.name = `Briefing · ${n}`;
+    c.style.only = k;
+    for (const key of Object.keys(c.style)) if (key.startsWith('off_')) delete c.style[key];
+    return c;
+  });
+}
+/** A briefing layout as separate layers. */
+export const briefingLayers = (layout = 'A', style = {}, ll = null) => splitBriefing(newBriefingLayer(layout, style, ll));
 export { CUSTOM_POS };

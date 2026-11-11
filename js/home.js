@@ -1,5 +1,5 @@
 // Home page: create/open projects, the list of saved projects, and the live demo.
-import { newBriefingLayer } from './briefing.js';
+import { briefingLayers } from './briefing.js';
 import { defaultBrand } from './branding.js';
 import { newScene } from './scene.js';
 import { listProjects, saveProject, deleteProject, newProject, normalizeProject, demoProject, projectFileJSON, importProjectMedia } from './store.js';
@@ -127,10 +127,10 @@ export function createHome({ open }) {
         p.scenes = plan.map(([name, lay, sec], i) => {
           const sc = i ? newScene(name, p.scenes[0].look) : Object.assign(p.scenes[0], { name });
           sc.lineSeconds = sec; sc.stillStart = 0; sc.stillEnd = Math.max(1, sec - 1.2);
-          sc.layers = [newBriefingLayer(lay, common)];
+          sc.layers = briefingLayers(lay, common);
           return sc;
         });
-      } else { p.scenes[0].layers.push(newBriefingLayer(layout, common)); p.scenes[0].stillStart = 0; p.scenes[0].stillEnd = 7; }
+      } else { p.scenes[0].layers.push(...briefingLayers(layout, common)); p.scenes[0].stillStart = 0; p.scenes[0].stillEnd = 7; }
     }
     await saveProject(p);
     $('#create-name').value = '';

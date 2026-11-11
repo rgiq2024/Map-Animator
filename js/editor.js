@@ -60,7 +60,7 @@ import { TwinCity } from './twin.js';
 import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
-import { BR_SHARED, BR_PARTS, newBriefingLayer } from './briefing.js';
+import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers } from './briefing.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -605,6 +605,7 @@ export function createEditor() {
         const kw = Math.max(0.25, (box.w + p[0] - p0[0]) / box.w), kh = Math.max(0.25, (box.h + p[1] - p0[1]) / box.h);
         const ns = box.uniform ? { w: +(sz0.w * kw).toFixed(3), h: +(sz0.w * kw).toFixed(3) } : { w: +(sz0.w * kw).toFixed(3), h: +(sz0.h * kh).toFixed(3) };
         L.style[`size_${box.key}`] = ns;
+        if (L.kind === 'briefing' && box.key === 'win') syncBriefing(L, 'style.size_win');
         // keep the top-left corner where it was
         if (L.style[`pos_${box.key}`]) { const nw = box.w * (ns.w / sz0.w), nh = box.h * ((box.uniform ? ns.w : ns.h) / (box.uniform ? sz0.w : sz0.h)); L.style[`pos_${box.key}`] = { x: +((box.x + nw / 2 - fr.x) / fr.w).toFixed(4), y: +((box.y + nh / 2 - fr.y) / fr.h).toFixed(4) }; }
         repaint();
@@ -612,7 +613,7 @@ export function createEditor() {
       }
       const cx = box.lockX ? c0[0] : c0[0] + p[0] - p0[0], cy = box.lockY ? c0[1] : c0[1] + p[1] - p0[1];
       const np = { x: +clamp((cx - fr.x) / fr.w, 0, 1).toFixed(4), y: +clamp((cy - fr.y) / fr.h, 0, 1).toFixed(4) };
-      if (box.key) L.style[`pos_${box.key}`] = np;
+      if (box.key) { L.style[`pos_${box.key}`] = np; if (L.kind === 'briefing' && box.key === 'win') syncBriefing(L, 'style.pos_win'); }
       else { L.style.position = 'custom'; L.style.pos = np; }
       repaint();
     };
@@ -2197,6 +2198,9 @@ export function createEditor() {
           const sl = L.style.slides || [];
           h += `<h5>${label}</h5><ol class="frame-list">${sl.map((f, i) => `<li><span class="fr-n">${i + 1}</span><input data-b="slide:${i}:caption" value="${esc(f.caption || '')}" placeholder="Caption" title="Caption"><input data-b="slide:${i}:credit" value="${esc(f.credit || '')}" placeholder="Credit" title="Photo credit"><span><button class="mini" data-act="slUp" data-i="${i}" title="Earlier">↑</button><button class="mini" data-act="slDown" data-i="${i}" title="Later">↓</button><button class="mini" data-act="slDel" data-i="${i}" title="Remove">✕</button></span></li>`).join('') || '<li class="empty">No photos yet.</li>'}</ol><div class="btn-row"><button class="btn sm primary" data-act="addSlides">＋ Add photos…</button></div>`;
         }
+        else if (type === 'brsplit') {
+          h += `<div class="row"><span>${label}</span><button class="btn sm" data-act="brSplit">Split into layers</button></div>`;
+        }
         else if (type === 'brparts') {
           const parts = [...(BR_PARTS[L.style.layout || 'A'] || []), ...BR_PARTS.common];
           h += `<div class="field"><span>${label}</span><div class="br-parts">${parts.map(([k, n]) => `<label class="br-part"><input type="checkbox" data-act-input="brPart" data-k="${k}" ${L.style[`off_${k}`] ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div></div>`;
@@ -2704,6 +2708,28 @@ export function createEditor() {
     if (L?.kind !== 'briefing' || !key.startsWith('style.')) return;
     const f = key.slice(6);
     if (f === 'sync') { if (L.style.sync) for (const k of BR_SHARED) syncBriefing(L, `style.${k}`); return; }
+    if (f === 'layout' && L.style.only) {
+      // separate layers: rebuild the scene's parts for the new layout (same text and look)
+      const ls = scene().layers, idx = ls.findIndex((o) => o.kind === 'briefing');
+      const base = JSON.parse(JSON.stringify(L)); delete base.style.only;
+      for (const k of Object.keys(base.style)) if (k.startsWith('pos_') || k.startsWith('size_')) delete base.style[k];
+      const rest = ls.filter((o) => o.kind !== 'briefing');
+      rest.splice(Math.max(0, idx), 0, ...splitBriefing(base));
+      ls.splice(0, ls.length, ...rest);
+      setTimeout(() => { selectLayer(null); commitLayers(); toast('Layout changed — the parts were rebuilt as separate layers'); }, 0);
+      return;
+    }
+    const mates = (scene().layers || []).filter((o) => o !== L && o.kind === 'briefing');
+    if (f === 'layout' || /^(pos|size)_win$/.test(f)) { for (const o of mates) o.style[f] = JSON.parse(JSON.stringify(L.style[f] ?? null)); if (f === 'layout') return; }
+    if ((f === 'header' || f === 'tickerOn') && L.style[f]) {
+      // switching the header / ticker on adds its layer to scenes made of separate parts
+      const part = f === 'header' ? 'header' : 'ticker';
+      for (const sc of project.scenes) {
+        const fr = (sc.layers || []).filter((o) => o.kind === 'briefing');
+        if (fr.length && fr.some((o) => o.style.only) && !fr.some((o) => o.style.only === part)) { const c = JSON.parse(JSON.stringify(fr[0])); c.id = `brief_${Math.random().toString(36).slice(2, 9)}`; c.name = part === 'header' ? 'Briefing · Header bar' : 'Briefing · Breaking ticker'; c.style.only = part; c.style[f] = true; sc.layers.push(c); }
+      }
+      commitLayers();
+    }
     if (L.style.sync === false || !BR_SHARED.includes(f)) return;
     for (const sc of project.scenes) for (const o of sc.layers || []) if (o !== L && o.kind === 'briefing' && o.style.sync !== false) o.style[f] = JSON.parse(JSON.stringify(L.style[f] ?? null));
   }
@@ -3172,6 +3198,13 @@ export function createEditor() {
       if (a === 'slDel') sl.splice(i, 1);
       else { const j = a === 'slUp' ? i - 1 : i + 1; if (j >= 0 && j < sl.length) [sl[i], sl[j]] = [sl[j], sl[i]]; }
       renderLayerEditor(); commitLayers();
+    }
+    if (a === 'brSplit') {
+      pushUndo();
+      const ls = scene().layers, i = ls.indexOf(L);
+      const parts = splitBriefing(L);
+      ls.splice(i, 1, ...parts);
+      selectLayer(null); commitLayers(); toast(`${parts.length} separate layers — select, hide or delete any of them in the layer list`);
     }
     if (a === 'brHere') { const c = map.getCenter(); setBriefPoint(L, [c.lng, c.lat]); toast('Location set to the middle of the map'); }
     if (a === 'resetPos') { pushUndo(); for (const k of Object.keys(L.style)) if (k.startsWith('pos_') || k.startsWith('size_')) delete L.style[k]; renderLayerEditor(); repaint(); save(); toast('Panels back in their places'); }
@@ -4811,11 +4844,15 @@ export function createEditor() {
     // briefing projects: the new scene gets the same frame
     const frame = last.layers?.find((l) => l.kind === 'briefing' && l.style?.layout !== 'end') || (project.layout === 'briefing' && project.scenes.flatMap((x) => x.layers || []).find((l) => l.kind === 'briefing'));
     if (frame) {
-      const f = { ...JSON.parse(JSON.stringify(frame)), id: `brief_${Math.random().toString(36).slice(2, 9)}` };
-      if (briefLayout) { f.style.layout = briefLayout; for (const k of Object.keys(f.style)) if (k.startsWith('pos_')) delete f.style[k]; }
-      sc.layers.push(f);
-    } else if (briefLayout) sc.layers.push(newBriefingLayer(briefLayout, { title: project.name }));
-    if (briefLayout === 'photos') { const f = sc.layers.find((l) => l.kind === 'briefing'); if (f) f.style.slides ||= []; sc.stillEnd = Math.max(+sc.stillEnd || 0, 7); }
+      // same text and look; a chosen layout starts with fresh positions and one layer per part
+      const f = JSON.parse(JSON.stringify(frame));
+      delete f.style.only;
+      if (briefLayout) f.style.layout = briefLayout;
+      for (const k of Object.keys(f.style)) if (k.startsWith('pos_') || k.startsWith('size_') || k.startsWith('off_')) delete f.style[k];
+      if (briefLayout || frame.style.only) sc.layers.push(...splitBriefing(f));
+      else sc.layers.push({ ...f, id: `brief_${Math.random().toString(36).slice(2, 9)}` });
+    } else if (briefLayout) sc.layers.push(...briefingLayers(briefLayout, { title: project.name }));
+    if (briefLayout === 'photos') { for (const f of sc.layers) if (f.kind === 'briefing') f.style.slides ||= []; sc.stillEnd = Math.max(+sc.stillEnd || 0, 7); }
     if (briefLayout) sc.name = { intro: 'Intro', A: 'Analysis', B: 'Dashboard', full: 'Full view', photos: 'Photos', end: 'End' }[briefLayout] || sc.name;
     project.scenes.push(sc);
     selectScene(project.scenes.length - 1);
