@@ -2164,6 +2164,10 @@ export function createEditor() {
         else if (type === 'cities') {
           h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea><span class="cpick"><input type="search" data-cfind="${path}" data-fmt="${o || 'cities'}" placeholder="Find a city or place by name…"><button class="btn sm" data-act="cityFind" data-field="${path}" data-fmt="${o || 'cities'}">＋ Add</button></span></label>`;
         }
+        else if (type === 'slides') {
+          const sl = L.style.slides || [];
+          h += `<h5>${label}</h5><ol class="frame-list">${sl.map((f, i) => `<li><span class="fr-n">${i + 1}</span><input data-b="slide:${i}:caption" value="${esc(f.caption || '')}" placeholder="Caption" title="Caption"><input data-b="slide:${i}:credit" value="${esc(f.credit || '')}" placeholder="Credit" title="Photo credit"><span><button class="mini" data-act="slUp" data-i="${i}" title="Earlier">↑</button><button class="mini" data-act="slDown" data-i="${i}" title="Later">↓</button><button class="mini" data-act="slDel" data-i="${i}" title="Remove">✕</button></span></li>`).join('') || '<li class="empty">No photos yet.</li>'}</ol><div class="btn-row"><button class="btn sm primary" data-act="addSlides">＋ Add photos…</button></div>`;
+        }
         else if (type === 'resetpos') {
           h += `<div class="row"><span>${label}</span><button class="btn sm" data-act="resetPos">Reset</button></div>`;
         }
@@ -2669,6 +2673,7 @@ export function createEditor() {
     if (key === 'style.weight') v = +v;
     if (key.startsWith('geo:')) return;
     if (final) pushUndo();
+    if (key.startsWith('slide:')) { const [, i, f] = key.split(':'); const sl = L.style.slides?.[+i]; if (sl) sl[f] = v; repaint(); save(); return; }
     if (key.startsWith('frame:')) { const [, i, f] = key.split(':'); const fr = L.style.frames?.[+i]; if (fr) fr[f] = v; repaint(); save(); return; }
     setPath(L, key, v);
     syncBriefing(L, key);
@@ -3085,6 +3090,26 @@ export function createEditor() {
     const gv = L.kind === 'geovideo' ? videoFor(L.style.media) : null;
     const img = gv ? { ready: !!gv.el.videoWidth, w: gv.el.videoWidth, h: gv.el.videoHeight } : imageFor(L.style.media || L.style.frames?.[0]?.media);
     const geo = (nq) => { pushUndo(); L.geom = quadGeom(nq); renderLayerEditor(); repaint(); save(); };
+    if (a === 'addSlides') {
+      const inp = Object.assign(document.createElement('input'), { type: 'file', multiple: true, accept: 'image/*' });
+      inp.onchange = async () => {
+        const files = [...inp.files];
+        if (!files.length) return;
+        pushUndo();
+        for (const f of files) { const id = await storeImage(f); imageFor(id)?.p?.then(repaint); (L.style.slides ||= []).push({ media: id, caption: f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '), credit: '' }); }
+        // the scene runs long enough to show every photo
+        const need = L.style.slides.length * (+L.style.slideSec || 3) + 1;
+        const sc = scene(); if ((+sc.stillEnd || 0) < need) sc.stillEnd = need;
+        renderLayerEditor(); commitLayers(); toast(`${files.length} photo${files.length === 1 ? '' : 's'} added — the scene now runs ${Math.round(need + 1)} s`);
+      };
+      inp.click();
+    }
+    if ((a === 'slUp' || a === 'slDown' || a === 'slDel') && L.style.slides) {
+      const sl = L.style.slides, i = +btn.dataset.i; pushUndo();
+      if (a === 'slDel') sl.splice(i, 1);
+      else { const j = a === 'slUp' ? i - 1 : i + 1; if (j >= 0 && j < sl.length) [sl[i], sl[j]] = [sl[j], sl[i]]; }
+      renderLayerEditor(); commitLayers();
+    }
     if (a === 'resetPos') { pushUndo(); for (const k of Object.keys(L.style)) if (k.startsWith('pos_')) delete L.style[k]; renderLayerEditor(); repaint(); save(); toast('Panels back in their places'); }
     if (a === 'pickImg') { geoPick = { mode: 'field', id: L.id, field: btn.dataset.field }; $('#file-geoimg').click(); }
     if (a === 'addFrames') { geoPick = { mode: 'frames', id: L.id }; $('#file-geoimg').click(); }
@@ -4726,7 +4751,8 @@ export function createEditor() {
       if (briefLayout) { f.style.layout = briefLayout; for (const k of Object.keys(f.style)) if (k.startsWith('pos_')) delete f.style[k]; }
       sc.layers.push(f);
     } else if (briefLayout) sc.layers.push(newBriefingLayer(briefLayout, { title: project.name }));
-    if (briefLayout) sc.name = { intro: 'Intro', A: 'Analysis', B: 'Dashboard', full: 'Full view', end: 'End' }[briefLayout] || sc.name;
+    if (briefLayout === 'photos') { const f = sc.layers.find((l) => l.kind === 'briefing'); if (f) f.style.slides ||= []; sc.stillEnd = Math.max(+sc.stillEnd || 0, 7); }
+    if (briefLayout) sc.name = { intro: 'Intro', A: 'Analysis', B: 'Dashboard', full: 'Full view', photos: 'Photos', end: 'End' }[briefLayout] || sc.name;
     project.scenes.push(sc);
     selectScene(project.scenes.length - 1);
     setStep('route');

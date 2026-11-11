@@ -29,18 +29,24 @@ export const BR_DEFAULTS = {
     date: '', place: '', country: '', event: '', eventIcon: 'alert', assessment: '', coords: '', sources: '',
     accent: '#35c8ff', bg: '#050b14', globe: true, before: null, after: null, photos: [], thumbZoom: 15, windowTag: true, scale: true,
     beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', beforeZoom: 1, afterZoom: 1, beforeX: 0, beforeY: 0, afterX: 0, afterY: 0,
+    logo: '', logo2: '', slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'kenburns',
     header: false, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
   } },
 };
-const LAYOUTS = { intro: 'Intro — title over a globe', A: 'Analysis — globe + title left, before / after under the map', B: 'Dashboard — title, map, regional context, before / after, field strip', full: 'Full view — map full frame, title block, mini globe', end: 'Closing card' };
+const LAYOUTS = { intro: 'Intro — title over a globe', A: 'Analysis — globe + title left, before / after under the map', B: 'Dashboard — title, map, regional context, before / after, field strip', full: 'Full view — map full frame, title block, mini globe', photos: 'Photos — photo slideshow with captions and a map inset', end: 'Closing card' };
 const ICONS = { alert: 'Alert', train: 'Train', flood: 'Flood', fire: 'Fire', quake: 'Earthquake', storm: 'Storm', plane: 'Plane', ship: 'Ship', car: 'Car', pin: 'Place', migration: 'People / migration', forest: 'Forest' };
 export const BR_FORMS = {
   briefmark: [['style.text', 'Label', 'text'], ['style.sub', 'Second line', 'text'], ['style.dx', 'Label offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Label offset ↑↓', 'range', [-400, 400, 1]], ['style.accent', 'Colour', 'color'], ['style.ring', 'Pulsing ring', 'switch'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
   briefing: [
     ['style.layout', 'Layout', 'select', LAYOUTS],
     ['style.sync', 'Same text on every scene', 'switch'],
+    ['style.slides', 'Photos (slideshow)', 'slides', null, (L) => L.style.layout === 'photos'],
+    ['style.slideSec', 'Seconds per photo', 'range', [1, 10, 0.5], (L) => L.style.layout === 'photos'],
+    ['style.slideFx', 'Photo motion', 'select', { kenburns: 'Slow zoom (Ken Burns)', fade: 'Cross-fade only', slide: 'Slide across' }, (L) => L.style.layout === 'photos'],
+    ['style.slideTitle', 'Photos — panel title', 'text', null, (L) => L.style.layout === 'photos'],
     ['style.header', 'Header bar (organisation · brand · briefing)', 'switch'],
+    ['style.logo', 'Logo (left of the header)', 'image', null, (L) => L.style.header], ['style.logo2', 'Second logo (right of the header)', 'image', null, (L) => L.style.header],
     ['style.org', 'Header — organisation', 'text', null, (L) => L.style.header], ['style.unit', 'Header — unit', 'text', null, (L) => L.style.header], ['style.brand', 'Header — centre title', 'text', null, (L) => L.style.header],
     ['style.tickerOn', 'Breaking ticker at the bottom', 'switch'],
     ['style.tickerLabel', 'Ticker — label', 'text', null, (L) => L.style.tickerOn], ['style.ticker', 'Ticker — items (one per line)', 'textarea', null, (L) => L.style.tickerOn],
@@ -67,7 +73,7 @@ export const BR_FORMS = {
 export const BR_SET = new Set(Object.keys(BR_KINDS));
 export const brPhases = () => ['captions'];
 /** text shared by every briefing frame of a project when “Same text on every scene” is on */
-export const BR_SHARED = ['title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
+export const BR_SHARED = ['logo', 'logo2', 'title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
 
 // ================================================================= geometry of the layouts (fractions of the frame)
 /** { win:[x,y,w,h], ... } in frame fractions for a layout and frame aspect (w / h). */
@@ -81,6 +87,7 @@ export function layoutBoxes(layout, aspect, hasThumbs = true, opt = {}) {
     return { portrait: true, top, bot, title: R(0.05, 0, 0.9, 0.1), win: R(0.04, 0.11, 0.92, hasThumbs ? 0.5 : 0.7), thumbs: hasThumbs ? [R(0.04, 0.63, 0.445, 0.17), R(0.515, 0.63, 0.445, 0.17)] : null, strip: R(0.04, 0.82, 0.92, 0.18), globe: null };
   }
   if (layout === 'B') return { top, bot, header: R(0.03, 0, 0.64, 0.12), win: R(0.03, 0.15, 0.64, 0.68), locator: R(0.69, 0, 0.28, 0.4), side: R(0.69, 0.43, 0.28, 0.4), strip: R(0.03, 0.865, 0.94, 0.135) };
+  if (layout === 'photos') return { photos: true, top, bot, slide: R(0.03, 0, 0.64, 0.82), strip: R(0.03, 0.85, 0.64, 0.15), win: R(0.69, 0, 0.28, 0.42), cap: R(0.69, 0.45, 0.28, 0.55) };
   if (layout === 'full') return { full: true, top, bot, win: R(0.02, 0, 0.96, 1), mini: [0.895, top + 0.17 * H, 0.062], titleBlock: R(0.05, 0.62, 0.55, 0.34), thumbs: hasThumbs ? [R(0.66, 0.66, 0.15, 0.28), R(0.82, 0.66, 0.15, 0.28)] : null };
   return { top, bot, left: R(0.03, 0, 0.265, 1), globe: [0.1625, top + 0.24 * H, 0.095], title: R(0.03, 0.5, 0.265, 0.2), info: R(0.03, 0.73, 0.265, 0.27), win: R(0.315, 0, 0.66, hasThumbs ? 0.6 : 1), thumbs: hasThumbs ? [R(0.315, 0.64, 0.31, 0.36), R(0.665, 0.64, 0.31, 0.36)] : null };
 }
@@ -389,8 +396,11 @@ function headerBar(ctx, L, fr, u, acc, k) {
   ctx.strokeStyle = ag; ctx.lineWidth = 2 * u; ctx.shadowColor = acc; ctx.shadowBlur = 14 * u;
   ctx.beginPath(); ctx.ellipse(cx, y + h * 0.15, fr.w * 0.3, h * 0.95, 0, 0.05 * Math.PI, 0.95 * Math.PI); ctx.stroke();
   ctx.restore();
-  // left: organisation
-  const lx = fr.x + fr.w * 0.03;
+  // left: logo + organisation
+  let lx = fr.x + fr.w * 0.03;
+  const lg = s.logo && imageFor(s.logo);
+  if (lg?.ready) { const lh = h * 0.62, lw = Math.min(lh * (lg.w / lg.h), fr.w * 0.14); ctx.drawImage(lg.bmp, lx, y + (h - lh) / 2 - 1 * u, lw, lw * (lg.h / lg.w)); lx += lw + 12 * u; }
+  else lg?.p?.then(() => lastMapRepaint());
   caps(ctx, s.org || '', lx, y + h * 0.42, 10 * u, '#fff', 800, 0.08);
   ctx.font = `500 ${9 * u}px ${SANS}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'left'; ctx.fillText(s.unit || '', lx, y + h * 0.7);
   ctx.fillStyle = acc; ctx.fillRect(lx - 4 * u, y + h - 2 * u, 110 * u, 2 * u);
@@ -407,8 +417,17 @@ function headerBar(ctx, L, fr, u, acc, k) {
   ctx.font = `500 ${8.5 * u}px ${MONO}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'right';
   ctx.fillText(`BRIEFING${s.date ? ` · ${String(s.date).toUpperCase()}` : ''}`, rx, y + h * 0.7);
   ctx.fillStyle = acc; ctx.fillRect(rx - 106 * u, y + h - 2 * u, 110 * u, 2 * u);
+  const lg2 = s.logo2 && imageFor(s.logo2);
+  if (lg2?.ready) {
+    ctx.font = `700 ${8.5 * u}px ${SANS}`;
+    const kw = ctx.measureText(String(s.kicker || 'Geospatial intelligence briefing').toUpperCase()).width * 1.2;
+    const lh = h * 0.62, lw = Math.min(lh * (lg2.w / lg2.h), fr.w * 0.14);
+    ctx.drawImage(lg2.bmp, rx - kw - 16 * u - lw, y + (h - lh) / 2 - 1 * u, lw, lw * (lg2.h / lg2.w));
+  } else lg2?.p?.then(() => lastMapRepaint());
   ctx.restore();
 }
+let repaintMap = null;
+const lastMapRepaint = () => repaintMap?.triggerRepaint?.();
 function tickerBar(ctx, L, fr, u, acc, k, t) {
   const s = L.style, h = fr.h * 0.058, y = fr.y + fr.h - h;
   const items = String(s.ticker || [s.title, s.sub, s.event].filter(Boolean).join('\n')).split(/\n|\|/).map((x) => x.trim()).filter(Boolean);
@@ -470,6 +489,7 @@ export function drawBriefing(ctx, L, tm, o) {
   if (L.kind === 'briefmark') return drawMark(ctx, L, tm, o);
   const fr = o.frame;
   if (!fr) return;
+  repaintMap = o.map || repaintMap;
   drawFrameBody(ctx, L, tm, o);
   const s = L.style, u = fr.w / 1000, acc = s.accent || '#35c8ff';
   const k = tm.edit || L.anim === 'none' ? 1 : easeOut(clamp(tm.tau / 0.5, 0, 1));
@@ -555,6 +575,93 @@ function drawFrameBody(ctx, L, tm, o) {
     const meta = [s.date, [s.place, s.country].filter(Boolean).join(', '), s.coords].filter(Boolean).join('   ·   ');
     if (meta) { ctx.font = `500 ${11 * u}px ${MONO}`; ctx.fillStyle = 'rgba(220,235,255,0.75)'; ctx.textAlign = 'center'; ctx.fillText(meta, cx, fr.y + fr.h * 0.2 + sz + 56 * u); }
     ctx.strokeStyle = acc; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(cx - 22 * u, fr.y + fr.h * 0.2 + sz + 70 * u); ctx.lineTo(cx + 22 * u, fr.y + fr.h * 0.2 + sz + 70 * u); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+    return;
+  }
+  if (Bx.photos) {
+    // ---- photo slideshow: big photo, thumbnail strip, map inset and caption panel
+    const slides = (s.slides || []).filter((x) => x?.media);
+    const per = Math.max(0.5, +s.slideSec || 3), T = Math.max(0, (o.time || 0) - (+L.start || 0) - 0.4);
+    const n = slides.length, idx = n ? Math.min(n - 1, Math.floor(T / per)) : 0, ph = n ? clamp((T - idx * per) / per, 0, 1) : 0;
+    const sb = P(Bx.slide);
+    // title over the photo
+    ctx.save(); ctx.globalAlpha *= stage(0); at('slide', sb);
+    ctx.save(); rr(ctx, sb[0], sb[1], sb[2], sb[3], 6 * u); ctx.fillStyle = '#060e1a'; ctx.fill(); ctx.clip();
+    const drawSlide = (sl, a, local) => {
+      const e = imageFor(sl.media);
+      if (!e?.ready) { e?.p?.then(() => lastMapRepaint()); return; }
+      ctx.save(); ctx.globalAlpha *= a;
+      const fx = s.slideFx || 'kenburns';
+      const z = fx === 'kenburns' ? 1.02 + local * 0.09 : 1;
+      const k0 = Math.max(sb[2] / e.w, sb[3] / e.h) * z, dw = e.w * k0, dh = e.h * k0;
+      let ox = sb[0] + (sb[2] - dw) / 2, oy = sb[1] + (sb[3] - dh) / 2;
+      if (fx === 'kenburns') { ox += (local - 0.5) * (dw - sb[2]) * 0.6 * (idxOf(sl) % 2 ? 1 : -1); }
+      if (fx === 'slide') ox += (1 - a) * sb[2] * 0.25;
+      ctx.drawImage(e.bmp, ox, oy, dw, dh);
+      ctx.restore();
+    };
+    const idxOf = (sl) => slides.indexOf(sl);
+    if (n) {
+      const fade = clamp(ph * per / 0.6, 0, 1);
+      if (idx > 0 && fade < 1) drawSlide(slides[idx - 1], 1, 1);
+      drawSlide(slides[idx], idx > 0 ? fade : 1, ph);
+      const g = ctx.createLinearGradient(0, sb[1] + sb[3] * 0.6, 0, sb[1] + sb[3]); g.addColorStop(0, 'rgba(3,9,18,0)'); g.addColorStop(1, 'rgba(3,9,18,0.85)');
+      ctx.fillStyle = g; ctx.fillRect(sb[0], sb[1] + sb[3] * 0.6, sb[2], sb[3] * 0.4);
+      const cap = slides[idx].caption || '';
+      if (cap) { const [ct] = fitFont(ctx, cap, sb[2] - 40 * u, 18 * u, 700, SANS); ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(ct, sb[0] + 20 * u, sb[1] + sb[3] - 22 * u); }
+      if (slides[idx].credit) { ctx.font = `500 ${9.5 * u}px ${MONO}`; ctx.fillStyle = 'rgba(220,235,255,0.75)'; ctx.textAlign = 'right'; ctx.fillText(slides[idx].credit, sb[0] + sb[2] - 14 * u, sb[1] + 20 * u); }
+      // progress bar
+      ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(sb[0], sb[1] + sb[3] - 3 * u, sb[2], 3 * u);
+      ctx.fillStyle = acc; ctx.fillRect(sb[0], sb[1] + sb[3] - 3 * u, sb[2] * ((idx + ph) / n), 3 * u);
+    } else { caps(ctx, 'Add photos in the frame settings', sb[0] + sb[2] / 2, sb[1] + sb[3] / 2, 13 * u, 'rgba(255,255,255,0.45)', 700, 0.15, 'center'); }
+    ctx.restore();
+    ctx.strokeStyle = hexA(acc, 0.5); ctx.lineWidth = 1.2 * u; rr(ctx, sb[0], sb[1], sb[2], sb[3], 6 * u); ctx.stroke();
+    brackets(ctx, sb[0] - 3 * u, sb[1] - 3 * u, sb[2] + 6 * u, sb[3] + 6 * u, u, acc, 18);
+    // counter chip
+    const cnt = `PHOTO ${String(Math.min(n, idx + 1)).padStart(2, '0')} / ${String(n).padStart(2, '0')}`;
+    ctx.font = `800 ${10.5 * u}px ${SANS}`; const cw = ctx.measureText(cnt).width + cnt.length * 1.05 * u + 20 * u;
+    ctx.fillStyle = 'rgba(4,10,18,0.85)'; rr(ctx, sb[0] + 14 * u, sb[1] + 14 * u, cw, 22 * u, 3 * u); ctx.fill(); ctx.strokeStyle = hexA(acc, 0.6); ctx.lineWidth = 1 * u; ctx.stroke();
+    caps(ctx, cnt, sb[0] + 24 * u, sb[1] + 29 * u, 10.5 * u, '#fff', 800, 0.1);
+    ctx.restore();
+    // thumbnail strip
+    const st = P(Bx.strip);
+    ctx.save(); ctx.globalAlpha *= stage(2); at('strip', st);
+    const m = Math.max(1, Math.min(8, n || 1)), gap = 8 * u, tw = (st[2] - gap * (m - 1)) / m, th = st[3] - 6 * u;
+    const first = n > 8 ? clamp(idx - 3, 0, n - 8) : 0;
+    for (let i = 0; i < m; i++) {
+      const j = first + i, x = st[0] + i * (tw + gap), y = st[1] + 6 * u;
+      ctx.save(); rr(ctx, x, y, tw, th, 4 * u); ctx.fillStyle = '#0b1522'; ctx.fill(); ctx.clip();
+      const e = slides[j] && imageFor(slides[j].media);
+      if (e?.ready) { const k0 = Math.max(tw / e.w, th / e.h); ctx.globalAlpha *= j === idx ? 1 : 0.55; ctx.drawImage(e.bmp, x + (tw - e.w * k0) / 2, y + (th - e.h * k0) / 2, e.w * k0, e.h * k0); }
+      ctx.restore();
+      ctx.strokeStyle = j === idx && n ? acc : hexA(acc, 0.25); ctx.lineWidth = (j === idx ? 2 : 1) * u; rr(ctx, x, y, tw, th, 4 * u); ctx.stroke();
+    }
+    ctx.restore();
+    // map inset
+    ctx.save(); ctx.globalAlpha *= stage(1);
+    caps(ctx, s.locatorTitle && s.locatorTitle !== 'Location' ? s.locatorTitle : 'Location', win[0] + win[2] - 10 * u, win[1] + 18 * u, 9 * u, acc, 700, 0.2, 'right');
+    if (s.windowTag !== false) placeTag(ctx, L, o, win[0] + 10 * u, win[1] + win[3] - 56 * u, u, acc);
+    ctx.restore();
+    // caption panel
+    const cb = P(Bx.cap);
+    ctx.save(); ctx.globalAlpha *= stage(3); at('caption', cb);
+    panel(ctx, cb[0], cb[1], cb[2], cb[3], u, acc);
+    caps(ctx, s.slideTitle || 'Photos from the site', cb[0] + 14 * u, cb[1] + 22 * u, 10 * u, acc, 700, 0.18);
+    ctx.font = `900 ${20 * u}px ${DISP}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+    const tl = wrap(ctx, title.toUpperCase(), cb[2] - 28 * u, 2); tl.forEach((l, i) => ctx.fillText(l, cb[0] + 14 * u, cb[1] + 50 * u + i * 23 * u));
+    let yy = cb[1] + 50 * u + tl.length * 23 * u + 6 * u;
+    if (sub) { ctx.font = `500 ${11.5 * u}px ${SANS}`; ctx.fillStyle = 'rgba(225,238,255,0.8)'; wrap(ctx, sub, cb[2] - 28 * u, 2).forEach((l) => { ctx.fillText(l, cb[0] + 14 * u, yy + 4 * u); yy += 15 * u; }); }
+    yy += 10 * u;
+    for (const [ic, lab, val] of fields.slice(0, 4)) {
+      if (yy > cb[1] + cb[3] - 26 * u) break;
+      ctx.strokeStyle = hexA(acc, 0.18); ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(cb[0] + 12 * u, yy); ctx.lineTo(cb[0] + cb[2] - 12 * u, yy); ctx.stroke();
+      icon(ctx, ic, cb[0] + 24 * u, yy + 18 * u, 15 * u, acc);
+      caps(ctx, lab, cb[0] + 42 * u, yy + 14 * u, 8 * u, acc, 700, 0.15);
+      const [vt] = fitFont(ctx, String(val).toUpperCase(), cb[2] - 56 * u, 11.5 * u, 700, SANS);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(vt, cb[0] + 42 * u, yy + 28 * u);
+      yy += 36 * u;
+    }
     ctx.restore();
     ctx.restore();
     return;
@@ -835,8 +942,12 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
     const extra = {};
     if (/photo/i.test(n)) {
       const media = sc.layers.filter((l) => l.kind === 'photocard' && l.style?.media).map((l) => ({ id: l.style.media, name: l.style.title }));
-      extra.photos = media;
-      if (media.length) sc.layers = sc.layers.filter((l) => l.kind !== 'photocard');
+      if (media.length) {
+        layout = 'photos';
+        extra.slides = media.map((m) => ({ media: m.id, caption: m.name || '', credit: '' }));
+        sc.layers = sc.layers.filter((l) => l.kind !== 'photocard');
+        sc.stillEnd = Math.max(+sc.stillEnd || 0, media.length * 3 + 1);
+      }
     }
     if (/before|pre & post|satellite/i.test(n)) {
       // the map window shows the imagery itself; the panels show both dates

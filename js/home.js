@@ -122,7 +122,7 @@ export function createHome({ open }) {
       if (layout === 'set') {
         // a whole briefing: intro, dashboard, analysis, full view and end card — same text on every scene
         Object.assign(common, { header: true, tickerOn: true, ticker: 'Geospatial assessment ongoing\nSatellite imagery under review', event: 'Event', assessment: 'Assessment' });
-        const plan = [['Intro', 'intro', 6], ['Dashboard', 'B', 9], ['Analysis', 'A', 9], ['Full view', 'full', 9], ['End', 'end', 5]];
+        const plan = [['Intro', 'intro', 6], ['Dashboard', 'B', 9], ['Analysis', 'A', 9], ['Full view', 'full', 9], ['Photos', 'photos', 10], ['End', 'end', 5]];
         p.brand = { ...p.brand, header: false }; // the briefing header replaces the logo strip (turn it back on under Brand)
         p.scenes = plan.map(([name, lay, sec], i) => {
           const sc = i ? newScene(name, p.scenes[0].look) : Object.assign(p.scenes[0], { name });
