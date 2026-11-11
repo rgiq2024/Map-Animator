@@ -10,7 +10,7 @@ export function defaultBrand() {
   const M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   return {
     v: 1,
-    header: true, logo: '', logoName: '', headerScale: 1,
+    header: true, logo: '', logoName: '', headerScale: 1, headerPlace: 'top', headerY: 0, lowerY: 0,
     lower: true,
     country: 'NEPAL', place: 'BUDHI GANDAKI RIVER', date: `${d.getDate()} - ${M[d.getMonth()]} - ${d.getFullYear()}`,
     ticker: 'Heavy rain upstream raises the level of water downstream | 5 people reported missing. | 96 people evacuated from riverside villages',
@@ -59,7 +59,10 @@ export function drawBranding(ctx, brand, frame, unit, t) {
       const k = clamp(+brand.headerScale || 1, 0.4, 2);
       const iw = im.width || im.naturalWidth, ih = im.height || im.naturalHeight;
       const dw = w * k, dh = dw * (ih / iw);
-      ctx.drawImage(im, x + (w - dw) / 2, y, dw, dh);
+      // top or bottom of the frame, then nudged up / down
+      let ly = brand.headerPlace === 'bottom' ? y + h - dh - (brand.lower ? h * 0.152 : 0) : y;
+      ly += (+brand.headerY || 0) * h;
+      ctx.drawImage(im, x + (w - dw) / 2, ly, dw, dh);
     }
   }
   if (brand.lower) {
@@ -67,7 +70,7 @@ export function drawBranding(ctx, brand, frame, unit, t) {
     const F = `"${brand.font || BRAND_FONT}", "Lexend", "Montserrat", "Inter", sans-serif`;
     const r1 = Math.round(h * 0.088), r2 = Math.round(h * 0.064);
     const slide = brand.animate === false ? 1 : easeOut(t / 0.7);
-    const top = Math.round(y + h - (r1 + r2) * slide);
+    const top = Math.round(y + h - (r1 + r2) * slide - (+brand.lowerY || 0) * h);
     const bw = Math.round(w * 0.067), bx = x + w - bw;
     // one white backing under both rows (no seam between them)
     ctx.fillStyle = '#ffffff'; ctx.fillRect(x, top, w, r1 + r2 + 2);

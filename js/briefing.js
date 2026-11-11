@@ -36,7 +36,7 @@ export const BR_DEFAULTS = {
     accent: '#35c8ff', bg: '#050b14', globe: true, before: null, after: null, photos: [], thumbZoom: 15, windowTag: true, scale: true,
     beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', beforeZoom: 1, afterZoom: 1, beforeX: 0, beforeY: 0, afterX: 0, afterY: 0,
     theme: 'navy', logo: '', logo2: '', logoSize: 1, logo2Size: 1, logoPlace: 'top', slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'kenburns',
-    header: false, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
+    header: false, headerOrg: true, headerBrand: true, headerRight: true, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
   } },
 };
@@ -59,7 +59,8 @@ export const BR_FORMS = {
     ['style.logo', 'Logo (left)', 'image'], ['style.logoSize', 'Logo — size', 'range', [0.3, 4, 0.05], (L) => !!L.style.logo],
     ['style.logo2', 'Second logo (right)', 'image'],
     ['style.logoPlace', 'Logos — place', 'select', { top: 'Top (header row)', bottom: 'Bottom (above the ticker)' }, (L) => L.style.logo || L.style.logo2], ['style.logo2Size', 'Second logo — size', 'range', [0.3, 4, 0.05], (L) => !!L.style.logo2],
-    ['style.org', 'Header — organisation', 'text', null, (L) => L.style.header], ['style.unit', 'Header — unit', 'text', null, (L) => L.style.header], ['style.brand', 'Header — centre title', 'text', null, (L) => L.style.header],
+    ['style.headerOrg', 'Header — show organisation text', 'switch', null, (L) => L.style.header], ['style.headerBrand', 'Header — show centre title', 'switch', null, (L) => L.style.header], ['style.headerRight', 'Header — show briefing line (right)', 'switch', null, (L) => L.style.header],
+    ['style.org', 'Header — organisation', 'text', null, (L) => L.style.header && L.style.headerOrg !== false], ['style.unit', 'Header — unit', 'text', null, (L) => L.style.header], ['style.brand', 'Header — centre title', 'text', null, (L) => L.style.header],
     ['style.tickerOn', 'Breaking ticker at the bottom', 'switch'],
     ['style.tickerLabel', 'Ticker — label', 'text', null, (L) => L.style.tickerOn], ['style.ticker', 'Ticker — items (one per line)', 'textarea', null, (L) => L.style.tickerOn],
     ['style.north', 'North arrow', 'switch', null, (L) => L.style.layout === 'B' || L.style.layout === 'full'],
@@ -95,7 +96,7 @@ export const BR_PARTS = {
   photos: [['slide', 'Photo'], ['strip', 'Thumbnails'], ['caption', 'Caption panel'], ['tag', 'Place label']],
   end: [['endTitle', 'Title'], ['endFields', 'Fields'], ['endSources', 'Sources']],
 };
-export const BR_SHARED = ['theme', 'logoPlace', 'logo', 'logo2', 'logoSize', 'logo2Size', 'title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
+export const BR_SHARED = ['headerOrg', 'headerBrand', 'headerRight', 'theme', 'logoPlace', 'logo', 'logo2', 'logoSize', 'logo2Size', 'title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
 
 // ================================================================= geometry of the layouts (fractions of the frame)
 /** { win:[x,y,w,h], ... } in frame fractions for a layout and frame aspect (w / h). */
@@ -467,21 +468,25 @@ function headerBar(ctx, L, fr, u, acc, k, scene) {
   // left: organisation (moves right of the logo when the logo sits in the header row)
   let lx = fr.x + fr.w * 0.03;
   if (s.logo && (s.logoPlace || 'top') === 'top' && logosShown(L, scene)) { const lg = imageFor(s.logo); if (lg?.ready && !s.pos_logo) { const lh = h * 0.62 * (+s.logoSize || 1) * (s.size_logo?.w || 1); lx += Math.min(lh * (lg.w / lg.h), fr.w * 0.3) + 12 * u; } }
+  if (s.headerOrg !== false) {
   caps(ctx, s.org || '', lx, y + h * 0.42, 10 * u, '#fff', 800, 0.08);
   ctx.font = `500 ${9 * u}px ${SANS}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'left'; ctx.fillText(s.unit || '', lx, y + h * 0.7);
+  }
   ctx.fillStyle = acc; ctx.fillRect(lx - 4 * u, y + h - 2 * u, 110 * u, 2 * u);
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.beginPath(); ctx.moveTo(lx + 128 * u, y + h * 0.25); ctx.lineTo(lx + 128 * u, y + h * 0.8); ctx.stroke();
+  if (s.headerOrg !== false) { ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.beginPath(); ctx.moveTo(lx + 128 * u, y + h * 0.25); ctx.lineTo(lx + 128 * u, y + h * 0.8); ctx.stroke(); }
   // centre: brand
   ctx.font = `800 ${19 * u}px ${DISP}`;
   try { ctx.letterSpacing = `${5 * u}px`; } catch { /* */ }
   ctx.fillStyle = '#eaf6ff'; ctx.textAlign = 'center'; ctx.shadowColor = hexA(acc, 0.6); ctx.shadowBlur = 10 * u;
-  ctx.fillText(String(s.brand || '').toUpperCase(), cx, y + h * 0.62);
+  if (s.headerBrand !== false) ctx.fillText(String(s.brand || '').toUpperCase(), cx, y + h * 0.62);
   ctx.shadowBlur = 0; try { ctx.letterSpacing = '0px'; } catch { /* */ }
   // right: briefing line
   const rx = fr.x + fr.w * 0.97;
+  if (s.headerRight !== false) {
   caps(ctx, s.kicker || 'Geospatial intelligence briefing', rx, y + h * 0.42, 8.5 * u, acc, 700, 0.2, 'right');
   ctx.font = `500 ${8.5 * u}px ${MONO}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'right';
   ctx.fillText(`BRIEFING${s.date ? ` · ${String(s.date).toUpperCase()}` : ''}`, rx, y + h * 0.7);
+  }
   ctx.fillStyle = acc; ctx.fillRect(rx - 106 * u, y + h - 2 * u, 110 * u, 2 * u);
   ctx.restore();
 }
