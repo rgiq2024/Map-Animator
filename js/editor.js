@@ -325,7 +325,14 @@ export function createEditor() {
       // layers with several draggable panels (keys) show every panel's outline
       const mine = hits.boxes.filter((q) => q.id === selLayer);
       const show = mine.some((q) => q.key) ? mine.filter((q) => q.key) : mine.slice(-1);
-      if (show.length) { octx.save(); octx.setLineDash([6 * px, 4 * px]); octx.strokeStyle = '#2d7ff9'; octx.lineWidth = 1.5 * px; octx.globalAlpha = show.length > 1 ? 0.7 : 1; for (const b of show) octx.strokeRect(b.x - 4 * px, b.y - 4 * px, b.w + 8 * px, b.h + 8 * px); octx.restore(); }
+      if (show.length) {
+        octx.save(); octx.setLineDash([6 * px, 4 * px]); octx.strokeStyle = '#2d7ff9'; octx.lineWidth = 1.5 * px; octx.globalAlpha = show.length > 1 ? 0.7 : 1;
+        for (const b of show) octx.strokeRect(b.x - 4 * px, b.y - 4 * px, b.w + 8 * px, b.h + 8 * px);
+        // resize handles
+        octx.setLineDash([]); octx.globalAlpha = 1; octx.fillStyle = '#ffffff';
+        for (const b of show) if (b.resize) { octx.fillRect(b.x + b.w - 5 * px, b.y + b.h - 5 * px, 10 * px, 10 * px); octx.strokeRect(b.x + b.w - 5 * px, b.y + b.h - 5 * px, 10 * px, 10 * px); }
+        octx.restore();
+      }
     }
     // dim everything outside the video frame
     octx.save();
@@ -558,9 +565,19 @@ export function createEditor() {
   /** On-screen element (caption, chart, text…) under canvas point p. */
   function hitBox(p) {
     const bs = hits.boxes || [];
+    const g = 10 * (overlay.width / stage.clientWidth);
+    // resize corners of the selected layer's panels first
     for (let i = bs.length - 1; i >= 0; i--) {
       const b = bs[i];
-      if (p[0] >= b.x - 4 && p[0] <= b.x + b.w + 4 && p[1] >= b.y - 4 && p[1] <= b.y + b.h + 4) return b;
+      if (b.resize && b.id === selLayer && Math.abs(p[0] - (b.x + b.w)) <= g && Math.abs(p[1] - (b.y + b.h)) <= g) return { ...b, corner: true };
+    }
+    for (let i = bs.length - 1; i >= 0; i--) {
+      const b = bs[i];
+      if (p[0] >= b.x - 4 && p[0] <= b.x + b.w + 4 && p[1] >= b.y - 4 && p[1] <= b.y + b.h + 4) {
+        // edge-only boxes (the map window) are grabbed by their border, so the map inside stays usable
+        if (b.edge && p[0] > b.x + g && p[0] < b.x + b.w - g && p[1] > b.y + g && p[1] < b.y + b.h - g) continue;
+        return b;
+      }
     }
     return null;
   }
@@ -574,6 +591,7 @@ export function createEditor() {
     const k = overlay.width / stage.clientWidth;
     const fr = { x: frame.x * k, y: frame.y * k, w: frame.w * k, h: frame.h * k };
     const c0 = [box.x + box.w / 2, box.y + box.h / 2];
+    const sz0 = { w: 1, h: 1, ...(L.style[`size_${box.key}`] || {}) };
     let moved = false;
     stage.classList.add('dragging');
     if (selLayer !== L.id) selectLayer(L.id);
@@ -581,6 +599,16 @@ export function createEditor() {
       const p = [(ev.clientX - rect.left) * k, (ev.clientY - rect.top) * k];
       if (!moved && Math.hypot(p[0] - p0[0], p[1] - p0[1]) < 3) return;
       moved = true;
+      if (box.corner) {
+        // resize from the bottom-right corner; the top-left stays put
+        const kw = Math.max(0.25, (box.w + p[0] - p0[0]) / box.w), kh = Math.max(0.25, (box.h + p[1] - p0[1]) / box.h);
+        const ns = box.uniform ? { w: +(sz0.w * kw).toFixed(3), h: +(sz0.w * kw).toFixed(3) } : { w: +(sz0.w * kw).toFixed(3), h: +(sz0.h * kh).toFixed(3) };
+        L.style[`size_${box.key}`] = ns;
+        // keep the top-left corner where it was
+        if (L.style[`pos_${box.key}`]) { const nw = box.w * (ns.w / sz0.w), nh = box.h * ((box.uniform ? ns.w : ns.h) / (box.uniform ? sz0.w : sz0.h)); L.style[`pos_${box.key}`] = { x: +((box.x + nw / 2 - fr.x) / fr.w).toFixed(4), y: +((box.y + nh / 2 - fr.y) / fr.h).toFixed(4) }; }
+        repaint();
+        return;
+      }
       const cx = box.lockX ? c0[0] : c0[0] + p[0] - p0[0], cy = box.lockY ? c0[1] : c0[1] + p[1] - p0[1];
       const np = { x: +clamp((cx - fr.x) / fr.w, 0, 1).toFixed(4), y: +clamp((cy - fr.y) / fr.h, 0, 1).toFixed(4) };
       if (box.key) L.style[`pos_${box.key}`] = np;
@@ -2168,6 +2196,10 @@ export function createEditor() {
           const sl = L.style.slides || [];
           h += `<h5>${label}</h5><ol class="frame-list">${sl.map((f, i) => `<li><span class="fr-n">${i + 1}</span><input data-b="slide:${i}:caption" value="${esc(f.caption || '')}" placeholder="Caption" title="Caption"><input data-b="slide:${i}:credit" value="${esc(f.credit || '')}" placeholder="Credit" title="Photo credit"><span><button class="mini" data-act="slUp" data-i="${i}" title="Earlier">↑</button><button class="mini" data-act="slDown" data-i="${i}" title="Later">↓</button><button class="mini" data-act="slDel" data-i="${i}" title="Remove">✕</button></span></li>`).join('') || '<li class="empty">No photos yet.</li>'}</ol><div class="btn-row"><button class="btn sm primary" data-act="addSlides">＋ Add photos…</button></div>`;
         }
+        else if (type === 'brhere') {
+          const c = L.geom?.coordinates;
+          h += `<div class="field"><span>${label}</span><div class="btn-row"><input data-act-input="brAt" value="${c ? `${c[1].toFixed(5)}, ${c[0].toFixed(5)}` : ''}" placeholder="lat, lon — e.g. 39.4134, -3.7151"><button class="btn sm" data-act="brHere" title="Use the middle of the map">◎ Map centre</button></div><small class="muted">${c ? 'Set — the globe and locator point here.' : 'Not set — the globe and locator follow the country, or the middle of the map.'}</small></div>`;
+        }
         else if (type === 'resetpos') {
           h += `<div class="row"><span>${label}</span><button class="btn sm" data-act="resetPos">Reset</button></div>`;
         }
@@ -2654,6 +2686,14 @@ export function createEditor() {
     return h;
   }
   let layerEditTimer = null;
+  /** Incident point of a briefing frame (and of every synced frame). */
+  function setBriefPoint(L, ll) {
+    pushUndo();
+    const g = ll ? { type: 'Point', coordinates: [+ll[0].toFixed(6), +ll[1].toFixed(6)] } : null;
+    L.geom = g;
+    if (L.style.sync !== false) for (const sc of project.scenes) for (const o of sc.layers || []) if (o.kind === 'briefing' && o.style.sync !== false) o.geom = g && JSON.parse(JSON.stringify(g));
+    renderLayerEditor(); commitLayers();
+  }
   /** Briefing frames with “Same text on every scene” share their text, dates, images and look across the project. */
   function syncBriefing(L, key) {
     if (L?.kind !== 'briefing' || !key.startsWith('style.')) return;
@@ -2706,6 +2746,17 @@ export function createEditor() {
     if (!k) return;
     const L = selLayer && layerById(selLayer);
     if (!L) return;
+    if (k === 'brAt') {
+      const m = String(e.target.value).match(/(-?\d+(?:\.\d+)?)\s*[°]?\s*([NS])?\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*[°]?\s*([EW])?/i);
+      if (!e.target.value.trim()) { setBriefPoint(L, null); return; }
+      if (!m) { toast('Type the location as “lat, lon”, e.g. 39.4134, -3.7151'); return; }
+      let lat = +m[1], lon = +m[3];
+      if (/s/i.test(m[2] || '')) lat = -Math.abs(lat);
+      if (/w/i.test(m[4] || '')) lon = -Math.abs(lon);
+      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) { toast('That is not a valid location'); return; }
+      setBriefPoint(L, [lon, lat]); toast('Location set');
+      return;
+    }
     pushUndo();
     if (k === 'untilEnd') {
       if (e.target.checked) { L.hold = 0; L.fadeOut = undefined; }
@@ -3110,7 +3161,8 @@ export function createEditor() {
       else { const j = a === 'slUp' ? i - 1 : i + 1; if (j >= 0 && j < sl.length) [sl[i], sl[j]] = [sl[j], sl[i]]; }
       renderLayerEditor(); commitLayers();
     }
-    if (a === 'resetPos') { pushUndo(); for (const k of Object.keys(L.style)) if (k.startsWith('pos_')) delete L.style[k]; renderLayerEditor(); repaint(); save(); toast('Panels back in their places'); }
+    if (a === 'brHere') { const c = map.getCenter(); setBriefPoint(L, [c.lng, c.lat]); toast('Location set to the middle of the map'); }
+    if (a === 'resetPos') { pushUndo(); for (const k of Object.keys(L.style)) if (k.startsWith('pos_') || k.startsWith('size_')) delete L.style[k]; renderLayerEditor(); repaint(); save(); toast('Panels back in their places'); }
     if (a === 'pickImg') { geoPick = { mode: 'field', id: L.id, field: btn.dataset.field }; $('#file-geoimg').click(); }
     if (a === 'addFrames') { geoPick = { mode: 'frames', id: L.id }; $('#file-geoimg').click(); }
     if (a === 'geoFit') geo(fitQuad(img?.ready ? img.h / img.w : 0.66));

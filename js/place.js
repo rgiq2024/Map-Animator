@@ -18,7 +18,7 @@ export function placeAt(ctx, L, frame, x, y, w, h, opts = {}) {
     if (!opts.lockY) dy = frame.y + pos.y * frame.h - (y + h / 2);
     ctx.translate(dx, dy);
   }
-  if (sink) sink.push({ id: L.id, key: opts.key || '', x: x + dx, y: y + dy, w, h, lockX: !!opts.lockX, lockY: !!opts.lockY });
+  if (sink) sink.push({ id: L.id, key: opts.key || '', x: x + dx, y: y + dy, w, h, lockX: !!opts.lockX, lockY: !!opts.lockY, resize: !!opts.resize, uniform: !!opts.uniform, edge: !!opts.edge });
   return [dx, dy];
 }
 export const CUSTOM_POS = { custom: 'Anywhere (drag it on the video)' };

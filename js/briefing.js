@@ -29,7 +29,7 @@ export const BR_DEFAULTS = {
     date: '', place: '', country: '', event: '', eventIcon: 'alert', assessment: '', coords: '', sources: '',
     accent: '#35c8ff', bg: '#050b14', globe: true, before: null, after: null, photos: [], thumbZoom: 15, windowTag: true, scale: true,
     beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', beforeZoom: 1, afterZoom: 1, beforeX: 0, beforeY: 0, afterX: 0, afterY: 0,
-    logo: '', logo2: '', slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'kenburns',
+    logo: '', logo2: '', logoSize: 1, logo2Size: 1, slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'kenburns',
     header: false, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
   } },
@@ -40,18 +40,20 @@ export const BR_FORMS = {
   briefmark: [['style.text', 'Label', 'text'], ['style.sub', 'Second line', 'text'], ['style.dx', 'Label offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Label offset ↑↓', 'range', [-400, 400, 1]], ['style.accent', 'Colour', 'color'], ['style.ring', 'Pulsing ring', 'switch'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
   briefing: [
     ['style.layout', 'Layout', 'select', LAYOUTS],
+    ['style._here', 'Incident location (globe, locator, place tag)', 'brhere'],
     ['style.sync', 'Same text on every scene', 'switch'],
     ['style.slides', 'Photos (slideshow)', 'slides', null, (L) => L.style.layout === 'photos'],
     ['style.slideSec', 'Seconds per photo', 'range', [1, 10, 0.5], (L) => L.style.layout === 'photos'],
     ['style.slideFx', 'Photo motion', 'select', { kenburns: 'Slow zoom (Ken Burns)', fade: 'Cross-fade only', slide: 'Slide across' }, (L) => L.style.layout === 'photos'],
     ['style.slideTitle', 'Photos — panel title', 'text', null, (L) => L.style.layout === 'photos'],
     ['style.header', 'Header bar (organisation · brand · briefing)', 'switch'],
-    ['style.logo', 'Logo (left of the header)', 'image', null, (L) => L.style.header], ['style.logo2', 'Second logo (right of the header)', 'image', null, (L) => L.style.header],
+    ['style.logo', 'Logo (left of the header)', 'image', null, (L) => L.style.header], ['style.logoSize', 'Logo — size', 'range', [0.3, 4, 0.05], (L) => L.style.header && L.style.logo],
+    ['style.logo2', 'Second logo (right of the header)', 'image', null, (L) => L.style.header], ['style.logo2Size', 'Second logo — size', 'range', [0.3, 4, 0.05], (L) => L.style.header && L.style.logo2],
     ['style.org', 'Header — organisation', 'text', null, (L) => L.style.header], ['style.unit', 'Header — unit', 'text', null, (L) => L.style.header], ['style.brand', 'Header — centre title', 'text', null, (L) => L.style.header],
     ['style.tickerOn', 'Breaking ticker at the bottom', 'switch'],
     ['style.tickerLabel', 'Ticker — label', 'text', null, (L) => L.style.tickerOn], ['style.ticker', 'Ticker — items (one per line)', 'textarea', null, (L) => L.style.tickerOn],
     ['style.north', 'North arrow', 'switch', null, (L) => L.style.layout === 'B' || L.style.layout === 'full'],
-    ['style._pos', 'Panels — drag them on the video to move', 'resetpos'],
+    ['style._pos', 'Panels — drag to move, drag the white corner to resize', 'resetpos'],
     ['style.title', 'Title', 'text'], ['style.sub', 'Subtitle', 'text'], ['style.kicker', 'Header line', 'text', null, (L) => L.style.layout !== 'A'],
     ['style.tag', 'Label on the map', 'text', null, (L) => L.style.layout !== 'end'],
     ['style.date', 'Date', 'text'], ['style.place', 'Place', 'text'], ['style.country', 'Country (globe / locator)', 'text'],
@@ -73,7 +75,7 @@ export const BR_FORMS = {
 export const BR_SET = new Set(Object.keys(BR_KINDS));
 export const brPhases = () => ['captions'];
 /** text shared by every briefing frame of a project when “Same text on every scene” is on */
-export const BR_SHARED = ['logo', 'logo2', 'title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
+export const BR_SHARED = ['logo', 'logo2', 'logoSize', 'logo2Size', 'title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
 
 // ================================================================= geometry of the layouts (fractions of the frame)
 /** { win:[x,y,w,h], ... } in frame fractions for a layout and frame aspect (w / h). */
@@ -260,7 +262,7 @@ function thumb(ctx, spec, ll, x, y, w, h, u, acc, label, o, defZoom) {
 function locator(ctx, ll, country, x, y, w, h, u, acc, place) {
   const C = allCountries();
   if (!C) return;
-  const c = (country && (countriesByName(country) || [])[0]) || (ll && countryAt(ll));
+  const c = (ll && countryAt(ll)) || (country && (countriesByName(country) || [])[0]);
   let box;
   if (c) {
     const big = c.polys.reduce((m, p) => (p[0].length > m[0].length ? p : m), c.polys[0]);
@@ -336,7 +338,8 @@ function windowTag(ctx, L, o, wx, wy, ww, wh, u, acc, align = 'right') {
 }
 function scaleBar(ctx, o, ll, x, y, u, acc, L) {
   if (!o.proj || !ll) return;
-  ctx.save(); const [sdx, sdy] = placeAt(ctx, L, o.frame, x - 8 * u, y - 18 * u, 200 * u, 30 * u, { key: 'scale' }); ctx.restore();
+  u *= L.style.size_scale?.w || 1;
+  ctx.save(); const [sdx, sdy] = placeAt(ctx, L, o.frame, x - 8 * u, y - 18 * u, 200 * u, 30 * u, { key: 'scale', resize: true, uniform: true }); ctx.restore();
   x += sdx; y += sdy;
   const a = o.proj(ll), b = o.proj([ll[0] + 0.01, ll[1]]);
   const pxPerM = Math.hypot(b[0] - a[0], b[1] - a[1]) / (0.01 * 111320 * Math.cos(ll[1] * D2R));
@@ -360,8 +363,10 @@ function placeTag(ctx, L, o, x, y, u, acc) {
   ctx.font = `800 ${15 * u}px ${SANS}`; const w1 = ctx.measureText(place).width;
   ctx.font = `500 ${10 * u}px ${MONO}`; const w2 = ctx.measureText(s.coords || '').width;
   const bw = Math.max(w1, w2) + 52 * u, bh = s.coords ? 46 * u : 32 * u;
-  ctx.save(); const [dx, dy] = placeAt(ctx, L, o.frame, x, y, bw, bh, { key: 'tag' }); ctx.restore();
+  const k = s.size_tag?.w || 1;
+  ctx.save(); const [dx, dy] = placeAt(ctx, L, o.frame, x, y, bw * k, bh * k, { key: 'tag', resize: true, uniform: true }); ctx.restore();
   x += dx; y += dy;
+  ctx.save(); ctx.translate(x, y); ctx.scale(k, k); ctx.translate(-x, -y);
   ctx.fillStyle = 'rgba(4,10,18,0.85)'; rr(ctx, x, y, bw, bh, 3 * u); ctx.fill();
   ctx.strokeStyle = hexA(acc, 0.6); ctx.lineWidth = 1 * u; ctx.stroke();
   ctx.fillStyle = acc; ctx.fillRect(x, y, 3 * u, bh);
@@ -369,9 +374,11 @@ function placeTag(ctx, L, o, x, y, u, acc) {
   ctx.font = `800 ${15 * u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillText(place, x + 38 * u, y + (s.coords ? 21 : 21) * u);
   if (s.coords) { ctx.font = `500 ${10 * u}px ${MONO}`; ctx.fillStyle = acc; ctx.fillText(s.coords, x + 38 * u, y + 37 * u); }
+  ctx.restore();
 }
 function northArrow(ctx, o, x, y, u, acc, L) {
-  ctx.save(); const [dx, dy] = placeAt(ctx, L, o.frame, x - 14 * u, y - 14 * u, 28 * u, 28 * u, { key: 'north' }); ctx.restore();
+  u *= L.style.size_north?.w || 1;
+  ctx.save(); const [dx, dy] = placeAt(ctx, L, o.frame, x - 14 * u, y - 14 * u, 28 * u, 28 * u, { key: 'north', resize: true, uniform: true }); ctx.restore();
   x += dx; y += dy;
   let b = 0; try { b = o.map?.getBearing?.() || 0; } catch { /* */ }
   ctx.save();
@@ -399,7 +406,13 @@ function headerBar(ctx, L, fr, u, acc, k) {
   // left: logo + organisation
   let lx = fr.x + fr.w * 0.03;
   const lg = s.logo && imageFor(s.logo);
-  if (lg?.ready) { const lh = h * 0.62, lw = Math.min(lh * (lg.w / lg.h), fr.w * 0.14); ctx.drawImage(lg.bmp, lx, y + (h - lh) / 2 - 1 * u, lw, lw * (lg.h / lg.w)); lx += lw + 12 * u; }
+  if (lg?.ready) {
+    const k = (+s.logoSize || 1) * (s.size_logo?.w || 1);
+    const lh = h * 0.62 * k, lw = Math.min(lh * (lg.w / lg.h), fr.w * 0.3), lhh = lw * (lg.h / lg.w);
+    const ly = y + (h - lhh) / 2 - 1 * u;
+    ctx.save(); placeAt(ctx, L, fr, lx, ly, lw, lhh, { key: 'logo', resize: true, uniform: true }); ctx.drawImage(lg.bmp, lx, ly, lw, lhh); ctx.restore();
+    if (!s.pos_logo) lx += lw + 12 * u;
+  }
   else lg?.p?.then(() => lastMapRepaint());
   caps(ctx, s.org || '', lx, y + h * 0.42, 10 * u, '#fff', 800, 0.08);
   ctx.font = `500 ${9 * u}px ${SANS}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'left'; ctx.fillText(s.unit || '', lx, y + h * 0.7);
@@ -421,8 +434,10 @@ function headerBar(ctx, L, fr, u, acc, k) {
   if (lg2?.ready) {
     ctx.font = `700 ${8.5 * u}px ${SANS}`;
     const kw = ctx.measureText(String(s.kicker || 'Geospatial intelligence briefing').toUpperCase()).width * 1.2;
-    const lh = h * 0.62, lw = Math.min(lh * (lg2.w / lg2.h), fr.w * 0.14);
-    ctx.drawImage(lg2.bmp, rx - kw - 16 * u - lw, y + (h - lh) / 2 - 1 * u, lw, lw * (lg2.h / lg2.w));
+    const k = (+s.logo2Size || 1) * (s.size_logo2?.w || 1);
+    const lh = h * 0.62 * k, lw = Math.min(lh * (lg2.w / lg2.h), fr.w * 0.3), lhh = lw * (lg2.h / lg2.w);
+    const x2 = rx - kw - 16 * u - lw, y2 = y + (h - lhh) / 2 - 1 * u;
+    ctx.save(); placeAt(ctx, L, fr, x2, y2, lw, lhh, { key: 'logo2', resize: true, uniform: true }); ctx.drawImage(lg2.bmp, x2, y2, lw, lhh); ctx.restore();
   } else lg2?.p?.then(() => lastMapRepaint());
   ctx.restore();
 }
@@ -505,6 +520,7 @@ function drawFrameBody(ctx, L, tm, o) {
   const u = fr.w / 1000;
   // the incident point, or the middle of the map when the frame has no point (added by hand)
   let ll = L.geom?.coordinates || null;
+  if (!ll && s.country) { const c = (countriesByName(s.country) || [])[0]; if (c) ll = labelPoint(c.polys); }
   if (!ll) { try { const c = o.map?.getCenter?.(); if (c) ll = [c.lng, c.lat]; } catch { /* */ } }
   const aspect = fr.w / fr.h;
   const side = (k) => {
@@ -522,9 +538,19 @@ function drawFrameBody(ctx, L, tm, o) {
   ctx.save();
   ctx.globalAlpha *= tm.alpha * (L.anim === 'fade' && !tm.edit ? kk : 1);
   // every panel can be dragged on the video (positions are kept as style.pos_<key>)
-  const at = (key, b) => placeAt(ctx, L, fr, b[0], b[1], b[2], b[3], { key });
+  // …and resized from their bottom-right corner (style.size_<key>): boxes stretch, text panels scale evenly
+  const sizeOf = (key) => ({ w: 1, h: 1, ...(s[`size_${key}`] || {}) });
+  const sizeBox = (key, b) => { const S = sizeOf(key); return [b[0], b[1], b[2] * S.w, b[3] * S.h]; };
+  const at = (key, b, box = false) => {
+    if (box) return placeAt(ctx, L, fr, b[0], b[1], b[2], b[3], { key, resize: true });
+    const k = sizeOf(key).w;
+    const r = placeAt(ctx, L, fr, b[0], b[1], b[2] * k, b[3] * k, { key, resize: true, uniform: true });
+    if (k !== 1) { ctx.translate(b[0], b[1]); ctx.scale(k, k); ctx.translate(-b[0], -b[1]); }
+    return r;
+  };
   // ---- background chrome with the window cut out
-  const win = Bx.win ? P(Bx.win) : null;
+  let win = Bx.win ? sizeBox('win', P(Bx.win)) : null;
+  if (win) { ctx.save(); const [wdx, wdy] = placeAt(ctx, L, fr, win[0], win[1], win[2], win[3], { key: 'win', resize: true, edge: true }); ctx.restore(); win = [win[0] + wdx, win[1] + wdy, win[2], win[3]]; }
   ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h);
   if (win) rrAdd(ctx, win[0], win[1], win[2], win[3], 6 * u);
   const bgG = ctx.createLinearGradient(fr.x, fr.y, fr.x + fr.w * 0.4, fr.y + fr.h);
@@ -584,9 +610,9 @@ function drawFrameBody(ctx, L, tm, o) {
     const slides = (s.slides || []).filter((x) => x?.media);
     const per = Math.max(0.5, +s.slideSec || 3), T = Math.max(0, (o.time || 0) - (+L.start || 0) - 0.4);
     const n = slides.length, idx = n ? Math.min(n - 1, Math.floor(T / per)) : 0, ph = n ? clamp((T - idx * per) / per, 0, 1) : 0;
-    const sb = P(Bx.slide);
+    const sb = sizeBox('slide', P(Bx.slide));
     // title over the photo
-    ctx.save(); ctx.globalAlpha *= stage(0); at('slide', sb);
+    ctx.save(); ctx.globalAlpha *= stage(0); at('slide', sb, true);
     ctx.save(); rr(ctx, sb[0], sb[1], sb[2], sb[3], 6 * u); ctx.fillStyle = '#060e1a'; ctx.fill(); ctx.clip();
     const drawSlide = (sl, a, local) => {
       const e = imageFor(sl.media);
@@ -625,8 +651,8 @@ function drawFrameBody(ctx, L, tm, o) {
     caps(ctx, cnt, sb[0] + 24 * u, sb[1] + 29 * u, 10.5 * u, '#fff', 800, 0.1);
     ctx.restore();
     // thumbnail strip
-    const st = P(Bx.strip);
-    ctx.save(); ctx.globalAlpha *= stage(2); at('strip', st);
+    const st = sizeBox('strip', P(Bx.strip));
+    ctx.save(); ctx.globalAlpha *= stage(2); at('strip', st, true);
     const m = Math.max(1, Math.min(8, n || 1)), gap = 8 * u, tw = (st[2] - gap * (m - 1)) / m, th = st[3] - 6 * u;
     const first = n > 8 ? clamp(idx - 3, 0, n - 8) : 0;
     for (let i = 0; i < m; i++) {
@@ -644,8 +670,8 @@ function drawFrameBody(ctx, L, tm, o) {
     if (s.windowTag !== false) placeTag(ctx, L, o, win[0] + 10 * u, win[1] + win[3] - 56 * u, u, acc);
     ctx.restore();
     // caption panel
-    const cb = P(Bx.cap);
-    ctx.save(); ctx.globalAlpha *= stage(3); at('caption', cb);
+    const cb = sizeBox('caption', P(Bx.cap));
+    ctx.save(); ctx.globalAlpha *= stage(3); at('caption', cb, true);
     panel(ctx, cb[0], cb[1], cb[2], cb[3], u, acc);
     caps(ctx, s.slideTitle || 'Photos from the site', cb[0] + 14 * u, cb[1] + 22 * u, 10 * u, acc, 700, 0.18);
     ctx.font = `900 ${20 * u}px ${DISP}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
@@ -765,19 +791,19 @@ function drawFrameBody(ctx, L, tm, o) {
     ctx.restore();
     // ---- locator
     if (Bx.locator) {
-      const lb = P(Bx.locator);
-      ctx.save(); ctx.globalAlpha *= stage(1); at('locator', lb);
+      const lb = sizeBox('locator', P(Bx.locator));
+      ctx.save(); ctx.globalAlpha *= stage(1); at('locator', lb, true);
       panel(ctx, lb[0], lb[1], lb[2], lb[3], u, acc);
       caps(ctx, s.locatorTitle || 'Location', lb[0] + 12 * u, lb[1] + 20 * u, 10 * u, acc, 700, 0.2);
       locator(ctx, ll, s.country, lb[0] + 8 * u, lb[1] + 28 * u, lb[2] - 16 * u, lb[3] - 36 * u, u, acc, s.place);
       ctx.restore();
     }
     // ---- side: before / after (or photos)
-    const thumbs = Bx.side ? (() => { const sb = P(Bx.side); return { box: sb, items: [[sb[0] + 8 * u, sb[1] + 30 * u, sb[2] - 16 * u, (sb[3] - 46 * u) / 2], [sb[0] + 8 * u, sb[1] + 38 * u + (sb[3] - 46 * u) / 2, sb[2] - 16 * u, (sb[3] - 46 * u) / 2]] }; })() : Bx.thumbs ? { items: Bx.thumbs.map(P) } : null;
+    const thumbs = Bx.side ? (() => { const sb = sizeBox('side', P(Bx.side)); return { box: sb, items: [[sb[0] + 8 * u, sb[1] + 30 * u, sb[2] - 16 * u, (sb[3] - 46 * u) / 2], [sb[0] + 8 * u, sb[1] + 38 * u + (sb[3] - 46 * u) / 2, sb[2] - 16 * u, (sb[3] - 46 * u) / 2]] }; })() : Bx.thumbs ? { items: Bx.thumbs.map(P) } : null;
     if (thumbs) {
       ctx.save(); ctx.globalAlpha *= stage(2);
       const photos = s.photos?.length && !BA[0] && !BA[1] ? s.photos : null;
-      if (thumbs.box) { at('side', thumbs.box); panel(ctx, ...thumbs.box, u, acc); caps(ctx, photos ? 'Site imagery' : s.sideTitle || 'Site analysis (before / after)', thumbs.box[0] + 12 * u, thumbs.box[1] + 20 * u, 10 * u, acc, 700, 0.15); }
+      if (thumbs.box) { at('side', thumbs.box, true); panel(ctx, ...thumbs.box, u, acc); caps(ctx, photos ? 'Site imagery' : s.sideTitle || 'Site analysis (before / after)', thumbs.box[0] + 12 * u, thumbs.box[1] + 20 * u, 10 * u, acc, 700, 0.15); }
       const specs = photos ? photos.slice(0, 2).map((m) => ({ media: m.id || m, date: '' })) : BA;
       const labs = photos ? photos.slice(0, 2).map((m) => m.name || 'Photo') : BAL;
       thumbs.items.forEach((b, i) => {
@@ -790,8 +816,8 @@ function drawFrameBody(ctx, L, tm, o) {
     }
     // ---- field strip
     if (Bx.strip) {
-      const sb = P(Bx.strip);
-      ctx.save(); ctx.globalAlpha *= stage(3); at('strip', sb);
+      const sb = sizeBox('strip', P(Bx.strip));
+      ctx.save(); ctx.globalAlpha *= stage(3); at('strip', sb, true);
       panel(ctx, sb[0], sb[1], sb[2], sb[3], u, acc);
       const n = Math.max(1, fields.length), per = Bx.portrait ? 2 : n, rows = Math.ceil(n / per);
       const cw = sb[2] / per, ch = sb[3] / rows;
@@ -862,11 +888,11 @@ function drawFrameBody(ctx, L, tm, o) {
     if (sub) { let ss = 12 * u; ctx.font = `700 ${ss}px ${SANS}`; while (ss > 8 * u && ctx.measureText(sub.toUpperCase()).width * 1.2 > tw) { ss *= 0.93; ctx.font = `700 ${ss}px ${SANS}`; } caps(ctx, sub, tx, by + 22 * u, ss, acc, 700, 0.15); }
     ctx.restore();
     // info rows
-    const ib = P(Bx.info);
+    const ib = sizeBox('info', P(Bx.info));
     ctx.save(); ctx.globalAlpha *= stage(2);
     const rows = fields.filter((f) => f[3] !== 'assess').slice(0, 3);
     const rh = ib[3] / 3;
-    at('info', [ib[0], ib[1], ib[2], rh * Math.max(1, rows.length)]);
+    at('info', [ib[0], ib[1], ib[2], rh * Math.max(1, rows.length)], true);
     if (rows.length) panel(ctx, ib[0], ib[1], ib[2], rh * rows.length, u, acc);
     rows.forEach(([ic, , val], i) => {
       const ry = ib[1] + i * rh;
@@ -880,13 +906,13 @@ function drawFrameBody(ctx, L, tm, o) {
   }
   if (Bx.thumbs) {
     ctx.save(); ctx.globalAlpha *= stage(3);
-    const [b0, b1] = Bx.thumbs.map(P);
+    const b0 = sizeBox('before', P(Bx.thumbs[0])), b1 = sizeBox('after', P(Bx.thumbs[1]));
     const photos = s.photos?.length && !BA[0] && !BA[1] ? s.photos : null;
     const specs = photos ? photos.slice(0, 2).map((m) => ({ media: m.id || m })) : BA;
     const labs = photos ? photos.slice(0, 2).map((m) => m.name || 'Photo') : BAL;
-    ctx.save(); at('before', b0); thumb(ctx, specs[0], ll, ...b0, u, acc, labs[0], o, s.thumbZoom); ctx.restore();
+    ctx.save(); at('before', b0, true); thumb(ctx, specs[0], ll, ...b0, u, acc, labs[0], o, s.thumbZoom); ctx.restore();
     if (specs[1] || !photos) {
-      ctx.save(); at('after', b1);
+      ctx.save(); at('after', b1, true);
       thumb(ctx, specs[1], ll, ...b1, u, acc, labs[1], o, s.thumbZoom);
       if (!photos && !s.pos_before && !s.pos_after) {
         // arrow between

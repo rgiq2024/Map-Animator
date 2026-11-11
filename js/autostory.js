@@ -419,12 +419,13 @@ export function buildStory(plan, g, opts = {}) {
   };
   // ---- 1. opening: from space down to the country
   if (B.opening) {
-    const D = 6 * k;
+    const D = 7 * k;
     const sc = newScene('Opening');
     Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, globe: true, atmosphere: true, clouds: true, cloudMode: 'zoom', cloudAmount: 0.7 });
     sc.camera.mode = 'keyframes';
     const cz = g.country?.bbox ? fitCamera(g.country.bbox, REF_W, vh, 0.08).zoom : 4.6;
-    sc.camera.keys = [K(0, V([focus[0] + 26, clamp(focus[1] * 0.5, -40, 45)], 0.6), 'ease'), K(D, V(g.country?.ll || focus, clamp(cz, 3, 6.5)), 'linear')];
+    // one smooth, eased move from space straight down to the place (the end view is matched to the next scene below)
+    sc.camera.keys = [K(0, V([focus[0] + 18, clamp(focus[1] * 0.6, -40, 45)], 0.8), 'ease'), K(D, V(focus, clamp(cz + 2.5, 5, 11)), 'linear')];
     sc.stillStart = 0; sc.stillEnd = 0.2;
     sc.layers.push(L('title', null, 0.8, { duration: 2.2, hold: Math.max(1, D - 3.8), style: { look: 'cinematic', text: plan.title.toUpperCase(), sub: [plan.date, plan.subtitle].filter(Boolean).join(' · ').toUpperCase(), font: 'Archivo', dim: 0.3, accent: '#e53935' } }));
     if (news) sc.layers.push(L('news', null, 0.3, { duration: 0.8, style: { look: 'bug', channel: opts.channel || 'NEWS', live: true } }));
@@ -589,6 +590,12 @@ export function buildStory(plan, g, opts = {}) {
     scenes.push(sc);
   }
   if (!scenes.length) throw new Error('Tick at least one part of the video');
+  // the opening flies all the way to the view the next scene starts with, so there is no jump between them
+  if (scenes[0]?.name === 'Opening' && scenes[1]?.camera?.keys?.length) {
+    const nk = scenes[1].camera.keys[0].view, ok = scenes[0].camera.keys;
+    ok[ok.length - 1] = { ...ok[ok.length - 1], view: { ...nk } };
+    scenes[0].look.cloudMode = 'zoom';
+  }
   const story = { name: plan.title, scenes };
   if (B.lower) story.brand = Object.fromEntries(Object.entries({ lower: true, country: (country || '').toUpperCase(), place: PLACE, date: (plan.date || '').toUpperCase(), ticker: B.ticker || [plan.subtitle, plan.title].filter(Boolean).join(' | ') }).filter(([, v]) => v !== ''));
   else story.brand = { lower: false };
