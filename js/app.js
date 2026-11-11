@@ -5,6 +5,7 @@ import { createEditor, toast } from './editor.js';
 import { createHome } from './home.js';
 import { getProject, newProject, saveProject } from './store.js';
 import { openAutoVideo } from './autostory.js';
+import { openNewsDesk, initDailyCard } from './newsdesk.js';
 
 const $ = (s) => document.querySelector(s);
 let pendingOpts = {};
@@ -63,4 +64,21 @@ function autoVideo() {
 }
 document.addEventListener('click', (e) => { if (e.target.closest('[data-autovideo]')) autoVideo(); });
 
-window.mapAnimator = { editor, autoVideo };
+// News desk: today's disasters and incidents → a whole news video
+async function storyToProject(story, note) {
+  const p = newProject(story.name);
+  p.scenes = story.scenes;
+  if (story.brand) p.brand = { ...defaultBrand(), ...story.brand };
+  if (story.sound) p.sound = { ...defaultSound(), ...story.sound };
+  await saveProject(p);
+  pendingOpts = { step: 'export' };
+  location.hash = `#/p/${p.id}`;
+  setTimeout(() => toast(note, 7000), 1200);
+}
+function newsDesk(preset = null) {
+  openNewsDesk({ aspect: 16 / 9, preset, onCreate: (story) => storyToProject(story, 'News video ready — press ▶ to preview. Check the facts against the sources, then Render video.') });
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-newsdesk]')) newsDesk(); });
+initDailyCard(document.getElementById('nd-daily'), (id) => newsDesk(id));
+
+window.mapAnimator = { editor, autoVideo, newsDesk };

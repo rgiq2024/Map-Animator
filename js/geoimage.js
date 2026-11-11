@@ -410,7 +410,11 @@ export function drawSeriesLabel(ctx, L, tm, frame, unit) {
   const acc = s.accent || '#ffb020';
   const big = 64 * unit * k;
   const showBar = s.bar !== false && st.n > 1;
-  const W = Math.max(260 * unit * k, showBar ? Math.min(frame.w * 0.6, (90 + st.n * 70) * unit * k) : 0);
+  ctx.save();
+  ctx.font = `900 ${big}px "Archivo Black", Inter, system-ui, sans-serif`;
+  const textW = Math.max(0, ...frames.map((f, i) => ctx.measureText(f.label || `#${i + 1}`).width));
+  ctx.restore();
+  const W = Math.min(frame.w - 60 * unit, Math.max(260 * unit * k, textW + 48 * unit, showBar ? Math.min(frame.w * 0.6, (90 + st.n * 70) * unit * k) : 0));
   const H = big * 1.15 + (showBar ? 40 * unit * k : 0) + 20 * unit;
   const m = 30 * unit;
   const pos = s.position || 'bottom-left';

@@ -307,3 +307,12 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
   3. In `js/auth-config.js` set `mode: 'firebase'`, paste the config into `firebase`, and optionally list `allowedEmails` and `adminEmails`.
   4. Authentication → Settings → Authorised domains → add `rgiq2024.github.io`.
   Also consider making the repository private (GitHub Pages from a private repository needs a paid plan).
+
+## News desk · AI (daily incidents → news video)
+
+**Home page → “News desk · AI”** (or **📰 News desk** in the top bar).
+
+- **Finds incidents** of the last 24 h / 3 days / 7 days: floods, flash floods, wildfires, deforestation, earthquakes, landslides, volcanoes, storms, drought, man-made disasters and illegal migration. Sources: USGS earthquakes, NASA EONET, GDACS alerts and world news from GDELT. Reports about the same event are joined and ranked (severity, number of sources and outlets, how recent).
+- **Builds the video** for the story you pick: 1 fly / zoom to the incident → 2 pre and post satellite images (real Sentinel-2 scenes from Microsoft Planetary Computer, Sentinel-1 radar for cloudy floods) → 3 damage & analysis (affected area or shaking rings, callout, facts card) → 4 photos and videos (your own files, plus geotagged Wikimedia Commons photos with credits) → 5 end card with the sources.
+- **Write with AI** (optional): add your Anthropic API key under *AI settings*. It stays in your browser and is only sent to api.anthropic.com. The AI writes the headline, facts, analysis, voice-over and post text from the feed data only. Without a key, built-in templates write the text. Always check facts against the linked sources before publishing.
+- **Every 24 hours**: `.github/workflows/daily-news.yml` runs `tools/news-fetch.mjs` at 02:17 UTC, writes `news/latest.json` (+ `news/archive/<date>.json`) and redeploys the site. The home page then shows **Today’s top story** with **Build today’s video**. Run it any time from the repository’s *Actions → Daily news feed → Run workflow*.

@@ -738,3 +738,6 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
   d.showModal();
   setTimeout(() => $('#av-text').focus(), 30);
 }
+
+// helpers shared with the news desk
+export { L as mkLayer, K as camKey, V as camView, dest as destPoint, pt as pointGeom, circle as circleGeom, darkLook, REF_W, find as findPlace };
