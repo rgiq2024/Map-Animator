@@ -126,13 +126,21 @@ export async function fetchGDELT(cats, hours = 24, perCat = 40) {
     const q = encodeURIComponent(`${C.q} sourcelang:english`);
     let j;
     try { j = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=${perCat}&timespan=${span}&sort=hybridrel&format=json`); ok++; } catch (e) { lastErr = e; continue; }
+    const kw = keywordsOf(C.q);
     for (const a of j.articles || []) {
+      if (!kw.some((k) => String(a.title || '').toLowerCase().includes(k))) continue; // off-topic hits (sports “Heat”, etc.)
       const t = parseSeen(a.seendate);
       out.push({ id: `gdelt:${a.url}`, cat, source: a.domain || 'news', title: String(a.title || '').trim(), place: '', country: a.sourcecountry || '', ll: null, time: t, severity: 0.6, sevText: 'News report', url: a.url, image: a.socialimage || '', facts: {} });
     }
   }
   if (!ok && lastErr) throw lastErr;
   return clusterArticles(out);
+}
+/** the query's words and phrases, for checking that a headline is really about the category */
+function keywordsOf(q) {
+  const out = [];
+  String(q).replace(/"([^"]+)"|([\p{L}-]+)/gu, (_, ph, w) => { const k = (ph || w || '').toLowerCase(); if (k && !['or', 'and', 'not'].includes(k)) out.push(k); return ''; });
+  return out;
 }
 function parseSeen(s) { const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s || ''); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : Date.now(); }
 const STOPW = new Set('the a an of in on at to for and or with by from as is are was were be after over amid into near says say said new news live update updates video photos more than its it their his her this that has have least'.split(' '));
@@ -149,7 +157,7 @@ export function clusterArticles(list) {
     g.outlets.add(a.source);
     g.time = Math.max(g.time, a.time);
   }
-  return groups.map(({ w, outlets, ...g }) => ({ ...g, coverage: outlets.size, severity: 0.5 + Math.min(2, outlets.size * 0.25), sevText: `${outlets.size} outlet${outlets.size === 1 ? '' : 's'}` }));
+  return groups.map(({ w, outlets, ...g }) => ({ ...g, coverage: outlets.size, severity: 0.4 + Math.min(1.1, outlets.size * 0.12), sevText: `${outlets.size} outlet${outlets.size === 1 ? '' : 's'}` }));
 }
 
 // ---------------------------------------------------------------- everything together
