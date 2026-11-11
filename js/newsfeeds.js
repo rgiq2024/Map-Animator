@@ -125,7 +125,12 @@ export async function fetchGDELT(cats, hours = 24, perCat = 40) {
     first = false;
     const q = encodeURIComponent(`${C.q} sourcelang:english`);
     let j;
-    try { j = await getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=${perCat}&timespan=${span}&sort=hybridrel&format=json`); ok++; } catch (e) { lastErr = e; continue; }
+    const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=${perCat}&timespan=${span}&sort=hybridrel&format=json`;
+    try { j = await getJSON(url); ok++; } catch (e) {
+      if (String(e.message) !== '429') { lastErr = e; continue; }
+      await sleep(15000); // rate limited: wait and try once more
+      try { j = await getJSON(url); ok++; } catch (e2) { lastErr = e2; continue; }
+    }
     const kw = keywordsOf(C.q);
     for (const a of j.articles || []) {
       if (!kw.some((k) => String(a.title || '').toLowerCase().includes(k))) continue; // off-topic hits (sports “Heat”, etc.)
