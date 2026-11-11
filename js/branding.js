@@ -10,7 +10,7 @@ export function defaultBrand() {
   const M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   return {
     v: 1,
-    header: true, logo: '', logoName: '', headerScale: 1, headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, lowerY: 0,
+    header: true, logo: '', logoName: '', headerScale: 1, headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, leftX: 0, rightX: 0, lowerY: 0,
     lower: true,
     country: 'NEPAL', place: 'BUDHI GANDAKI RIVER', date: `${d.getDate()} - ${M[d.getMonth()]} - ${d.getFullYear()}`,
     ticker: 'Heavy rain upstream raises the level of water downstream | 5 people reported missing. | 96 people evacuated from riverside villages',
@@ -88,17 +88,18 @@ export function drawBranding(ctx, brand, frame, unit, t) {
       ly += (+brand.headerY || 0) * h;
       // spread: the left and right thirds of the strip move out to the sides (logos keep their shape); move: the whole strip left / right
       const sp = (+brand.headerSpread || 0) * w, mx = (+brand.headerX || 0) * w;
+      const lx = (+brand.leftX || 0) * w, rx = (+brand.rightX || 0) * w;
       const x0 = x + (w - dw) / 2 + mx;
-      if (sp) {
+      if (sp || lx || rx) {
         // the strip's own background is made see-through first, so moving its thirds leaves no seams
         const src = knockout(im);
         // one even shade across the top instead of the strip's own (so the moved parts join up)
         const sg = ctx.createLinearGradient(0, ly, 0, ly + dh); sg.addColorStop(0, 'rgba(0,0,0,0.4)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = sg; ctx.fillRect(x, ly, w, dh);
         const sw = src.width || iw, sh = src.height || ih, t3 = sw / 3;
-        ctx.drawImage(src, 0, 0, t3, sh, x0 - sp, ly, dw / 3, dh);
+        ctx.drawImage(src, 0, 0, t3, sh, x0 - sp + lx, ly, dw / 3, dh);
         ctx.drawImage(src, t3, 0, t3, sh, x0 + dw / 3, ly, dw / 3, dh);
-        ctx.drawImage(src, 2 * t3, 0, sw - 2 * t3, sh, x0 + (2 * dw) / 3 + sp, ly, dw / 3, dh);
+        ctx.drawImage(src, 2 * t3, 0, sw - 2 * t3, sh, x0 + (2 * dw) / 3 + sp + rx, ly, dw / 3, dh);
       } else ctx.drawImage(im, x0, ly, dw, dh);
     }
   }
