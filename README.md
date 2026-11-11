@@ -324,3 +324,7 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - **Classic**: the full-screen map with the lower third and scrolling ticker, as before.
 - To add a frame by hand, go to **Add → Typography → Frames → Briefing frame**. Every text, the accent colour and the layout (A / B / end) can be edited in the layer settings.
 - **Create project** on the home page has a **Layout** choice too: *Standard* (full-screen map), *Briefing A* or *Briefing B*. A briefing project starts with the frame, and every new scene you add gets the same frame. Fill in the place, event and dates in the frame's layer settings.
+- **Editing a briefing frame:** select the *Briefing frame* layer.
+  - **Move panels:** drag any panel on the video (globe, title, info rows, before, after, locator, field strip, place tag, scale bar). **Panels → Reset** puts them all back.
+  - **Before / after images:** choose your own pictures. Set each one's label, date, **zoom** and **move ←→ / ↑↓** to crop it. For satellite before / after images, set the map zoom.
+  - **Text:** every text and label (title, subtitle, header line, map tag, field labels, panel titles) is editable in the settings.

@@ -321,8 +321,10 @@ export function createEditor() {
       drawScreenEffects(octx, scene(), { frame: fr, unit, time: t, src: { canvas: mc, sx: frame.x * k, sy: frame.y * k, sw: frame.w * k, sh: frame.h * k } }, layerTiming);
     }
     if (viewMode === 'edit' && step === 'layers' && selLayer) {
-      const b = hits.boxes.findLast?.((q) => q.id === selLayer);
-      if (b) { octx.save(); octx.setLineDash([6 * px, 4 * px]); octx.strokeStyle = '#2d7ff9'; octx.lineWidth = 1.5 * px; octx.strokeRect(b.x - 4 * px, b.y - 4 * px, b.w + 8 * px, b.h + 8 * px); octx.restore(); }
+      // layers with several draggable panels (keys) show every panel's outline
+      const mine = hits.boxes.filter((q) => q.id === selLayer);
+      const show = mine.some((q) => q.key) ? mine.filter((q) => q.key) : mine.slice(-1);
+      if (show.length) { octx.save(); octx.setLineDash([6 * px, 4 * px]); octx.strokeStyle = '#2d7ff9'; octx.lineWidth = 1.5 * px; octx.globalAlpha = show.length > 1 ? 0.7 : 1; for (const b of show) octx.strokeRect(b.x - 4 * px, b.y - 4 * px, b.w + 8 * px, b.h + 8 * px); octx.restore(); }
     }
     // dim everything outside the video frame
     octx.save();
@@ -2161,6 +2163,9 @@ export function createEditor() {
         else if (type === 'cities') {
           h += `<label class="field"><span>${label}</span><textarea data-b="${path}" rows="5">${esc(v || '')}</textarea><span class="cpick"><input type="search" data-cfind="${path}" data-fmt="${o || 'cities'}" placeholder="Find a city or place by name…"><button class="btn sm" data-act="cityFind" data-field="${path}" data-fmt="${o || 'cities'}">＋ Add</button></span></label>`;
         }
+        else if (type === 'resetpos') {
+          h += `<div class="row"><span>${label}</span><button class="btn sm" data-act="resetPos">Reset</button></div>`;
+        }
         else if (type === 'image') {
           const im = v && imageFor(v);
           h += `<div class="row img-pick"><span>${label}</span><span class="img-pick-r">${im?.ready ? `<i class="muted small">${im.w}×${im.h}</i>` : ''}<button class="btn sm" data-act="pickImg" data-field="${path}">${v ? 'Replace…' : 'Choose…'}</button></span></div>`;
@@ -3002,7 +3007,8 @@ export function createEditor() {
       if (!L) return;
       if (pick.mode === 'field') {
         setPath(L, pick.field, items[0].id);
-        if (items[0].quad && (L.kind === 'image' || !quadOf(L))) { L.geom = quadGeom(items[0].quad); L.style.crs = items[0].crs; zoomTo = L; }
+        if (L.kind === 'briefing' && /Media$/.test(pick.field) && /(19|20)\d\d/.test(items[0].name || '')) { const dk = pick.field.replace('Media', 'Date'); if (!getPath(L, dk)) setPath(L, dk, labelFromName(items[0].name)); }
+        if (items[0].quad && L.kind !== 'briefing' && (L.kind === 'image' || !quadOf(L))) { L.geom = quadGeom(items[0].quad); L.style.crs = items[0].crs; zoomTo = L; }
         if (L.kind === 'compare' && pick.field === 'style.media2' && items[0].name.match(/(19|20)\d\d/)) L.style.labelB = labelFromName(items[0].name);
       } else if (pick.mode === 'frames') {
         (L.style.frames ||= []).push(...items.map((r) => ({ media: r.id, name: r.name, label: labelFromName(r.name) })));
@@ -3068,6 +3074,7 @@ export function createEditor() {
     const gv = L.kind === 'geovideo' ? videoFor(L.style.media) : null;
     const img = gv ? { ready: !!gv.el.videoWidth, w: gv.el.videoWidth, h: gv.el.videoHeight } : imageFor(L.style.media || L.style.frames?.[0]?.media);
     const geo = (nq) => { pushUndo(); L.geom = quadGeom(nq); renderLayerEditor(); repaint(); save(); };
+    if (a === 'resetPos') { pushUndo(); for (const k of Object.keys(L.style)) if (k.startsWith('pos_')) delete L.style[k]; renderLayerEditor(); repaint(); save(); toast('Panels back in their places'); }
     if (a === 'pickImg') { geoPick = { mode: 'field', id: L.id, field: btn.dataset.field }; $('#file-geoimg').click(); }
     if (a === 'addFrames') { geoPick = { mode: 'frames', id: L.id }; $('#file-geoimg').click(); }
     if (a === 'geoFit') geo(fitQuad(img?.ready ? img.h / img.w : 0.66));
