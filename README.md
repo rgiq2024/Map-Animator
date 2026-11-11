@@ -349,3 +349,5 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - **Logos — place:** *Top* puts the logos in the header row; *Bottom* puts them in the bottom band above the ticker. Size them with the sliders, or drag and resize them on the video. The logos work with or without the header bar.
 - **Header text:** *Header — show organisation text / show centre title / show briefing line* each switch one text off. The header bar's background, glow arc and lines stay.
 - **Logo & lower third (Preview & export):** *Logo place* (top or bottom of the video) and *Logo — move ↑ / ↓* position the logo strip. *Lower third — move ↑ / ↓* lifts the lower third and ticker off the bottom edge.
+- **Logos — spread to the sides ← →** pushes the left and right logos of the strip out towards the edges (and back in with negative values) without stretching them. **Logo — move ← / →** shifts the whole strip.
+- **Header — show text** (briefing frame): turn it off to keep only the header background, glow arc and line; the text and the short accent lines go.

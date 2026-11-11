@@ -10,7 +10,7 @@ export function defaultBrand() {
   const M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   return {
     v: 1,
-    header: true, logo: '', logoName: '', headerScale: 1, headerPlace: 'top', headerY: 0, lowerY: 0,
+    header: true, logo: '', logoName: '', headerScale: 1, headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, lowerY: 0,
     lower: true,
     country: 'NEPAL', place: 'BUDHI GANDAKI RIVER', date: `${d.getDate()} - ${M[d.getMonth()]} - ${d.getFullYear()}`,
     ticker: 'Heavy rain upstream raises the level of water downstream | 5 people reported missing. | 96 people evacuated from riverside villages',
@@ -34,6 +34,30 @@ function headerImage(brand) {
   if (brand.logo) { const im = imageFor(brand.logo); return im?.bmp || null; }
   if (!builtIn) { builtIn = new Image(); builtIn.src = 'assets/brand/header.png'; }
   return builtIn.complete && builtIn.naturalWidth ? builtIn : null;
+}
+/** A copy of a logo strip with its flat background colour turned transparent (cached). */
+const knocked = new WeakMap();
+function knockout(im) {
+  if (knocked.has(im)) return knocked.get(im);
+  let out = im;
+  try {
+    const W = im.width || im.naturalWidth, H = im.height || im.naturalHeight;
+    const sc = Math.min(1, 2400 / W);
+    const c = document.createElement('canvas'); c.width = Math.round(W * sc); c.height = Math.round(H * sc);
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(im, 0, 0, c.width, c.height);
+    const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    // background = the corner colour (a flat panel, or the dark see-through shading of the default strip)
+    const br = p[0], bg = p[1], bb = p[2];
+    for (let i = 0; i < p.length; i += 4) {
+      const dist = Math.abs(p[i] - br) + Math.abs(p[i + 1] - bg) + Math.abs(p[i + 2] - bb);
+      if (dist < 60) p[i + 3] = Math.round(p[i + 3] * clamp((dist - 18) / 42, 0, 1));
+    }
+    g.putImageData(d, 0, 0);
+    out = c;
+  } catch { out = im; }
+  knocked.set(im, out);
+  return out;
 }
 /** Resolves when the logo strip is ready to draw (for export). */
 export function preloadBrand(brand) {
@@ -62,7 +86,20 @@ export function drawBranding(ctx, brand, frame, unit, t) {
       // top or bottom of the frame, then nudged up / down
       let ly = brand.headerPlace === 'bottom' ? y + h - dh - (brand.lower ? h * 0.152 : 0) : y;
       ly += (+brand.headerY || 0) * h;
-      ctx.drawImage(im, x + (w - dw) / 2, ly, dw, dh);
+      // spread: the left and right thirds of the strip move out to the sides (logos keep their shape); move: the whole strip left / right
+      const sp = (+brand.headerSpread || 0) * w, mx = (+brand.headerX || 0) * w;
+      const x0 = x + (w - dw) / 2 + mx;
+      if (sp) {
+        // the strip's own background is made see-through first, so moving its thirds leaves no seams
+        const src = knockout(im);
+        // one even shade across the top instead of the strip's own (so the moved parts join up)
+        const sg = ctx.createLinearGradient(0, ly, 0, ly + dh); sg.addColorStop(0, 'rgba(0,0,0,0.4)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = sg; ctx.fillRect(x, ly, w, dh);
+        const sw = src.width || iw, sh = src.height || ih, t3 = sw / 3;
+        ctx.drawImage(src, 0, 0, t3, sh, x0 - sp, ly, dw / 3, dh);
+        ctx.drawImage(src, t3, 0, t3, sh, x0 + dw / 3, ly, dw / 3, dh);
+        ctx.drawImage(src, 2 * t3, 0, sw - 2 * t3, sh, x0 + (2 * dw) / 3 + sp, ly, dw / 3, dh);
+      } else ctx.drawImage(im, x0, ly, dw, dh);
     }
   }
   if (brand.lower) {
