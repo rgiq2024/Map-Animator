@@ -6,6 +6,7 @@ import { parseBrief, resolvePlaces, buildStory, defaultBlocks, mkLayer as L, cam
 import { newScene, fitCamera } from './scene.js';
 import { pcScenes, pcRenders, pcDayTiles } from './pcsat.js';
 import { putMedia } from './store.js';
+import { applyBriefing } from './briefing.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -154,10 +155,12 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
   const fit = fitCamera([[box[0], box[1]], [box[2], box[3]]], REF_W, vh, 0.05);
   const zClose = Math.min(16, Math.max(6, fit.zoom));
   const credits = [];
+  let sat = null;
   // ---- pre and post satellite images
   if (parts.sat) {
     let res = null;
     try { res = await satPair(focus, inc.time, Math.min(zoneKm * 1.25, 12), inc.cat, onStatus); } catch (e) { res = { error: e.message }; }
+    sat = res;
     const sc = newScene('Pre & post satellite');
     Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
     const D = 9;
@@ -187,7 +190,7 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
     if (inc.cat === 'earthquake') {
       const m = inc.mag || 6, base = Math.pow(10, 0.43 * m - 1.7);
       const rings = [['Strong shaking', base], ['Moderate shaking', base * 2.6], ['Light shaking', base * 6]].map(([n, r]) => `${n} | ${Math.max(1, Math.round(r))} | km | none`).join('\n');
-      sc.layers.push(L('rangerings', pt(focus), 0.6, { duration: 3.5, name: 'Shaking rings (estimate)', style: { rings, color: '#ffffff', labelColor: '#ffffff', iconColor: '#ffffff', dash: true, width: 1.6, base: true, labelSize: 1, angle: 205, spread: 0 } }));
+      sc.layers.push(L('rangerings', pt(focus), 0.6, { duration: 3.5, name: 'Shaking rings (estimate)', style: { rings, color: '#ffffff', labelColor: '#ffffff', iconColor: '#ffffff', dash: true, width: 1.6, base: true, labelSize: 1, angle: 230, spread: 40 } }));
       sc.camera.keys = [K(0, V(focus, Math.max(5, zClose - 2.2)), 'ease'), K(D, V(focus, Math.max(5, zClose - 1.8), 8, 30), 'linear')];
     } else {
       sc.layers.push(L('area', circle(focus, zoneKm * 1000), 0.6, { duration: 2, name: 'Affected area (approximate)', style: { stroke: '#ffffff', fill: inc.cat === 'wildfire' ? '#ff5a1f' : inc.cat === 'deforestation' ? '#c98b2e' : '#2f80ff', fillOpacity: 0.22, dash: 'dashed', width: 2 } }));
@@ -228,6 +231,17 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
   const end = story.scenes.find((s) => s.name === 'End');
   if (end) end.layers.push(L('mapcredits', null, 0.5, { duration: 0.6, name: 'Sources', style: { text: [`Sources: ${plan.source}`, ...credits].join(' | '), look: 'plain', position: 'bottom-center', color: '#ffffff', size: 0.85 } }));
   story.name = `${text.headline} — ${plan.date}`;
+  if (opts.layout !== 'classic') {
+    const fr = sat?.frames || [];
+    const spec = (f) => (f ? { url: f.url, date: f.date, minzoom: f.minzoom, maxzoom: f.maxzoom } : null);
+    applyBriefing(story, {
+      ll: focus, title: text.headline, sub: 'Geospatial analysis', kicker: 'Geospatial intelligence briefing', tag: C.name,
+      date: plan.date, place: text.place || geo.place?.name || '', country: geo.country?.name || geo.place?.country || inc.country || '',
+      event: C.name, eventKey: inc.cat, assessment: inc.sevText || (text.analysis || [])[0] || '', coords: fmtLatLon(focus),
+      sources: [`Sources: ${plan.source}`, ...credits].join(' · '), before: spec(fr.length > 1 ? fr[0] : null), after: spec(fr.length > 1 ? fr.at(-1) : fr[0]),
+      thumbZoom: Math.max(fr[0]?.minzoom || 0, Math.min(16, zClose - 0.4)),
+    }, opts.aspect || 16 / 9);
+  }
   return story;
 }
 
@@ -269,6 +283,7 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
     const P = LS.get('ma.newsparts', { fly: true, sat: true, analysis: true, media: true, end: true, commons: true, music: false, length: 60 });
     const row = (k, t, s) => `<label class="nd-part"><input type="checkbox" data-p="${k}" ${P[k] ? 'checked' : ''}><span><b>${t}</b><small>${s}</small></span></label>`;
     return `${row('fly', '1 · Fly / zoom to the incident', 'From space down to the place, news map with the spot')}${row('sat', '2 · Pre and post satellite images', 'Real Sentinel-2 scenes before and after the date (radar for floods if cloudy)')}${row('analysis', '3 · Damage &amp; analysis', 'Affected area or shaking rings, callout and a facts card')}${row('media', '4 · Photos and videos', 'Your files below, plus photos of the area from Wikimedia Commons')}${row('end', '5 · End card', 'Closing line and the sources')}
+      <div class="nd-row"><label class="nd-mini">Layout <select data-p="layout"><option value="briefing" ${P.layout !== 'classic' ? 'selected' : ''}>Briefing — framed map, globe, before / after panels</option><option value="classic" ${P.layout === 'classic' ? 'selected' : ''}>Classic — full-screen map, lower third and ticker</option></select></label></div>
       <div class="nd-row"><label class="nd-mini"><input type="checkbox" data-p="commons" ${P.commons ? 'checked' : ''}> Photos of the area from Wikimedia Commons</label><label class="nd-mini"><input type="checkbox" data-p="music" ${P.music ? 'checked' : ''}> Music</label></div>`;
   };
   function renderRight() {
@@ -303,7 +318,7 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
     const k = e.target.dataset.t;
     if (k && text) text[k] = k === 'facts' || k === 'analysis' ? e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) : e.target.value;
     const p = e.target.dataset.p;
-    if (p) { const P = LS.get('ma.newsparts', {}); P[p] = e.target.checked; LS.set('ma.newsparts', P); }
+    if (p) { const P = LS.get('ma.newsparts', {}); P[p] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; LS.set('ma.newsparts', P); }
   });
   $('#nd-right').addEventListener('change', async (e) => {
     if (e.target.id !== 'nd-files') return;
@@ -350,7 +365,7 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
     const P = LS.get('ma.newsparts', { fly: true, sat: true, analysis: true, media: true, end: true, commons: true, music: false });
     $('#nd-make').disabled = true;
     try {
-      const story = await buildNewsStory(cur, text, P, media, { aspect, length: 60, commons: P.commons !== false, music: !!P.music }, status);
+      const story = await buildNewsStory(cur, text, P, media, { aspect, length: 60, commons: P.commons !== false, music: !!P.music, layout: P.layout || 'briefing' }, status);
       d.close(); d.remove();
       await onCreate?.(story, { incident: cur, text });
     } catch (e) { status(e.message || 'Could not build the video'); $('#nd-make').disabled = false; }

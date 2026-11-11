@@ -103,6 +103,8 @@ export function countryAt(ll) {
   if (!C || !ll) return null;
   return C.find((c) => ll[0] >= c.bbox[0] && ll[0] <= c.bbox[2] && ll[1] >= c.bbox[1] && ll[1] <= c.bbox[3] && inPolys(ll, c.polys)) || null;
 }
+/** All countries [{ name, polys, bbox }] (null while loading). */
+export function allCountries() { return loadCountries(); }
 export function countryNames() { const C = loadCountries(); return C ? C.map((c) => c.name).sort() : []; }
 
 // raster tiles for insets
@@ -117,7 +119,7 @@ const tiles = new Map();
 function tile(src, z, x, y) {
   const n = 2 ** z; x = ((x % n) + n) % n;
   if (y < 0 || y >= n) return null;
-  const url = (TILE_SRC[src] || TILE_SRC.satellite).replace('{z}', z).replace('{x}', x).replace('{y}', y);
+  const url = (TILE_SRC[src] || (String(src).includes('{z}') ? src : TILE_SRC.satellite)).replace('{z}', z).replace('{x}', x).replace('{y}', y);
   let t = tiles.get(url);
   if (!t) {
     const img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async';

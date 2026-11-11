@@ -316,3 +316,10 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - **Builds the video** for the story you pick: 1 fly / zoom to the incident → 2 pre and post satellite images (real Sentinel-2 scenes from Microsoft Planetary Computer, Sentinel-1 radar for cloudy floods) → 3 damage & analysis (affected area or shaking rings, callout, facts card) → 4 photos and videos (your own files, plus geotagged Wikimedia Commons photos with credits) → 5 end card with the sources.
 - **Write with AI** (optional): add your Anthropic API key under *AI settings*. It stays in your browser and is only sent to api.anthropic.com. The AI writes the headline, facts, analysis, voice-over and post text from the feed data only. Without a key, built-in templates write the text. Always check facts against the linked sources before publishing.
 - **Every 24 hours**: `.github/workflows/daily-news.yml` runs `tools/news-fetch.mjs` at 02:17 UTC, writes `news/latest.json` (+ `news/archive/<date>.json`) and redeploys the site. The home page then shows **Today’s top story** with **Build today’s video**. Run it any time from the repository’s *Actions → Daily news feed → Run workflow*.
+
+## Briefing layout (new) / Classic layout
+
+**Auto video** and **News desk** have a **Layout** choice. The app remembers the one you pick.
+- **Briefing**: the map sits in a framed window on a dark intelligence-briefing background, with no scrolling ticker. **Layout A** has a globe with the country highlighted, the title, and rows for date, place and event on the left, with *Before* / *After* satellite panels under the map. **Layout B** has a header title, a locator map, a *Site analysis (before / after)* panel, a scale bar and a field strip (incident date, location, event, assessment). The end card lists the sources. The camera is moved so the incident stays in the middle of the window.
+- **Classic**: the full-screen map with the lower third and scrolling ticker, as before.
+- To add a frame by hand, go to **Add → Typography → Frames → Briefing frame**. Every text, the accent colour and the layout (A / B / end) can be edited in the layer settings.
