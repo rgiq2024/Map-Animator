@@ -1216,3 +1216,5 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 @media (max-width: 520px) { .create-layout { flex-wrap: wrap; } .create-layout .cl-lab { flex-basis: 100%; padding: 2px 6px; } }
 .brief-add { flex: none; max-width: 150px; padding-right: 22px; cursor: pointer; }
 .brief-add[hidden] { display: none; }
+.br-parts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 4px; }
+.br-part { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer; }

@@ -60,7 +60,7 @@ import { TwinCity } from './twin.js';
 import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
-import { BR_SHARED, newBriefingLayer } from './briefing.js';
+import { BR_SHARED, BR_PARTS, newBriefingLayer } from './briefing.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -305,13 +305,14 @@ export function createEditor() {
       drawZoomBlur(octx, mc, frame.x * k, frame.y * k, frame.w * k, frame.h * k, fr, zoomSpeedAt(model, t), +scene().look.zoomBlurAmount || 1);
     }
     drawGradeWash(octx, { x: 0, y: 0, w: W, h: H }, scene().look.grade);
+    const frameBoxes = [];
     hits = renderScene(octx, {
-      map, model, scene: scene(), time: t, px, unit, frame: fr,
+      map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: frameBoxes,
       edit: viewMode === 'edit' ? { step, activeLeg, selPoint, hoverPoint, selSign, selLayer, drawing, dpr: px } : null,
     });
     drawVignette(octx, fr, +scene().camera.lens?.vignette || 0);
     drawLetterbox(octx, fr, scene().look, t, unit);
-    hits.boxes = [];
+    hits.boxes = frameBoxes;
     MC_EDIT.info = null; MC_EDIT.sel = viewMode === 'edit' && step === 'layers' ? selLayer : null;
     if (MC_EDIT.sel !== MC_EDIT.last) { MC_EDIT.page = null; MC_EDIT.last = MC_EDIT.sel; }
     renderCaptions(octx, { map, model, scene: scene(), time: t, px, unit, frame: fr, boxes: hits.boxes });
@@ -2196,6 +2197,10 @@ export function createEditor() {
           const sl = L.style.slides || [];
           h += `<h5>${label}</h5><ol class="frame-list">${sl.map((f, i) => `<li><span class="fr-n">${i + 1}</span><input data-b="slide:${i}:caption" value="${esc(f.caption || '')}" placeholder="Caption" title="Caption"><input data-b="slide:${i}:credit" value="${esc(f.credit || '')}" placeholder="Credit" title="Photo credit"><span><button class="mini" data-act="slUp" data-i="${i}" title="Earlier">↑</button><button class="mini" data-act="slDown" data-i="${i}" title="Later">↓</button><button class="mini" data-act="slDel" data-i="${i}" title="Remove">✕</button></span></li>`).join('') || '<li class="empty">No photos yet.</li>'}</ol><div class="btn-row"><button class="btn sm primary" data-act="addSlides">＋ Add photos…</button></div>`;
         }
+        else if (type === 'brparts') {
+          const parts = [...(BR_PARTS[L.style.layout || 'A'] || []), ...BR_PARTS.common];
+          h += `<div class="field"><span>${label}</span><div class="br-parts">${parts.map(([k, n]) => `<label class="br-part"><input type="checkbox" data-act-input="brPart" data-k="${k}" ${L.style[`off_${k}`] ? '' : 'checked'}> ${esc(n)}</label>`).join('')}</div></div>`;
+        }
         else if (type === 'brhere') {
           const c = L.geom?.coordinates;
           h += `<div class="field"><span>${label}</span><div class="btn-row"><input data-act-input="brAt" value="${c ? `${c[1].toFixed(5)}, ${c[0].toFixed(5)}` : ''}" placeholder="lat, lon — e.g. 39.4134, -3.7151"><button class="btn sm" data-act="brHere" title="Use the middle of the map">◎ Map centre</button></div><small class="muted">${c ? 'Set — the globe and locator point here.' : 'Not set — the globe and locator follow the country, or the middle of the map.'}</small></div>`;
@@ -2746,6 +2751,13 @@ export function createEditor() {
     if (!k) return;
     const L = selLayer && layerById(selLayer);
     if (!L) return;
+    if (k === 'brPart') {
+      pushUndo();
+      const part = e.target.dataset.k;
+      if (e.target.checked) delete L.style[`off_${part}`]; else L.style[`off_${part}`] = true;
+      repaint(); save();
+      return;
+    }
     if (k === 'brAt') {
       const m = String(e.target.value).match(/(-?\d+(?:\.\d+)?)\s*[°]?\s*([NS])?\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*[°]?\s*([EW])?/i);
       if (!e.target.value.trim()) { setBriefPoint(L, null); return; }

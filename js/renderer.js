@@ -318,7 +318,7 @@ export function renderScene(ctx, o) {
   const out = { signBoxes: [], legBadges: [], handles: [], layerHandles: [], proj };
   const edit = o.edit;
   const tokens = o.tokens || tokensAt(model, time);
-  const lo = { scene, proj, unit, time, frame: o.frame, tokens, exact: o.exact, pitch: map.getPitch(), map, model };
+  const lo = { scene, proj, unit, time, frame: o.frame, tokens, exact: o.exact, pitch: map.getPitch(), map, model, boxes: o.boxes };
   drawLayers(ctx, lo, 'below');
 
   // ---- route lines ----

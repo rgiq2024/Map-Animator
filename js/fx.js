@@ -1420,7 +1420,7 @@ export function drawFX(ctx, L, tm, o, phase) {
   if (CH_SET.has(L.kind)) { if (phase === 'captions') drawGChart(ctx, L, tm, o); return; }
   if (ML_SET.has(L.kind)) { drawLayout(ctx, L, tm, o, phase); return; }
   if (TY_SET.has(L.kind)) { drawTypography(ctx, L, tm, o, phase); return; }
-  if (BR_SET.has(L.kind)) { if (phase === 'captions') drawBriefing(ctx, L, tm, o); return; }
+  if (BR_SET.has(L.kind)) { if (brPhases(L.kind).includes(phase)) drawBriefing(ctx, L, tm, o); return; }
   if (GL_SET.has(L.kind)) { drawGlobe3d(ctx, L, tm, o, phase); return; }
   if (MF_SET.has(L.kind)) { drawModelFlow(ctx, L, tm, o, phase); return; }
   if (L.kind === 'geovideo') { if (phase === 'below') drawGeoVideo(ctx, L, tm, o); return; }

@@ -802,8 +802,14 @@ export function drawLayers(ctx, o, phase) {
   setBoxSink(o.boxes || null);
   try { drawLayersInner(ctx, o, phase); } finally { setBoxSink(null); }
 }
+// imagery that covers the map (drawn before a briefing frame so the frame sits on it; every other layer goes in front of the frame)
+const UNDER_FRAME = new Set(['timeseries', 'image', 'compare', 'geovideo', 'capture', 'wxfield']);
 function drawLayersInner(ctx, o, phase) {
-  const layers = o.scene.layers || [];
+  let layers = o.scene.layers || [];
+  if (phase === 'below' && layers.some((l) => l.kind === 'briefing')) {
+    const imagery = layers.filter((l) => UNDER_FRAME.has(l.kind)), frames = layers.filter((l) => l.kind === 'briefing');
+    layers = [...imagery, ...frames, ...layers.filter((l) => !UNDER_FRAME.has(l.kind) && l.kind !== 'briefing')];
+  }
   const { proj, unit, time, frame } = o;
   const tokens = o.tokens || {};
   for (const L of layers) {
