@@ -240,6 +240,7 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
       event: C.name, eventKey: inc.cat, assessment: inc.sevText || (text.analysis || [])[0] || '', coords: fmtLatLon(focus),
       sources: [`Sources: ${plan.source}`, ...credits].join(' · '), before: spec(fr.length > 1 ? fr[0] : null), after: spec(fr.length > 1 ? fr.at(-1) : fr[0]),
       thumbZoom: Math.max(fr[0]?.minzoom || 0, Math.min(16, zClose - 0.4)),
+      geobrief: opts.layout === 'geobrief', ticker: [text.subtitle, ...(text.analysis || [])].filter(Boolean).join('\n'),
     }, opts.aspect || 16 / 9);
   }
   return story;
@@ -283,7 +284,7 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
     const P = LS.get('ma.newsparts', { fly: true, sat: true, analysis: true, media: true, end: true, commons: true, music: false, length: 60 });
     const row = (k, t, s) => `<label class="nd-part"><input type="checkbox" data-p="${k}" ${P[k] ? 'checked' : ''}><span><b>${t}</b><small>${s}</small></span></label>`;
     return `${row('fly', '1 · Fly / zoom to the incident', 'From space down to the place, news map with the spot')}${row('sat', '2 · Pre and post satellite images', 'Real Sentinel-2 scenes before and after the date (radar for floods if cloudy)')}${row('analysis', '3 · Damage &amp; analysis', 'Affected area or shaking rings, callout and a facts card')}${row('media', '4 · Photos and videos', 'Your files below, plus photos of the area from Wikimedia Commons')}${row('end', '5 · End card', 'Closing line and the sources')}
-      <div class="nd-row"><label class="nd-mini">Layout <select data-p="layout"><option value="briefing" ${P.layout !== 'classic' ? 'selected' : ''}>Briefing — framed map, globe, before / after panels</option><option value="classic" ${P.layout === 'classic' ? 'selected' : ''}>Classic — full-screen map, lower third and ticker</option></select></label></div>
+      <div class="nd-row"><label class="nd-mini">Layout <select data-p="layout"><option value="briefing" ${!P.layout || P.layout === 'briefing' ? 'selected' : ''}>Briefing — framed map, globe, before / after panels</option><option value="geobrief" ${P.layout === 'geobrief' ? 'selected' : ''}>GEO·BRIEF — header bar, intro card, breaking ticker</option><option value="classic" ${P.layout === 'classic' ? 'selected' : ''}>Classic — full-screen map, lower third and ticker</option></select></label></div>
       <div class="nd-row"><label class="nd-mini"><input type="checkbox" data-p="commons" ${P.commons ? 'checked' : ''}> Photos of the area from Wikimedia Commons</label><label class="nd-mini"><input type="checkbox" data-p="music" ${P.music ? 'checked' : ''}> Music</label></div>`;
   };
   function renderRight() {

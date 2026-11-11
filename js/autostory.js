@@ -620,7 +620,7 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
       <div class="av-opts">
         <label>Length <select id="av-len"><option value="30">About 30 s</option><option value="45" selected>About 45 s</option><option value="60">About 1 min</option><option value="120">About 2 min</option><option value="300">About 5 min</option></select></label>
         <label>Style <select id="av-style"><option value="news">TV news</option><option value="documentary">Documentary (no news graphics)</option></select></label>
-        <label>Layout <select id="av-layout"><option value="briefing">Briefing — framed map, globe, before / after panels (new)</option><option value="classic">Classic — full-screen map with lower third and ticker</option></select></label>
+        <label>Layout <select id="av-layout"><option value="briefing">Briefing — framed map, globe, before / after panels (new)</option><option value="geobrief">GEO·BRIEF — briefing with header bar, intro card and breaking ticker</option><option value="classic">Classic — full-screen map with lower third and ticker</option></select></label>
         <label>Channel name <input id="av-channel" type="text" value="NEWS" maxlength="16" /></label>
         <label>Base map — close-up <select id="av-base-close">${BASEMAPS.map(([k, n]) => `<option value="${k}" ${k === 'satellite' ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label>Base map — news map <select id="av-base-map"><option value="relief" selected>Dark relief (news style)</option>${BASEMAPS.map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></label>
@@ -733,9 +733,9 @@ export function openAutoVideo({ onCreate, aspect = 16 / 9 } = {}) {
       const layout = $('#av-layout').value;
       try { localStorage.setItem('ma.layout', layout); } catch { /* */ }
       const story = buildStory(plan, geo, { length: +$('#av-len').value, style: $('#av-style').value, channel: $('#av-channel').value.trim() || 'NEWS', aspect, baseClose: $('#av-base-close').value, baseMap: $('#av-base-map').value });
-      if (layout === 'briefing') {
+      if (layout === 'briefing' || layout === 'geobrief') {
         const ll = geo.place?.ll || geo.to?.ll || geo.from?.ll;
-        applyBriefing(story, { ll, title: plan.title, sub: 'Geospatial analysis', tag: EVENTS[plan.event] || '', date: plan.date, place: plan.place || geo.place?.name || '', country: geo.country?.name || geo.place?.country || '', event: EVENTS[plan.event] || '', eventKey: plan.event, assessment: plan.subtitle || '', coords: ll ? fmtLatLon(ll) : '', sources: plan.source ? `Source: ${plan.source}` : '', thumbZoom: 15 }, aspect);
+        applyBriefing(story, { ll, title: plan.title, sub: 'Geospatial analysis', tag: EVENTS[plan.event] || '', date: plan.date, place: plan.place || geo.place?.name || '', country: geo.country?.name || geo.place?.country || '', event: EVENTS[plan.event] || '', eventKey: plan.event, assessment: plan.subtitle || '', coords: ll ? fmtLatLon(ll) : '', sources: plan.source ? `Source: ${plan.source}` : '', thumbZoom: 15, geobrief: layout === 'geobrief', ticker: [plan.subtitle, plan.title, plan.place && `${plan.place} — geospatial assessment ongoing`].filter(Boolean).join('\n') }, aspect);
       }
       d.close(); d.remove();
       await onCreate?.(story, plan);

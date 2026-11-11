@@ -60,6 +60,7 @@ import { TwinCity } from './twin.js';
 import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
+import { BR_SHARED, newBriefingLayer } from './briefing.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -2649,6 +2650,14 @@ export function createEditor() {
     return h;
   }
   let layerEditTimer = null;
+  /** Briefing frames with “Same text on every scene” share their text, dates, images and look across the project. */
+  function syncBriefing(L, key) {
+    if (L?.kind !== 'briefing' || !key.startsWith('style.')) return;
+    const f = key.slice(6);
+    if (f === 'sync') { if (L.style.sync) for (const k of BR_SHARED) syncBriefing(L, `style.${k}`); return; }
+    if (L.style.sync === false || !BR_SHARED.includes(f)) return;
+    for (const sc of project.scenes) for (const o of sc.layers || []) if (o !== L && o.kind === 'briefing' && o.style.sync !== false) o.style[f] = JSON.parse(JSON.stringify(L.style[f] ?? null));
+  }
   function onLayerField(e, final) {
     const el = e.target.closest('[data-b]');
     const L = selLayer && layerById(selLayer);
@@ -2662,6 +2671,7 @@ export function createEditor() {
     if (final) pushUndo();
     if (key.startsWith('frame:')) { const [, i, f] = key.split(':'); const fr = L.style.frames?.[+i]; if (fr) fr[f] = v; repaint(); save(); return; }
     setPath(L, key, v);
+    syncBriefing(L, key);
     eventsCache = null;
     if (L.kind === 'matchcut' && /^style\.hl\d?Clear$/.test(key)) { const k = key.slice(9, -5); delete L.style[`hl${k}List`]; delete L.style[`hl${k}Clear`]; renderLayerEditor(); commitLayers(); return; }
     if (L.kind === 'matchcut' && /^style\.img\d?Mouse$/.test(key)) { repaint(); renderLayerEditor(); return; }
@@ -3007,6 +3017,7 @@ export function createEditor() {
       if (!L) return;
       if (pick.mode === 'field') {
         setPath(L, pick.field, items[0].id);
+        if (L.kind === 'briefing') { syncBriefing(L, pick.field); syncBriefing(L, pick.field.replace('Media', 'Date')); }
         if (L.kind === 'briefing' && /Media$/.test(pick.field) && /(19|20)\d\d/.test(items[0].name || '')) { const dk = pick.field.replace('Media', 'Date'); if (!getPath(L, dk)) setPath(L, dk, labelFromName(items[0].name)); }
         if (items[0].quad && L.kind !== 'briefing' && (L.kind === 'image' || !quadOf(L))) { L.geom = quadGeom(items[0].quad); L.style.crs = items[0].crs; zoomTo = L; }
         if (L.kind === 'compare' && pick.field === 'style.media2' && items[0].name.match(/(19|20)\d\d/)) L.style.labelB = labelFromName(items[0].name);
@@ -4583,6 +4594,8 @@ export function createEditor() {
     window.__sceneBarUpd = upd;
   })();
   function renderScenes() {
+    const nb = $('#new-brief-scene');
+    if (nb) nb.hidden = !project.scenes.some((sc) => (sc.layers || []).some((l) => l.kind === 'briefing'));
     $('#scene-tabs').innerHTML = project.scenes.map((sc, i) => `
       <div class="scene-tab ${i === sceneIdx ? 'active' : ''}" data-i="${i}" draggable="true" title="Drag to change the order">
         <span class="n">${i + 1}</span>${miniSVG(sc)}<b>${esc(sc.name)}</b><small data-dur="${i}"></small>
@@ -4694,7 +4707,10 @@ export function createEditor() {
     });
   };
 
-  $('#new-scene').onclick = () => {
+  $('#new-scene').onclick = () => addScene();
+  // briefing projects: add a scene in a chosen briefing layout (same text, same look)
+  $('#new-brief-scene')?.addEventListener('change', (e) => { const v = e.target.value; e.target.value = ''; if (v) addScene(v); });
+  function addScene(briefLayout = null) {
     const last = project.scenes.at(-1);
     const sc = newScene(`Scene ${project.scenes.length + 1}`, last.look);
     // start where the previous scene ended, if it had a route
@@ -4705,13 +4721,18 @@ export function createEditor() {
     sc.camera.tilt = last.camera.tilt || 0;
     // briefing projects: the new scene gets the same frame
     const frame = last.layers?.find((l) => l.kind === 'briefing' && l.style?.layout !== 'end') || (project.layout === 'briefing' && project.scenes.flatMap((x) => x.layers || []).find((l) => l.kind === 'briefing'));
-    if (frame) sc.layers.push({ ...JSON.parse(JSON.stringify(frame)), id: `brief_${Math.random().toString(36).slice(2, 9)}` });
+    if (frame) {
+      const f = { ...JSON.parse(JSON.stringify(frame)), id: `brief_${Math.random().toString(36).slice(2, 9)}` };
+      if (briefLayout) { f.style.layout = briefLayout; for (const k of Object.keys(f.style)) if (k.startsWith('pos_')) delete f.style[k]; }
+      sc.layers.push(f);
+    } else if (briefLayout) sc.layers.push(newBriefingLayer(briefLayout, { title: project.name }));
+    if (briefLayout) sc.name = { intro: 'Intro', A: 'Analysis', B: 'Dashboard', full: 'Full view', end: 'End' }[briefLayout] || sc.name;
     project.scenes.push(sc);
     selectScene(project.scenes.length - 1);
     setStep('route');
     save();
-    toast('New scene — it copies the look of the last scene');
-  };
+    toast(briefLayout ? 'New briefing scene — same text and look, new layout' : 'New scene — it copies the look of the last scene');
+  }
   function selectScene(i, force) {
     if (i === sceneIdx && !force) return;
     setPlaying(false);

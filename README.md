@@ -328,3 +328,11 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
   - **Move panels:** drag any panel on the video (globe, title, info rows, before, after, locator, field strip, place tag, scale bar). **Panels → Reset** puts them all back.
   - **Before / after images:** choose your own pictures. Set each one's label, date, **zoom** and **move ←→ / ↑↓** to crop it. For satellite before / after images, set the map zoom.
   - **Text:** every text and label (title, subtitle, header line, map tag, field labels, panel titles) is editable in the settings.
+
+## GEO·BRIEF briefing set (multi-scene)
+
+- **Create project → Layout → GEO·BRIEF set** makes 5 scenes with the same text and look: **Intro** (title over a globe), **Dashboard** (title, map window, regional context, before / after, field strip), **Analysis** (globe, title, info rows, before / after), **Full view** (map full frame, title block, mini globe, compact before / after) and **End**. It has a header bar (organisation · GEO·BRIEF · briefing date) and a **Breaking** ticker; switch either off in the frame settings.
+- **+ Briefing scene…** (next to *New scene* in the editor) adds another scene in any of these layouts. It copies the text, images and look and starts from the current map view. Add as many as you need.
+- **Same text on every scene** (on by default): edit the title, date, place, event, before / after images, header or ticker in one scene and every other briefing scene updates. Turn it off on a scene to give it its own text.
+- **Add layers** on any briefing scene as usual: routes, areas, 3D models, callouts and so on. **Add → Typography → Frames → Briefing marker** adds the glowing ring with a label box (e.g. “18:11Z — IMPACT”).
+- **Auto video** and **News desk** have a **GEO·BRIEF** layout too. It adds the header bar, an intro card, the full view for the close-up, and the breaking ticker.

@@ -7,6 +7,7 @@
 import { placeAt, CUSTOM_POS } from './place.js';
 import { H, allCountries, countriesByName, countryAt } from './cartofx.js';
 import { imageFor } from './geoimage.js';
+import { newScene } from './scene.js';
 
 const { clamp, easeOut, D2R, rr, merc, drawTiles, bboxOf, labelPoint } = H;
 const DISP = '"Archivo", Inter, system-ui, sans-serif';
@@ -17,23 +18,33 @@ const r6 = (v) => Math.round(v * 1e6) / 1e6;
 const rrAdd = (ctx, x, y, w, h, r) => { if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
 
 export const BR_KINDS = {
+  briefmark: { name: 'Briefing marker', icon: '◉', geom: 'point', desc: 'A glowing ring on the map with a label box, e.g. “18:11Z — IMPACT”' },
   briefing: { name: 'Briefing frame', icon: '▣', geom: null, desc: 'Intelligence-briefing layout: the map in a window with a globe, title, info rows, locator, before / after images and a field strip' },
 };
-export const BR_ANIMS = { briefing: { fade: 'Fade in', build: 'Panels build in', none: 'Shown' } };
+export const BR_ANIMS = { briefing: { fade: 'Fade in', build: 'Panels build in', none: 'Shown' }, briefmark: { pop: 'Pop in', fade: 'Fade in', none: 'Shown' } };
 export const BR_DEFAULTS = {
+  briefmark: { anim: 'pop', duration: 0.8, style: { text: '18:11Z — IMPACT', sub: '', dx: -130, dy: -70, accent: '#35c8ff', ring: true, size: 1 } },
   briefing: { anim: 'build', duration: 1.2, style: {
     layout: 'A', title: 'Urda train collision', sub: 'Geospatial analysis', kicker: 'Geospatial intelligence briefing', tag: 'Train collision',
     date: '', place: '', country: '', event: '', eventIcon: 'alert', assessment: '', coords: '', sources: '',
     accent: '#35c8ff', bg: '#050b14', globe: true, before: null, after: null, photos: [], thumbZoom: 15, windowTag: true, scale: true,
     beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', beforeZoom: 1, afterZoom: 1, beforeX: 0, beforeY: 0, afterX: 0, afterY: 0,
+    header: false, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
   } },
 };
-const LAYOUTS = { A: 'Globe + title left, before / after below the map', B: 'Header, locator and before / after on the right, field strip', end: 'Closing card' };
+const LAYOUTS = { intro: 'Intro — title over a globe', A: 'Analysis — globe + title left, before / after under the map', B: 'Dashboard — title, map, regional context, before / after, field strip', full: 'Full view — map full frame, title block, mini globe', end: 'Closing card' };
 const ICONS = { alert: 'Alert', train: 'Train', flood: 'Flood', fire: 'Fire', quake: 'Earthquake', storm: 'Storm', plane: 'Plane', ship: 'Ship', car: 'Car', pin: 'Place', migration: 'People / migration', forest: 'Forest' };
 export const BR_FORMS = {
+  briefmark: [['style.text', 'Label', 'text'], ['style.sub', 'Second line', 'text'], ['style.dx', 'Label offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Label offset ↑↓', 'range', [-400, 400, 1]], ['style.accent', 'Colour', 'color'], ['style.ring', 'Pulsing ring', 'switch'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
   briefing: [
     ['style.layout', 'Layout', 'select', LAYOUTS],
+    ['style.sync', 'Same text on every scene', 'switch'],
+    ['style.header', 'Header bar (organisation · brand · briefing)', 'switch'],
+    ['style.org', 'Header — organisation', 'text', null, (L) => L.style.header], ['style.unit', 'Header — unit', 'text', null, (L) => L.style.header], ['style.brand', 'Header — centre title', 'text', null, (L) => L.style.header],
+    ['style.tickerOn', 'Breaking ticker at the bottom', 'switch'],
+    ['style.tickerLabel', 'Ticker — label', 'text', null, (L) => L.style.tickerOn], ['style.ticker', 'Ticker — items (one per line)', 'textarea', null, (L) => L.style.tickerOn],
+    ['style.north', 'North arrow', 'switch', null, (L) => L.style.layout === 'B' || L.style.layout === 'full'],
     ['style._pos', 'Panels — drag them on the video to move', 'resetpos'],
     ['style.title', 'Title', 'text'], ['style.sub', 'Subtitle', 'text'], ['style.kicker', 'Header line', 'text', null, (L) => L.style.layout !== 'A'],
     ['style.tag', 'Label on the map', 'text', null, (L) => L.style.layout !== 'end'],
@@ -55,19 +66,23 @@ export const BR_FORMS = {
 };
 export const BR_SET = new Set(Object.keys(BR_KINDS));
 export const brPhases = () => ['captions'];
+/** text shared by every briefing frame of a project when “Same text on every scene” is on */
+export const BR_SHARED = ['title', 'sub', 'kicker', 'tag', 'date', 'place', 'country', 'event', 'eventIcon', 'assessment', 'coords', 'sources', 'accent', 'bg', 'header', 'org', 'unit', 'brand', 'tickerOn', 'ticker', 'tickerLabel', 'beforeMedia', 'afterMedia', 'beforeLabel', 'afterLabel', 'beforeDate', 'afterDate', 'dateLabel', 'placeLabel', 'eventLabel', 'assessLabel', 'locatorTitle', 'sideTitle'];
 
 // ================================================================= geometry of the layouts (fractions of the frame)
 /** { win:[x,y,w,h], ... } in frame fractions for a layout and frame aspect (w / h). */
-export function layoutBoxes(layout, aspect, hasThumbs = true) {
-  const portrait = aspect < 1.2;
-  if (layout === 'end') return { end: true };
-  if (portrait) {
-    return { portrait: true, title: [0.05, 0.1, 0.9, 0.08], win: [0.04, 0.19, 0.92, hasThumbs ? 0.395 : 0.565], thumbs: hasThumbs ? [[0.04, 0.6, 0.445, 0.17], [0.515, 0.6, 0.445, 0.17]] : null, strip: [0.04, 0.785, 0.92, 0.165], globe: null };
+export function layoutBoxes(layout, aspect, hasThumbs = true, opt = {}) {
+  // content area between the header (or logo band) and the ticker (or bottom margin)
+  const top = opt.header ? 0.1 : 0.15, bot = opt.ticker ? 0.078 : 0.035, H = 1 - top - bot;
+  const R = (x, y, w, h) => [x, top + y * H, w, h * H];
+  if (layout === 'end') return { end: true, top, bot };
+  if (layout === 'intro') return { intro: true, top, bot };
+  if (aspect < 1.2) {
+    return { portrait: true, top, bot, title: R(0.05, 0, 0.9, 0.1), win: R(0.04, 0.11, 0.92, hasThumbs ? 0.5 : 0.7), thumbs: hasThumbs ? [R(0.04, 0.63, 0.445, 0.17), R(0.515, 0.63, 0.445, 0.17)] : null, strip: R(0.04, 0.82, 0.92, 0.18), globe: null };
   }
-  if (layout === 'B') {
-    return { header: [0.03, 0.165, 0.945, 0.09], win: [0.03, 0.27, 0.675, 0.54], locator: [0.725, 0.27, 0.25, 0.22], side: [0.725, 0.51, 0.25, 0.3], strip: [0.03, 0.835, 0.945, 0.125] };
-  }
-  return { left: [0.03, 0.17, 0.265, 0.79], globe: [0.1625, 0.355, 0.095], title: [0.03, 0.545], info: [0.03, 0.72, 0.265, 0.24], win: [0.315, 0.17, 0.66, hasThumbs ? 0.49 : 0.79], thumbs: hasThumbs ? [[0.315, 0.695, 0.31, 0.265], [0.665, 0.695, 0.31, 0.265]] : null };
+  if (layout === 'B') return { top, bot, header: R(0.03, 0, 0.64, 0.12), win: R(0.03, 0.15, 0.64, 0.68), locator: R(0.69, 0, 0.28, 0.4), side: R(0.69, 0.43, 0.28, 0.4), strip: R(0.03, 0.865, 0.94, 0.135) };
+  if (layout === 'full') return { full: true, top, bot, win: R(0.02, 0, 0.96, 1), mini: [0.895, top + 0.17 * H, 0.062], titleBlock: R(0.05, 0.62, 0.55, 0.34), thumbs: hasThumbs ? [R(0.66, 0.66, 0.15, 0.28), R(0.82, 0.66, 0.15, 0.28)] : null };
+  return { top, bot, left: R(0.03, 0, 0.265, 1), globe: [0.1625, top + 0.24 * H, 0.095], title: R(0.03, 0.5, 0.265, 0.2), info: R(0.03, 0.73, 0.265, 0.27), win: R(0.315, 0, 0.66, hasThumbs ? 0.6 : 1), thumbs: hasThumbs ? [R(0.315, 0.64, 0.31, 0.36), R(0.665, 0.64, 0.31, 0.36)] : null };
 }
 
 // ================================================================= drawing helpers
@@ -330,8 +345,140 @@ function scaleBar(ctx, o, ll, x, y, u, acc, L) {
   ctx.fillText(nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, x + W + 6 * u, y + 3 * u);
 }
 
+// ---------------------------------------------------------------- place tag (pin + place + coordinates) and north arrow
+function placeTag(ctx, L, o, x, y, u, acc) {
+  const s = L.style;
+  const place = [s.place, s.country].filter(Boolean).join(', ').toUpperCase();
+  if (!place && !s.coords) return;
+  ctx.font = `800 ${15 * u}px ${SANS}`; const w1 = ctx.measureText(place).width;
+  ctx.font = `500 ${10 * u}px ${MONO}`; const w2 = ctx.measureText(s.coords || '').width;
+  const bw = Math.max(w1, w2) + 52 * u, bh = s.coords ? 46 * u : 32 * u;
+  ctx.save(); const [dx, dy] = placeAt(ctx, L, o.frame, x, y, bw, bh, { key: 'tag' }); ctx.restore();
+  x += dx; y += dy;
+  ctx.fillStyle = 'rgba(4,10,18,0.85)'; rr(ctx, x, y, bw, bh, 3 * u); ctx.fill();
+  ctx.strokeStyle = hexA(acc, 0.6); ctx.lineWidth = 1 * u; ctx.stroke();
+  ctx.fillStyle = acc; ctx.fillRect(x, y, 3 * u, bh);
+  icon(ctx, 'pin', x + 20 * u, y + bh / 2, 16 * u, acc);
+  ctx.font = `800 ${15 * u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(place, x + 38 * u, y + (s.coords ? 21 : 21) * u);
+  if (s.coords) { ctx.font = `500 ${10 * u}px ${MONO}`; ctx.fillStyle = acc; ctx.fillText(s.coords, x + 38 * u, y + 37 * u); }
+}
+function northArrow(ctx, o, x, y, u, acc, L) {
+  ctx.save(); const [dx, dy] = placeAt(ctx, L, o.frame, x - 14 * u, y - 14 * u, 28 * u, 28 * u, { key: 'north' }); ctx.restore();
+  x += dx; y += dy;
+  let b = 0; try { b = o.map?.getBearing?.() || 0; } catch { /* */ }
+  ctx.save();
+  ctx.fillStyle = 'rgba(4,10,18,0.8)'; ctx.beginPath(); ctx.arc(x, y, 14 * u, 0, Math.PI * 2); ctx.fill();
+  ctx.translate(x, y); ctx.rotate(-b * D2R);
+  ctx.fillStyle = acc; ctx.beginPath(); ctx.moveTo(0, -10 * u); ctx.lineTo(5 * u, 2 * u); ctx.lineTo(0, -1 * u); ctx.lineTo(-5 * u, 2 * u); ctx.closePath(); ctx.fill();
+  ctx.font = `800 ${7 * u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('N', 0, 10 * u);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- header bar and breaking ticker
+function headerBar(ctx, L, fr, u, acc, k) {
+  const s = L.style, h = fr.h * 0.085, y = fr.y;
+  ctx.save(); ctx.globalAlpha *= k;
+  const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(3,8,16,0.96)'); g.addColorStop(1, 'rgba(5,12,24,0.92)');
+  ctx.fillStyle = g; ctx.fillRect(fr.x, y, fr.w, h);
+  ctx.strokeStyle = hexA(acc, 0.22); ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(fr.x + fr.w * 0.025, y + h); ctx.lineTo(fr.x + fr.w * 0.975, y + h); ctx.stroke();
+  // glow arc under the centre title
+  const cx = fr.x + fr.w / 2;
+  ctx.save(); ctx.beginPath(); ctx.rect(fr.x, y + h * 0.6, fr.w, h * 0.9); ctx.clip();
+  const ag = ctx.createLinearGradient(cx - fr.w * 0.3, 0, cx + fr.w * 0.3, 0); ag.addColorStop(0, hexA(acc, 0)); ag.addColorStop(0.5, hexA(acc, 0.85)); ag.addColorStop(1, hexA(acc, 0));
+  ctx.strokeStyle = ag; ctx.lineWidth = 2 * u; ctx.shadowColor = acc; ctx.shadowBlur = 14 * u;
+  ctx.beginPath(); ctx.ellipse(cx, y + h * 0.15, fr.w * 0.3, h * 0.95, 0, 0.05 * Math.PI, 0.95 * Math.PI); ctx.stroke();
+  ctx.restore();
+  // left: organisation
+  const lx = fr.x + fr.w * 0.03;
+  caps(ctx, s.org || '', lx, y + h * 0.42, 10 * u, '#fff', 800, 0.08);
+  ctx.font = `500 ${9 * u}px ${SANS}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'left'; ctx.fillText(s.unit || '', lx, y + h * 0.7);
+  ctx.fillStyle = acc; ctx.fillRect(lx - 4 * u, y + h - 2 * u, 110 * u, 2 * u);
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.beginPath(); ctx.moveTo(lx + 128 * u, y + h * 0.25); ctx.lineTo(lx + 128 * u, y + h * 0.8); ctx.stroke();
+  // centre: brand
+  ctx.font = `800 ${19 * u}px ${DISP}`;
+  try { ctx.letterSpacing = `${5 * u}px`; } catch { /* */ }
+  ctx.fillStyle = '#eaf6ff'; ctx.textAlign = 'center'; ctx.shadowColor = hexA(acc, 0.6); ctx.shadowBlur = 10 * u;
+  ctx.fillText(String(s.brand || '').toUpperCase(), cx, y + h * 0.62);
+  ctx.shadowBlur = 0; try { ctx.letterSpacing = '0px'; } catch { /* */ }
+  // right: briefing line
+  const rx = fr.x + fr.w * 0.97;
+  caps(ctx, s.kicker || 'Geospatial intelligence briefing', rx, y + h * 0.42, 8.5 * u, acc, 700, 0.2, 'right');
+  ctx.font = `500 ${8.5 * u}px ${MONO}`; ctx.fillStyle = 'rgba(200,215,235,0.7)'; ctx.textAlign = 'right';
+  ctx.fillText(`BRIEFING${s.date ? ` · ${String(s.date).toUpperCase()}` : ''}`, rx, y + h * 0.7);
+  ctx.fillStyle = acc; ctx.fillRect(rx - 106 * u, y + h - 2 * u, 110 * u, 2 * u);
+  ctx.restore();
+}
+function tickerBar(ctx, L, fr, u, acc, k, t) {
+  const s = L.style, h = fr.h * 0.058, y = fr.y + fr.h - h;
+  const items = String(s.ticker || [s.title, s.sub, s.event].filter(Boolean).join('\n')).split(/\n|\|/).map((x) => x.trim()).filter(Boolean);
+  if (!items.length) return;
+  ctx.save(); ctx.globalAlpha *= k;
+  ctx.fillStyle = 'rgba(3,8,16,0.95)'; ctx.fillRect(fr.x, y, fr.w, h);
+  ctx.strokeStyle = hexA(acc, 0.25); ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(fr.x, y); ctx.lineTo(fr.x + fr.w, y); ctx.stroke();
+  const lab = String(s.tickerLabel || 'Breaking').toUpperCase();
+  ctx.font = `800 ${13 * u}px ${SANS}`;
+  const lw = ctx.measureText(lab).width + lab.length * 1.6 * u + 34 * u;
+  ctx.save(); ctx.beginPath(); ctx.rect(fr.x + lw, y, fr.w - lw, h); ctx.clip();
+  const sep = '   ◆   ';
+  ctx.font = `600 ${14 * u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const line = items.join(sep) + sep;
+  const W = ctx.measureText(line).width;
+  let x = fr.x + lw + 16 * u - ((t * 70 * u) % W);
+  while (x < fr.x + fr.w) { ctx.fillText(line, x, y + h / 2 + 1 * u); x += W; }
+  ctx.restore();
+  ctx.fillStyle = acc; ctx.fillRect(fr.x, y, lw, h);
+  caps(ctx, lab, fr.x + 17 * u, y + h / 2 + 4.5 * u, 13 * u, '#04121f', 800, 0.12);
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------- marker with a label box
+function drawMark(ctx, L, tm, o) {
+  const s = L.style, fr = o.frame, ll = L.geom?.coordinates;
+  if (!fr || !ll || !o.proj) return;
+  const u = (fr.w / 1000) * (+s.size || 1), acc = s.accent || '#35c8ff';
+  const p = o.proj(ll);
+  const k = tm.edit || L.anim === 'none' ? 1 : clamp(tm.tau / Math.max(0.1, +L.duration || 0.8), 0, 1);
+  const kk = easeOut(k);
+  ctx.save(); ctx.globalAlpha *= tm.alpha * (L.anim === 'fade' ? kk : 1);
+  if (s.ring !== false) { for (let i = 0; i < 2; i++) { const ph = ((o.time * 0.8) + i * 0.5) % 1; ctx.strokeStyle = hexA(acc, (1 - ph) * 0.9); ctx.lineWidth = 1.4 * u; ctx.beginPath(); ctx.arc(p[0], p[1], (6 + ph * 22) * u, 0, Math.PI * 2); ctx.stroke(); } }
+  ctx.fillStyle = hexA(acc, 0.35); ctx.beginPath(); ctx.arc(p[0], p[1], 9 * u * (L.anim === 'pop' ? kk : 1), 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(p[0], p[1], 4 * u, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p[0], p[1], 1.6 * u, 0, Math.PI * 2); ctx.fill();
+  const text = String(s.text || '').toUpperCase(), sub = s.sub || '';
+  if (text) {
+    ctx.font = `800 ${12 * u}px ${SANS}`; const tw = ctx.measureText(text).width + text.length * 0.8 * u;
+    ctx.font = `500 ${9.5 * u}px ${MONO}`; const sw = sub ? ctx.measureText(sub).width : 0;
+    const bw = Math.max(tw, sw) + 24 * u, bh = sub ? 40 * u : 27 * u;
+    const bx = p[0] + (+s.dx || 0) * u - bw / 2, by = p[1] + (+s.dy || 0) * u - bh / 2;
+    const ax = clamp(p[0], bx, bx + bw), ay = p[1] < by ? by : p[1] > by + bh ? by + bh : by + bh / 2;
+    const ex = ay === by + bh / 2 ? (p[0] < bx ? bx : bx + bw) : ax;
+    ctx.strokeStyle = hexA(acc, 0.9); ctx.lineWidth = 1.2 * u;
+    const reach = L.anim === 'pop' ? kk : 1;
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(p[0] + (ex - p[0]) * reach, p[1] + (ay - p[1]) * reach); ctx.stroke();
+    ctx.globalAlpha *= L.anim === 'pop' ? clamp(k * 2 - 0.6, 0, 1) : 1;
+    ctx.fillStyle = 'rgba(4,10,18,0.88)'; rr(ctx, bx, by, bw, bh, 3 * u); ctx.fill();
+    ctx.strokeStyle = hexA(acc, 0.75); ctx.lineWidth = 1 * u; ctx.stroke();
+    caps(ctx, text, bx + 12 * u, by + 18 * u, 12 * u, '#fff', 800, 0.07);
+    if (sub) { ctx.font = `500 ${9.5 * u}px ${MONO}`; ctx.fillStyle = acc; ctx.textAlign = 'left'; ctx.fillText(sub, bx + 12 * u, by + 32 * u); }
+  }
+  ctx.restore();
+}
+
 // ================================================================= main draw
 export function drawBriefing(ctx, L, tm, o) {
+  if (L.kind === 'briefmark') return drawMark(ctx, L, tm, o);
+  const fr = o.frame;
+  if (!fr) return;
+  drawFrameBody(ctx, L, tm, o);
+  const s = L.style, u = fr.w / 1000, acc = s.accent || '#35c8ff';
+  const k = tm.edit || L.anim === 'none' ? 1 : easeOut(clamp(tm.tau / 0.5, 0, 1));
+  ctx.save(); ctx.globalAlpha *= tm.alpha;
+  if (s.header) headerBar(ctx, L, fr, u, acc, k);
+  if (s.tickerOn) tickerBar(ctx, L, fr, u, acc, k, o.time || 0);
+  ctx.restore();
+}
+function drawFrameBody(ctx, L, tm, o) {
   const fr = o.frame;
   if (!fr) return;
   const s = L.style, acc = s.accent || '#35c8ff';
@@ -346,7 +493,7 @@ export function drawBriefing(ctx, L, tm, o) {
   };
   const BA = [side('before'), side('after')], BAL = [s.beforeLabel || 'Before', s.afterLabel || 'After'];
   const hasThumbs = !!(BA[0] || BA[1] || s.photos?.length);
-  const Bx = layoutBoxes(s.layout || 'A', aspect, hasThumbs);
+  const Bx = layoutBoxes(s.layout || 'A', aspect, hasThumbs, { header: s.header, ticker: s.tickerOn });
   const P = (b) => [fr.x + b[0] * fr.w, fr.y + b[1] * fr.h, b[2] * fr.w, b[3] * fr.h];
   const k = tm.edit || L.anim === 'none' ? 1 : clamp(tm.tau / Math.max(0.2, +L.duration || 1), 0, 1);
   const kk = easeOut(k);
@@ -368,7 +515,7 @@ export function drawBriefing(ctx, L, tm, o) {
   ctx.strokeStyle = hexA(acc, 0.04); ctx.lineWidth = 1;
   ctx.beginPath(); for (let gx = fr.x; gx < fr.x + fr.w; gx += 40 * u) { ctx.moveTo(gx, fr.y); ctx.lineTo(gx, fr.y + fr.h); } for (let gy = fr.y; gy < fr.y + fr.h; gy += 40 * u) { ctx.moveTo(fr.x, gy); ctx.lineTo(fr.x + fr.w, gy); } ctx.stroke();
   // top hairline under the logo band
-  ctx.strokeStyle = hexA(acc, 0.18); ctx.beginPath(); ctx.moveTo(fr.x + 0.03 * fr.w, fr.y + 0.15 * fr.h); ctx.lineTo(fr.x + 0.97 * fr.w, fr.y + 0.15 * fr.h); ctx.stroke();
+  if (!s.header) { ctx.strokeStyle = hexA(acc, 0.18); ctx.beginPath(); ctx.moveTo(fr.x + 0.03 * fr.w, fr.y + 0.15 * fr.h); ctx.lineTo(fr.x + 0.97 * fr.w, fr.y + 0.15 * fr.h); ctx.stroke(); }
   ctx.restore();
   if (win) {
     ctx.strokeStyle = hexA(acc, 0.5); ctx.lineWidth = 1.2 * u; rr(ctx, win[0], win[1], win[2], win[3], 6 * u); ctx.stroke();
@@ -383,6 +530,91 @@ export function drawBriefing(ctx, L, tm, o) {
   const evIcon = s.eventIcon || 'alert';
   const fields = [['calendar', s.dateLabel || 'Incident date', s.date, 'date'], ['pin', s.placeLabel || 'Location', [s.place, s.country].filter(Boolean).join(', '), 'place'], [evIcon, s.eventLabel || 'Event', s.event, 'event'], ['shield', s.assessLabel || 'Assessment', s.assessment, 'assess']].filter((f) => f[2]);
 
+  if (Bx.intro) {
+    // ---- intro: the title over the curve of a big globe
+    const cx = fr.x + fr.w / 2;
+    const R = fr.w * 0.42, gy = fr.y + fr.h * 1.02 + R * 0.35;
+    ctx.save(); ctx.globalAlpha *= stage(0);
+    const glow = ctx.createRadialGradient(cx, gy, R * 0.9, cx, gy, R * 1.12);
+    glow.addColorStop(0, hexA(acc, 0.28)); glow.addColorStop(1, hexA(acc, 0)); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, gy, R * 1.12, 0, Math.PI * 2); ctx.fill();
+    const G = ll && globeImage(ll[0], clamp(ll[1] - 28, -60, 60), Math.round(R / 8) * 8, '', acc);
+    if (G) { ctx.save(); ctx.beginPath(); ctx.arc(cx, gy, R, 0, Math.PI * 2); ctx.clip(); ctx.globalAlpha *= 0.9; ctx.drawImage(G.cv, cx - G.S / 2, gy - G.S / 2); ctx.restore(); }
+    else { ctx.fillStyle = '#0a1d36'; ctx.beginPath(); ctx.arc(cx, gy, R, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = hexA(acc, 0.7); ctx.lineWidth = 1.4 * u; ctx.beginPath(); ctx.arc(cx, gy, R, 0, Math.PI * 2); ctx.stroke();
+    if (G && ll) { const q = G.proj(ll); if (q[2]) { const px = cx - G.S / 2 + q[0], py = gy - G.S / 2 + q[1]; const pulse = (o.time * 0.9) % 1; ctx.strokeStyle = hexA(acc, 1 - pulse); ctx.lineWidth = 1.5 * u; ctx.beginPath(); ctx.arc(px, py, (5 + pulse * 16) * u, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(px, py, 4 * u, 0, Math.PI * 2); ctx.fill(); } }
+    ctx.restore();
+    // title (fades in, then out near the end of the layer's hold, if any)
+    ctx.save(); ctx.globalAlpha *= stage(1); at('introTitle', [fr.x + fr.w * 0.1, fr.y + fr.h * 0.18, fr.w * 0.8, fr.h * 0.24]);
+    const [t1, sz] = fitFont(ctx, title.toUpperCase(), fr.w * 0.8, 46 * u, 800, DISP);
+    try { ctx.letterSpacing = `${sz * 0.04}px`; } catch { /* */ }
+    ctx.fillStyle = '#e8f4ff'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.shadowColor = hexA(acc, 0.5); ctx.shadowBlur = 18 * u;
+    ctx.fillText(t1, cx, fr.y + fr.h * 0.2 + sz);
+    try { ctx.letterSpacing = '0px'; } catch { /* */ }
+    ctx.shadowBlur = 0;
+    if (sub) caps(ctx, sub, cx, fr.y + fr.h * 0.2 + sz + 30 * u, 12 * u, acc, 700, 0.22, 'center');
+    const meta = [s.date, [s.place, s.country].filter(Boolean).join(', '), s.coords].filter(Boolean).join('   ·   ');
+    if (meta) { ctx.font = `500 ${11 * u}px ${MONO}`; ctx.fillStyle = 'rgba(220,235,255,0.75)'; ctx.textAlign = 'center'; ctx.fillText(meta, cx, fr.y + fr.h * 0.2 + sz + 56 * u); }
+    ctx.strokeStyle = acc; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(cx - 22 * u, fr.y + fr.h * 0.2 + sz + 70 * u); ctx.lineTo(cx + 22 * u, fr.y + fr.h * 0.2 + sz + 70 * u); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+    return;
+  }
+  if (Bx.full) {
+    // ---- full view: the map fills the frame; title block, mini globe and before / after sit over it
+    const [wx, wy, ww, wh] = win;
+    ctx.save(); rr(ctx, wx, wy, ww, wh, 6 * u); ctx.clip();
+    const fade = ctx.createLinearGradient(0, wy + wh * 0.45, 0, wy + wh);
+    fade.addColorStop(0, 'rgba(3,9,18,0)'); fade.addColorStop(1, 'rgba(3,9,18,0.88)');
+    ctx.fillStyle = fade; ctx.fillRect(wx, wy + wh * 0.45, ww, wh * 0.55);
+    ctx.restore();
+    // title block
+    const tb = P(Bx.titleBlock);
+    ctx.save(); ctx.globalAlpha *= stage(1); at('titleBlock', tb);
+    ctx.fillStyle = acc; ctx.fillRect(tb[0], tb[1] + 6 * u, 3 * u, tb[3] - 14 * u);
+    const tx = tb[0] + 18 * u;
+    if (s.event || s.tag) caps(ctx, s.event || s.tag, tx, tb[1] + 20 * u, 11 * u, acc, 700, 0.18);
+    const [t1, sz] = fitFont(ctx, title.toUpperCase(), tb[2] - 20 * u, 38 * u, 800, DISP);
+    try { ctx.letterSpacing = `${sz * 0.03}px`; } catch { /* */ }
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(t1, tx, tb[1] + 22 * u + sz);
+    try { ctx.letterSpacing = '0px'; } catch { /* */ }
+    if (sub) { ctx.font = `500 ${14 * u}px ${SANS}`; ctx.fillStyle = 'rgba(225,238,255,0.85)'; ctx.fillText(sub, tx, tb[1] + 22 * u + sz + 26 * u); }
+    let mx = tx; const my = tb[1] + 22 * u + sz + 62 * u;
+    for (const [ic, , val] of fields.filter((f) => f[3] !== 'event')) {
+      icon(ctx, ic, mx + 7 * u, my - 4 * u, 13 * u, acc);
+      ctx.font = `700 ${11.5 * u}px ${SANS}`; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+      const t = String(val).toUpperCase(); ctx.fillText(t, mx + 20 * u, my);
+      mx += 20 * u + ctx.measureText(t).width + 26 * u;
+    }
+    ctx.restore();
+    // mini globe
+    if (s.globe !== false && ll) {
+      const gx = fr.x + Bx.mini[0] * fr.w, gy = Bx.mini[1] * fr.h + fr.y, R = Bx.mini[2] * fr.w;
+      ctx.save(); ctx.globalAlpha *= stage(0); at('globe', [gx - R, gy - R, 2 * R, 2 * R + 26 * u]);
+      const c = countryAt(ll) || (s.country ? (countriesByName(s.country) || [])[0] : null);
+      ctx.fillStyle = 'rgba(3,9,18,0.65)'; ctx.beginPath(); ctx.arc(gx, gy, R * 1.12, 0, Math.PI * 2); ctx.fill();
+      const G = globeImage(ll[0], clamp(ll[1] * 0.8, -60, 60), R, c?.name || '', acc);
+      if (G) { ctx.drawImage(G.cv, gx - G.S / 2, gy - G.S / 2); const q = G.proj(ll); if (q[2]) { const px = gx - G.S / 2 + q[0], py = gy - G.S / 2 + q[1]; ctx.fillStyle = '#ffd25a'; ctx.beginPath(); ctx.arc(px, py, 3.5 * u, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(255,210,90,0.6)'; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(px, py, 8 * u, 0, Math.PI * 2); ctx.stroke(); } }
+      ctx.strokeStyle = hexA(acc, 0.8); ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(gx, gy, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = hexA(acc, 0.35); ctx.beginPath(); ctx.arc(gx, gy, R * 1.12, 0, Math.PI * 2); ctx.stroke();
+      const name = String(s.country || c?.name || '').toUpperCase();
+      if (name) { ctx.font = `800 ${10.5 * u}px ${SANS}`; const tw = ctx.measureText(name).width + 18 * u; const lx = gx + R * 0.6 - tw / 2, ly = gy + R * 1.12 + 6 * u; ctx.fillStyle = 'rgba(4,10,18,0.9)'; rr(ctx, lx, ly, tw, 19 * u, 3 * u); ctx.fill(); ctx.strokeStyle = acc; ctx.lineWidth = 1 * u; ctx.stroke(); caps(ctx, name, lx + 9 * u, ly + 13.5 * u, 10.5 * u, '#fff', 800, 0.1); }
+      ctx.restore();
+    }
+    // before / after (compact)
+    if (Bx.thumbs) {
+      const [b0, b1] = Bx.thumbs.map(P);
+      ctx.save(); ctx.globalAlpha *= stage(3); at('side', [b0[0], b0[1] - 22 * u, b1[0] + b1[2] - b0[0], b0[3] + 22 * u]);
+      caps(ctx, `▣  ${s.sideTitle || 'Site analysis (before / after)'}`, b0[0], b0[1] - 8 * u, 9.5 * u, 'rgba(225,238,255,0.9)', 700, 0.12);
+      thumb(ctx, BA[0], ll, ...b0, u, acc, BAL[0], o, s.thumbZoom);
+      thumb(ctx, BA[1], ll, ...b1, u, acc, BAL[1], o, s.thumbZoom);
+      ctx.restore();
+    }
+    ctx.save(); ctx.globalAlpha *= stage(1);
+    if (s.windowTag !== false) placeTag(ctx, L, o, wx + 18 * u, wy + 18 * u, u, acc);
+    ctx.restore();
+    ctx.restore();
+    return;
+  }
   if (Bx.end) {
     // ---- closing card
     ctx.globalAlpha *= stage(0);
@@ -415,10 +647,10 @@ export function drawBriefing(ctx, L, tm, o) {
     // ---- header title
     const hb = P(Bx.header || Bx.title);
     ctx.save(); ctx.globalAlpha *= stage(0); at('header', hb);
-    const [t1, sz] = fitFont(ctx, title.toUpperCase(), hb[2] * (Bx.portrait ? 1 : 0.62), (Bx.portrait ? 30 : 34) * u, 900, DISP);
+    const [t1, sz] = fitFont(ctx, title.toUpperCase(), hb[2] * (Bx.portrait || s.header ? 1 : 0.62), (Bx.portrait ? 30 : 34) * u, 900, DISP, 0.45);
     ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t1, hb[0], hb[1] + sz * 1.0);
     if (sub) { ctx.font = `500 ${14 * u}px ${SANS}`; ctx.fillStyle = hexA(acc, 0.95); ctx.fillText(sub, hb[0], hb[1] + sz * 1.0 + 22 * u); }
-    if (!Bx.portrait && s.kicker) {
+    if (!Bx.portrait && s.kicker && !s.header) {
       caps(ctx, s.kicker, hb[0] + hb[2], hb[1] + 22 * u, 10.5 * u, acc, 700, 0.25, 'right');
       ctx.font = `500 ${10 * u}px ${MONO}`; ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.textAlign = 'right';
       ctx.fillText(s.coords || '', hb[0] + hb[2], hb[1] + 40 * u);
@@ -468,7 +700,8 @@ export function drawBriefing(ctx, L, tm, o) {
     }
     if (win) {
       ctx.save(); ctx.globalAlpha *= stage(1);
-      if (s.windowTag !== false) windowTag(ctx, L, o, win[0], win[1], win[2], win[3], u, acc, 'left');
+      if (s.windowTag !== false) placeTag(ctx, L, o, win[0] + 16 * u, win[1] + 16 * u, u, acc);
+      if (s.north !== false) northArrow(ctx, o, win[0] + win[2] - 34 * u, win[1] + 34 * u, u, acc, L);
       if (s.scale !== false) scaleBar(ctx, o, ll, win[0] + 22 * u, win[1] + win[3] - 20 * u, u, acc, L);
       ctx.restore();
     }
@@ -519,7 +752,7 @@ export function drawBriefing(ctx, L, tm, o) {
     ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     lines.forEach((l, i) => ctx.fillText(l, tx, ty + sz + i * sz * 1.05));
     const by = ty + sz + (lines.length - 1) * sz * 1.05;
-    if (sub) caps(ctx, sub, tx, by + 22 * u, 12 * u, acc, 700, 0.18);
+    if (sub) { let ss = 12 * u; ctx.font = `700 ${ss}px ${SANS}`; while (ss > 8 * u && ctx.measureText(sub.toUpperCase()).width * 1.2 > tw) { ss *= 0.93; ctx.font = `700 ${ss}px ${SANS}`; } caps(ctx, sub, tx, by + 22 * u, ss, acc, 700, 0.15); }
     ctx.restore();
     // info rows
     const ib = P(Bx.info);
@@ -591,13 +824,14 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
   const mk = (layout, extra = {}) => ({
     id: `brief_${Math.random().toString(36).slice(2, 9)}`, kind: 'briefing', name: 'Briefing frame', visible: true, start: 0, duration: 1.2, hold: 0, anim: 'build',
     geom: info.ll ? { type: 'Point', coordinates: [r6(info.ll[0]), r6(info.ll[1])] } : null,
-    style: { ...BR_DEFAULTS.briefing.style, layout, title: info.title || '', sub: info.sub || 'Geospatial analysis', kicker: info.kicker || 'Geospatial intelligence briefing', tag: info.tag || info.event || '', date: info.date || '', place: info.place || '', country: info.country || '', event: info.event || '', eventIcon: iconFor(info.eventKey), assessment: info.assessment || '', coords: info.coords || '', sources: info.sources || '', accent: info.accent || '#35c8ff', before: info.before || null, after: info.after || null, photos: [], thumbZoom: info.thumbZoom || 15, ...extra },
+    style: { ...BR_DEFAULTS.briefing.style, layout, title: info.title || '', sub: info.sub || 'Geospatial analysis', kicker: info.kicker || 'Geospatial intelligence briefing', tag: info.tag || info.event || '', date: info.date || '', place: info.place || '', country: info.country || '', event: info.event || '', eventIcon: iconFor(info.eventKey), assessment: info.assessment || '', coords: info.coords || '', sources: info.sources || '', accent: info.accent || '#35c8ff', before: info.before || null, after: info.after || null, photos: [], thumbZoom: info.thumbZoom || 15, ...(info.geobrief ? { header: true, tickerOn: true, ticker: info.ticker || '' } : {}), ...extra },
   });
   // before / after pictures the user gave (Auto video) show on every A-layout scene
   if (!info.before) for (const sc of story.scenes) { const c = sc.layers.find((l) => l.kind === 'compare'); if (c) { info.before = { media: c.style.media, date: c.style.labelA && c.style.labelA !== 'BEFORE' ? c.style.labelA : '' }; info.after = { media: c.style.media2, date: c.style.labelB && c.style.labelB !== 'AFTER' ? c.style.labelB : '' }; } }
   for (const sc of story.scenes) {
     const n = sc.name || '';
     let layout = /^end$/i.test(n) ? 'end' : /map|damage|analysis|photo|region|drive|selected/i.test(n) ? 'B' : 'A';
+    if (info.geobrief && /^event$/i.test(n)) layout = 'full';
     const extra = {};
     if (/photo/i.test(n)) {
       const media = sc.layers.filter((l) => l.kind === 'photocard' && l.style?.media).map((l) => ({ id: l.style.media, name: l.style.title }));
@@ -613,12 +847,24 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
     else for (const l of sc.layers) if (l.kind === 'point' && l.style?.label) l.style.label = ''; // the window tag names the place
     const lay = mk(layout, extra);
     const S = lay.style;
-    const boxes = layoutBoxes(layout, aspect, !!(S.before || S.after || S.photos?.length));
+    const boxes = layoutBoxes(layout, aspect, !!(S.before || S.after || S.beforeMedia || S.afterMedia || S.photos?.length), { header: S.header, ticker: S.tickerOn });
     if (boxes.win && sc.camera?.keys?.length) sc.camera.keys = sc.camera.keys.map((key) => ({ ...key, view: viewIntoWindow(key.view, boxes.win, aspect) }));
     if (layout === 'end') { sc.look.grade = { preset: 'custom', brightness: 0.35, contrast: 1.1, saturation: 0.3, warmth: -0.3, fade: 0 }; }
     sc.layers.unshift(lay);
   }
   story.brand = { ...(story.brand || {}), lower: false };
+  if (info.geobrief) {
+    // GEO·BRIEF: the header bar replaces the logo strip; an intro title card comes first
+    story.brand.header = false;
+    const first = story.scenes[0];
+    const sc = newScene('Intro', first?.look);
+    sc.camera = JSON.parse(JSON.stringify(first?.camera || sc.camera));
+    if (sc.camera.mode === 'keyframes' && sc.camera.keys?.length) sc.camera.keys = [{ ...sc.camera.keys[0], t: 0 }, { ...sc.camera.keys[0], t: 5 }];
+    sc.stillStart = 0; sc.stillEnd = 0.5;
+    sc.layers = [mk('intro')];
+    sc.transition = 'dissolve'; sc.transitionSeconds = 0.8;
+    story.scenes.unshift(sc);
+  }
   return story;
 }
 

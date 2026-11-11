@@ -1,6 +1,7 @@
 // Home page: create/open projects, the list of saved projects, and the live demo.
 import { newBriefingLayer } from './briefing.js';
 import { defaultBrand } from './branding.js';
+import { newScene } from './scene.js';
 import { listProjects, saveProject, deleteProject, newProject, normalizeProject, demoProject, projectFileJSON, importProjectMedia } from './store.js';
 import { buildStyle } from './themes.js';
 import { buildScene } from './scene.js';
@@ -117,7 +118,19 @@ export function createHome({ open }) {
     if (layout !== 'standard') {
       p.layout = 'briefing';
       p.brand = { ...defaultBrand(), ...(p.brand || {}), lower: false };
-      p.scenes[0].layers.push(newBriefingLayer(layout, { title: p.name, sub: 'Geospatial analysis', tag: '', date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }));
+      const common = { title: p.name, sub: 'Satellite observation & geospatial assessment', tag: '', date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) };
+      if (layout === 'set') {
+        // a whole briefing: intro, dashboard, analysis, full view and end card — same text on every scene
+        Object.assign(common, { header: true, tickerOn: true, ticker: 'Geospatial assessment ongoing\nSatellite imagery under review', event: 'Event', assessment: 'Assessment' });
+        const plan = [['Intro', 'intro', 6], ['Dashboard', 'B', 9], ['Analysis', 'A', 9], ['Full view', 'full', 9], ['End', 'end', 5]];
+        p.brand = { ...p.brand, header: false }; // the briefing header replaces the logo strip (turn it back on under Brand)
+        p.scenes = plan.map(([name, lay, sec], i) => {
+          const sc = i ? newScene(name, p.scenes[0].look) : Object.assign(p.scenes[0], { name });
+          sc.lineSeconds = sec; sc.stillStart = 0; sc.stillEnd = Math.max(1, sec - 1.2);
+          sc.layers = [newBriefingLayer(lay, common)];
+          return sc;
+        });
+      } else { p.scenes[0].layers.push(newBriefingLayer(layout, common)); p.scenes[0].stillStart = 0; p.scenes[0].stillEnd = 7; }
     }
     await saveProject(p);
     $('#create-name').value = '';
