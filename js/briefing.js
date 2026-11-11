@@ -40,7 +40,7 @@ export const BR_DEFAULTS = {
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
   } },
 };
-const LAYOUTS = { intro: 'Intro — title over a globe', A: 'Analysis — globe + title left, before / after under the map', B: 'Dashboard — title, map, regional context, before / after, field strip', full: 'Full view — map full frame, title block, mini globe', photos: 'Photos — photo slideshow with captions and a map inset', end: 'Closing card' };
+const LAYOUTS = { intro: 'Intro — title over a globe', zoom: 'Zoom to location — from space down to the place', A: 'Analysis — globe + title left, before / after under the map', B: 'Dashboard — title, map, regional context, before / after, field strip', full: 'Full view — map full frame, title block, mini globe', photos: 'Photos — photo slideshow with captions and a map inset', end: 'Closing card' };
 const ICONS = { alert: 'Alert', train: 'Train', flood: 'Flood', fire: 'Fire', quake: 'Earthquake', storm: 'Storm', plane: 'Plane', ship: 'Ship', car: 'Car', pin: 'Place', migration: 'People / migration', forest: 'Forest' };
 export const BR_FORMS = {
   briefmark: [['style.text', 'Label', 'text'], ['style.sub', 'Second line', 'text'], ['style.dx', 'Label offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Label offset ↑↓', 'range', [-400, 400, 1]], ['style.accent', 'Colour', 'color'], ['style.ring', 'Pulsing ring', 'switch'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
@@ -93,6 +93,7 @@ export const BR_PARTS = {
   intro: [['introGlobe', 'Globe'], ['introTitle', 'Title block']],
   A: [['globe', 'Globe'], ['title', 'Title'], ['info', 'Info rows'], ['before', 'Before picture'], ['after', 'After picture'], ['tag', 'Place label on the map']],
   B: [['heading', 'Title'], ['locator', 'Locator map'], ['side', 'Before / after panel'], ['strip', 'Field strip'], ['tag', 'Place label'], ['scale', 'Scale bar'], ['north', 'North arrow']],
+  zoom: [['tag', 'Place label']],
   full: [['titleBlock', 'Title block'], ['globe', 'Mini globe'], ['side', 'Before / after'], ['tag', 'Place label']],
   photos: [['slide', 'Photo'], ['strip', 'Thumbnails'], ['caption', 'Caption panel'], ['tag', 'Place label']],
   end: [['endTitle', 'Title'], ['endFields', 'Fields'], ['endSources', 'Sources']],
@@ -112,6 +113,7 @@ export function layoutBoxes(layout, aspect, hasThumbs = true, opt = {}) {
   }
   if (layout === 'B') return { top, bot, header: R(0.03, 0, 0.64, 0.12), win: R(0.03, 0.15, 0.64, 0.68), locator: R(0.69, 0, 0.28, 0.4), side: R(0.69, 0.43, 0.28, 0.4), strip: R(0.03, 0.865, 0.94, 0.135) };
   if (layout === 'photos') return { photos: true, top, bot, slide: R(0.03, 0, 0.64, 0.82), strip: R(0.03, 0.85, 0.64, 0.15), win: R(0.69, 0, 0.28, 0.42), cap: R(0.69, 0.45, 0.28, 0.55) };
+  if (layout === 'zoom') return { full: true, zoom: true, top, bot, win: R(0.02, 0, 0.96, 1), mini: [0.895, top + 0.17 * H, 0.062], titleBlock: R(0.05, 0.62, 0.55, 0.34), thumbs: null };
   if (layout === 'full') return { full: true, top, bot, win: R(0.02, 0, 0.96, 1), mini: [0.895, top + 0.17 * H, 0.062], titleBlock: R(0.05, 0.62, 0.55, 0.34), thumbs: hasThumbs ? [R(0.66, 0.66, 0.15, 0.28), R(0.82, 0.66, 0.15, 0.28)] : null };
   return { top, bot, left: R(0.03, 0, 0.265, 1), globe: [0.1625, top + 0.24 * H, 0.095], title: R(0.03, 0.5, 0.265, 0.2), info: R(0.03, 0.73, 0.265, 0.27), win: R(0.315, 0, 0.66, hasThumbs ? 0.6 : 1), thumbs: hasThumbs ? [R(0.315, 0.64, 0.31, 0.36), R(0.665, 0.64, 0.31, 0.36)] : null };
 }
@@ -399,8 +401,10 @@ function drawStars(ctx, fr, u, t) {
 
 // ---------------------------------------------------------------- place tag (pin + place + coordinates) and north arrow
 function placeTag(ctx, L, o, x, y, u, acc) {
-  const s = L.style;
+  let s = L.style;
   if (!partOn(s, 'tag')) return;
+  const g = L.geom?.coordinates;
+  if (!s.coords && g) s = { ...s, coords: `${Math.abs(g[1]).toFixed(4)}° ${g[1] >= 0 ? 'N' : 'S'}, ${Math.abs(g[0]).toFixed(4)}° ${g[0] >= 0 ? 'E' : 'W'}` };
   const place = [s.place, s.country].filter(Boolean).join(', ').toUpperCase();
   if (!place && !s.coords) return;
   ctx.font = `800 ${15 * u}px ${SANS}`; const w1 = ctx.measureText(place).width;
@@ -1101,4 +1105,17 @@ export function splitBriefing(F) {
 }
 /** A briefing layout as separate layers. */
 export const briefingLayers = (layout = 'A', style = {}, ll = null) => splitBriefing(newBriefingLayer(layout, style, ll));
+/**
+ * Camera for a “zoom to location” scene: one smooth, eased move from the globe straight down to the place.
+ * ll [lng, lat]; returns { mode: 'keyframes', keys }.
+ */
+export function zoomCamera(ll, seconds = 8, endZoom = 13) {
+  const k = (t, c, z, pitch = 0, ease = 'ease') => ({ t, view: { center: [r6(c[0]), r6(c[1])], zoomRef: z, bearing: 0, pitch }, ease });
+  return {
+    mode: 'keyframes',
+    keys: [k(0, [ll[0] - 30, clamp(ll[1] * 0.5, -45, 45)], 0.7), k(seconds * 0.85, ll, endZoom, 0, 'ease'), k(seconds, ll, endZoom + 0.25, 25, 'linear')],
+  };
+}
+/** middle of a country by name (null while the outlines load) */
+export function countryPoint(name) { const c = (countriesByName(name) || [])[0]; return c ? labelPoint(c.polys) : null; }
 export { CUSTOM_POS };

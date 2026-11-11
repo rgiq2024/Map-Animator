@@ -1,5 +1,5 @@
 // Home page: create/open projects, the list of saved projects, and the live demo.
-import { briefingLayers } from './briefing.js';
+import { briefingLayers, zoomCamera } from './briefing.js';
 import { defaultBrand } from './branding.js';
 import { newScene } from './scene.js';
 import { listProjects, saveProject, deleteProject, newProject, normalizeProject, demoProject, projectFileJSON, importProjectMedia } from './store.js';
@@ -122,12 +122,13 @@ export function createHome({ open }) {
       if (layout === 'set') {
         // a whole briefing: intro, dashboard, analysis, full view and end card — same text on every scene
         Object.assign(common, { header: true, tickerOn: true, ticker: 'Geospatial assessment ongoing\nSatellite imagery under review', event: 'Event', assessment: 'Assessment' });
-        const plan = [['Intro', 'intro', 6], ['Dashboard', 'B', 9], ['Analysis', 'A', 9], ['Full view', 'full', 9], ['Photos', 'photos', 10], ['End', 'end', 5]];
+        const plan = [['Intro', 'intro', 6], ['Zoom to location', 'zoom', 8], ['Dashboard', 'B', 9], ['Analysis', 'A', 9], ['Full view', 'full', 9], ['Photos', 'photos', 10], ['End', 'end', 5]];
         p.brand = { ...p.brand, header: false }; // the briefing header replaces the logo strip (turn it back on under Brand)
         p.scenes = plan.map(([name, lay, sec], i) => {
           const sc = i ? newScene(name, p.scenes[0].look) : Object.assign(p.scenes[0], { name });
           sc.lineSeconds = sec; sc.stillStart = 0; sc.stillEnd = Math.max(1, sec - 1.2);
           sc.layers = briefingLayers(lay, common);
+          if (lay === 'zoom') { Object.assign(sc.camera, zoomCamera([20, 25], sec)); sc.briefZoom = true; sc.stillEnd = 0.5; Object.assign(sc.look, { globe: true, theme: 'satellite', placeNames: false }); }
           return sc;
         });
       } else { p.scenes[0].layers.push(...briefingLayers(layout, common)); p.scenes[0].stillStart = 0; p.scenes[0].stillEnd = 7; }

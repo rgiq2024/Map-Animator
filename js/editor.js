@@ -60,7 +60,7 @@ import { TwinCity } from './twin.js';
 import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
-import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers } from './briefing.js';
+import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers, zoomCamera, countryPoint as countryLabelPoint } from './briefing.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -2701,6 +2701,8 @@ export function createEditor() {
     const g = ll ? { type: 'Point', coordinates: [+ll[0].toFixed(6), +ll[1].toFixed(6)] } : null;
     L.geom = g;
     if (L.style.sync !== false) for (const sc of project.scenes) for (const o of sc.layers || []) if (o.kind === 'briefing' && o.style.sync !== false) o.geom = g && JSON.parse(JSON.stringify(g));
+    // “zoom to location” scenes fly to the new place
+    if (ll) for (const sc of project.scenes) if (sc.briefZoom) { const sec = sc.camera?.keys?.at(-1)?.t || 8; sc.camera = { ...sc.camera, ...zoomCamera(ll, sec) }; }
     renderLayerEditor(); commitLayers();
   }
   /** Briefing frames with “Same text on every scene” share their text, dates, images and look across the project. */
@@ -4854,12 +4856,28 @@ export function createEditor() {
       else sc.layers.push({ ...f, id: `brief_${Math.random().toString(36).slice(2, 9)}` });
     } else if (briefLayout) sc.layers.push(...briefingLayers(briefLayout, { title: project.name }));
     if (briefLayout === 'photos') { for (const f of sc.layers) if (f.kind === 'briefing') f.style.slides ||= []; sc.stillEnd = Math.max(+sc.stillEnd || 0, 7); }
-    if (briefLayout) sc.name = { intro: 'Intro', A: 'Analysis', B: 'Dashboard', full: 'Full view', photos: 'Photos', end: 'End' }[briefLayout] || sc.name;
-    project.scenes.push(sc);
-    selectScene(project.scenes.length - 1);
-    setStep('route');
+    let at = project.scenes.length;
+    if (briefLayout === 'zoom') {
+      // from space down to the incident: the briefing's location, else its country, else the middle of the map
+      const fr = sc.layers.find((l) => l.kind === 'briefing');
+      let ll = fr?.geom?.coordinates;
+      if (!ll && fr?.style.country) ll = countryLabelPoint(fr.style.country);
+      if (!ll) { const c = map.getCenter(); ll = [c.lng, c.lat]; }
+      Object.assign(sc.camera, zoomCamera(ll, 8));
+      Object.assign(sc.look, { globe: true, theme: sc.look.theme === 'classic' ? 'satellite' : sc.look.theme, placeNames: false });
+      sc.stillStart = 0; sc.stillEnd = 0.5; sc.briefZoom = true;
+      sc.legs = [{ ...sc.legs[0], points: [] }];
+      // right after the intro (or after the scene you are on)
+      const intro = project.scenes.findIndex((x) => x.name === 'Intro');
+      at = (intro >= 0 ? intro : sceneIdx) + 1;
+      if (!fr?.geom) setTimeout(() => toast('Tip: set the Incident location in the briefing settings and the zoom flies there', 6000), 1500);
+    }
+    if (briefLayout) sc.name = { intro: 'Intro', zoom: 'Zoom to location', A: 'Analysis', B: 'Dashboard', full: 'Full view', photos: 'Photos', end: 'End' }[briefLayout] || sc.name;
+    project.scenes.splice(at, 0, sc);
+    selectScene(at, true);
+    setStep(briefLayout === 'zoom' ? 'layers' : 'route');
     save();
-    toast(briefLayout ? 'New briefing scene — same text and look, new layout' : 'New scene — it copies the look of the last scene');
+    toast(briefLayout === 'zoom' ? 'Zoom to location added — press ▶ to watch it fly down to the place' : briefLayout ? 'New briefing scene — same text and look, new layout' : 'New scene — it copies the look of the last scene');
   }
   function selectScene(i, force) {
     if (i === sceneIdx && !force) return;
