@@ -17,7 +17,7 @@ const r6 = (v) => Math.round(v * 1e6) / 1e6;
 const rrAdd = (ctx, x, y, w, h, r) => { if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
 
 export const BR_KINDS = {
-  briefing: { name: 'Briefing frame', icon: '▣', geom: 'point', desc: 'Intelligence-briefing layout: the map in a window with a globe, title, info rows, locator, before / after images and a field strip' },
+  briefing: { name: 'Briefing frame', icon: '▣', geom: null, desc: 'Intelligence-briefing layout: the map in a window with a globe, title, info rows, locator, before / after images and a field strip' },
 };
 export const BR_ANIMS = { briefing: { fade: 'Fade in', build: 'Panels build in', none: 'Shown' } };
 export const BR_DEFAULTS = {
@@ -315,7 +315,9 @@ export function drawBriefing(ctx, L, tm, o) {
   if (!fr) return;
   const s = L.style, acc = s.accent || '#35c8ff';
   const u = fr.w / 1000;
-  const ll = L.geom?.coordinates || null;
+  // the incident point, or the middle of the map when the frame has no point (added by hand)
+  let ll = L.geom?.coordinates || null;
+  if (!ll) { try { const c = o.map?.getCenter?.(); if (c) ll = [c.lng, c.lat]; } catch { /* */ } }
   const aspect = fr.w / fr.h;
   const hasThumbs = !!(s.before || s.after || s.photos?.length);
   const Bx = layoutBoxes(s.layout || 'A', aspect, hasThumbs);
@@ -484,9 +486,9 @@ export function drawBriefing(ctx, L, tm, o) {
     // info rows
     const ib = P(Bx.info);
     ctx.save(); ctx.globalAlpha *= stage(2);
-    panel(ctx, ib[0], ib[1], ib[2], ib[3], u, acc);
     const rows = fields.filter((f) => f[1] !== 'Assessment').slice(0, 3);
-    const rh = ib[3] / Math.max(3, rows.length);
+    const rh = ib[3] / 3;
+    if (rows.length) panel(ctx, ib[0], ib[1], ib[2], rh * rows.length, u, acc);
     rows.forEach(([ic, , val], i) => {
       const ry = ib[1] + i * rh;
       if (i) { ctx.strokeStyle = hexA(acc, 0.18); ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(ib[0] + 12 * u, ry); ctx.lineTo(ib[0] + ib[2] - 12 * u, ry); ctx.stroke(); }
@@ -577,4 +579,12 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
   return story;
 }
 
+/** A briefing frame layer for a new project / scene. */
+export function newBriefingLayer(layout = 'A', style = {}, ll = null) {
+  return {
+    id: `brief_${Math.random().toString(36).slice(2, 9)}`, kind: 'briefing', name: `Briefing frame (${layout === 'B' ? 'header + locator' : layout === 'end' ? 'end card' : 'globe + before / after'})`, visible: true, start: 0, duration: 1.2, hold: 0, anim: 'build',
+    geom: ll ? { type: 'Point', coordinates: [r6(ll[0]), r6(ll[1])] } : null,
+    style: { ...JSON.parse(JSON.stringify(BR_DEFAULTS.briefing.style)), layout, ...style },
+  };
+}
 export { CUSTOM_POS };

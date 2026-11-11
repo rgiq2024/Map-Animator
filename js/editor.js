@@ -4696,6 +4696,9 @@ export function createEditor() {
     if (end) sc.legs[0].points.push({ lng: end.lng, lat: end.lat });
     sc.camera.fixed = currentView();
     sc.camera.tilt = last.camera.tilt || 0;
+    // briefing projects: the new scene gets the same frame
+    const frame = last.layers?.find((l) => l.kind === 'briefing' && l.style?.layout !== 'end') || (project.layout === 'briefing' && project.scenes.flatMap((x) => x.layers || []).find((l) => l.kind === 'briefing'));
+    if (frame) sc.layers.push({ ...JSON.parse(JSON.stringify(frame)), id: `brief_${Math.random().toString(36).slice(2, 9)}` });
     project.scenes.push(sc);
     selectScene(project.scenes.length - 1);
     setStep('route');

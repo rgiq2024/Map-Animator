@@ -1,4 +1,5 @@
 // Home page: create/open projects, the list of saved projects, and the live demo.
+import { newBriefingLayer } from './briefing.js';
 import { listProjects, saveProject, deleteProject, newProject, normalizeProject, demoProject, projectFileJSON, importProjectMedia } from './store.js';
 import { buildStyle } from './themes.js';
 import { buildScene } from './scene.js';
@@ -106,9 +107,16 @@ export function createHome({ open }) {
     });
   };
 
+  try { const lay = localStorage.getItem('ma.newLayout'); const r = lay && document.querySelector(`#create-layout input[value="${lay}"]`); if (r) r.checked = true; } catch { /* */ }
   $('#create-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const p = newProject($('#create-name').value.trim() || 'Untitled trip');
+    const layout = document.querySelector('#create-layout input:checked')?.value || 'standard';
+    try { localStorage.setItem('ma.newLayout', layout); } catch { /* */ }
+    if (layout !== 'standard') {
+      p.layout = 'briefing';
+      p.scenes[0].layers.push(newBriefingLayer(layout, { title: p.name, sub: 'Geospatial analysis', tag: '', date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }));
+    }
     await saveProject(p);
     $('#create-name').value = '';
     open(p.id);
