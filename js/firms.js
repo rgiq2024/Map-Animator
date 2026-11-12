@@ -79,36 +79,36 @@ export function hotspotStats(list) {
   return { count: list.length, frp: Math.round(frp), maxFrp: Math.round(max), bbox: [w, s, e, n], spanKm: Math.max(1, Math.round(Math.max(kmX, kmY))), t0, t1, centre: [r4(cx / tot), r4(cy / tot)] };
 }
 /**
- * Groups world hotspots into fire clusters (0.25° cells joined with their neighbours). Returns the biggest first:
- * [{ ll, count, frp, hotspots }]
+ * The hottest fire areas in a world list: 0.25° cells scored with their neighbours (≈ 80 km window, by fire power),
+ * picked greedily at least 1.5° apart, each with the hotspots within radiusKm of its centre. Biggest first:
+ * [{ ll, count, frp, stats, hotspots }]
  */
-export function clusterHotspots(list, { cell = 0.25, minCount = 25 } = {}) {
+export function clusterHotspots(list, { cell = 0.25, minCount = 25, radiusKm = 40, max = 40 } = {}) {
   const grid = new Map();
-  const key = (x, y) => `${x}:${y}`;
   for (const h of list) {
-    const gx = Math.floor(h.ll[0] / cell), gy = Math.floor(h.ll[1] / cell);
-    const k = key(gx, gy);
-    if (!grid.has(k)) grid.set(k, { gx, gy, pts: [] });
-    grid.get(k).pts.push(h);
+    const gx = Math.floor(h.ll[0] / cell), gy = Math.floor(h.ll[1] / cell), k = `${gx}:${gy}`;
+    let c = grid.get(k);
+    if (!c) grid.set(k, (c = { gx, gy, n: 0, frp: 0 }));
+    c.n++; c.frp += h.frp || 0.5;
   }
-  const done = new Set(), out = [];
-  for (const [k, c] of grid) {
-    if (done.has(k)) continue;
-    const stack = [c], pts = [];
-    done.add(k);
-    while (stack.length) {
-      const g = stack.pop();
-      pts.push(...g.pts);
-      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-        const nk = key(g.gx + dx, g.gy + dy);
-        if (!done.has(nk) && grid.has(nk)) { done.add(nk); stack.push(grid.get(nk)); }
-      }
-    }
+  const scored = [];
+  for (const c of grid.values()) {
+    let n = 0, frp = 0;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const o = grid.get(`${c.gx + dx}:${c.gy + dy}`); if (o) { n += o.n; frp += o.frp; } }
+    if (n >= minCount) scored.push({ c, n, frp });
+  }
+  scored.sort((a, b) => b.frp - a.frp);
+  const out = [];
+  for (const sc of scored) {
+    if (out.length >= max) break;
+    const ctr = [(sc.c.gx + 0.5) * cell, (sc.c.gy + 0.5) * cell];
+    if (out.some((o) => Math.abs(o.ll[0] - ctr[0]) < 1.5 && Math.abs(o.ll[1] - ctr[1]) < 1.5)) continue;
+    const pts = hotspotsIn(list, bboxAround(ctr, radiusKm));
     if (pts.length < minCount) continue;
     const st = hotspotStats(pts);
     out.push({ ll: st.centre, count: st.count, frp: st.frp, stats: st, hotspots: pts });
   }
-  return out.sort((a, b) => b.frp - a.frp || b.count - a.count);
+  return out;
 }
 
 // ================================================================= the map layer
