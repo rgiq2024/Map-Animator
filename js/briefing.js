@@ -1125,6 +1125,7 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
       for (const l of sc.layers) if (l.kind === 'timeseries') l.style.label = 'none';
     }
     sc.layers = sc.layers.filter((l) => !DROP.has(l.kind));
+    for (const l of sc.layers) if (l.kind === 'compare' || l.kind === 'timeseries') l.underFrame = true; // generated imagery stays inside the map window
     if (sc.layers.some((l) => l.kind === 'tcallout' || l.kind === 'linecallout')) extra.windowTag = false;
     else for (const l of sc.layers) if (l.kind === 'point' && l.style?.label) l.style.label = ''; // the window tag names the place
     const lay = mk(layout, extra);

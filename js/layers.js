@@ -803,12 +803,14 @@ export function drawLayers(ctx, o, phase) {
   try { drawLayersInner(ctx, o, phase); } finally { setBoxSink(null); }
 }
 // imagery that covers the map (drawn before a briefing frame so the frame sits on it; every other layer goes in front of the frame)
-const UNDER_FRAME = new Set(['timeseries', 'image', 'compare', 'geovideo', 'capture', 'wxfield']);
+// (only map-filling imagery the app itself puts in the map window; anything you add yourself — images, photos, videos — goes in front)
+const UNDER_FRAME = new Set(['timeseries', 'capture', 'wxfield']);
 function drawLayersInner(ctx, o, phase) {
   let layers = o.scene.layers || [];
   if (phase === 'below' && layers.some((l) => l.kind === 'briefing')) {
-    const imagery = layers.filter((l) => UNDER_FRAME.has(l.kind)), frames = layers.filter((l) => l.kind === 'briefing');
-    layers = [...imagery, ...frames, ...layers.filter((l) => !UNDER_FRAME.has(l.kind) && l.kind !== 'briefing')];
+    const under = (l) => UNDER_FRAME.has(l.kind) || l.underFrame;
+    const imagery = layers.filter(under), frames = layers.filter((l) => l.kind === 'briefing');
+    layers = [...imagery, ...frames, ...layers.filter((l) => !under(l) && l.kind !== 'briefing')];
   }
   const { proj, unit, time, frame } = o;
   const tokens = o.tokens || {};
