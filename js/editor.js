@@ -60,7 +60,8 @@ import { TwinCity } from './twin.js';
 import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
-import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers, zoomCamera, countryPoint as countryLabelPoint } from './briefing.js';
+import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers, zoomCamera, ZOOM_DEFAULTS, countryPoint as countryLabelPoint } from './briefing.js';
+import { findPlace } from './autostory.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -2199,6 +2200,19 @@ export function createEditor() {
           const sl = L.style.slides || [];
           h += `<h5>${label}</h5><ol class="frame-list">${sl.map((f, i) => `<li><span class="fr-n">${i + 1}</span><input data-b="slide:${i}:caption" value="${esc(f.caption || '')}" placeholder="Caption" title="Caption"><input data-b="slide:${i}:credit" value="${esc(f.credit || '')}" placeholder="Credit" title="Photo credit"><span><button class="mini" data-act="slUp" data-i="${i}" title="Earlier">↑</button><button class="mini" data-act="slDown" data-i="${i}" title="Later">↓</button><button class="mini" data-act="slDel" data-i="${i}" title="Remove">✕</button></span></li>`).join('') || '<li class="empty">No photos yet.</li>'}</ol><div class="btn-row"><button class="btn sm primary" data-act="addSlides">＋ Add photos…</button></div>`;
         }
+        else if (type === 'brzoom') {
+          const sc = scene();
+          if (!sc.briefZoom) h += '';
+          else {
+            const z = zoomOf(sc);
+            const rng = (k, lab, min, max, st, unitTxt = '') => `<label class="row"><span>${lab}</span><input type="range" data-act-input="bz" data-k="${k}" min="${min}" max="${max}" step="${st}" value="${z[k]}"><output>${z[k]}${unitTxt}</output></label>`;
+            h += `<h5>${label}</h5>
+              <div class="field"><span>Place or coordinates</span><div class="btn-row"><input data-act-input="bzPlace" value="${esc(z.place || (z.ll ? `${z.ll[1].toFixed(5)}, ${z.ll[0].toFixed(5)}` : ''))}" placeholder="e.g. Boca Raton, Florida — or 26.6328, -80.1131"><button class="btn sm primary" data-act="bzGo">Fly there</button></div>
+              <div class="btn-row"><button class="btn sm" data-act="bzHere">◎ Use the map centre</button><button class="btn sm" data-act="bzIncident">⌖ Use the incident location</button></div></div>
+              ${rng('end', 'Zoom at the end', 3, 18, 0.25)}${rng('sec', 'Length', 3, 20, 0.5, ' s')}${rng('tilt', 'Tilt at the end', 0, 75, 1, '°')}${rng('rotate', 'Rotate (compass) at the end', -180, 180, 5, '°')}${rng('spin', 'Globe spins first', 0, 3, 0.25, ' turns')}${rng('startZoom', 'Start height (globe zoom)', 0, 4, 0.1)}
+              <div class="btn-row"><button class="btn sm" data-act="bzPreview">▶ Preview the zoom</button></div>`;
+          }
+        }
         else if (type === 'brsplit') {
           h += `<div class="row"><span>${label}</span><button class="btn sm" data-act="brSplit">Split into layers</button></div>`;
         }
@@ -2696,6 +2710,27 @@ export function createEditor() {
     return h;
   }
   let layerEditTimer = null;
+  /** “Zoom to location” scenes: where they fly to and how (sc.briefZoom = { ll, place, sec, end, tilt, rotate, spin }). */
+  const zoomOf = (sc) => ({ ...ZOOM_DEFAULTS, ...(typeof sc.briefZoom === 'object' ? sc.briefZoom : {}) });
+  function applyZoom(sc, patch = {}) {
+    const z = { ...zoomOf(sc), ...patch };
+    sc.briefZoom = z;
+    const ll = z.ll || sc.camera?.keys?.at(-1)?.view?.center || [0, 20];
+    sc.camera = { ...sc.camera, ...zoomCamera(ll, +z.sec || 8, +z.end || 13, z) };
+    sc.stillStart = 0; sc.stillEnd = 0.5;
+  }
+  /** Search a place name (or read “lat, lon”) and point the scene's zoom there. */
+  async function flyZoomTo(q) {
+    q = String(q || '').trim();
+    if (!q) return;
+    const m = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[°]?\s*([NS])?\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*[°]?\s*([EW])?\s*$/i);
+    let ll = null, name = q;
+    if (m) { let lat = +m[1], lon = +m[3]; if (/s/i.test(m[2] || '')) lat = -Math.abs(lat); if (/w/i.test(m[4] || '')) lon = -Math.abs(lon); if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) ll = [lon, lat]; }
+    else { toast('Searching…'); const r = await findPlace(q).catch(() => null); if (r) { ll = r.ll; name = r.name; } }
+    if (!ll) { toast('Place not found — try another name or type “lat, lon”'); return; }
+    pushUndo(); applyZoom(scene(), { ll, place: name, own: true });
+    renderLayerEditor(); commitLayers(); toast(`The zoom flies to ${name}`);
+  }
   /** Incident point of a briefing frame (and of every synced frame). */
   function setBriefPoint(L, ll) {
     pushUndo();
@@ -2703,7 +2738,7 @@ export function createEditor() {
     L.geom = g;
     if (L.style.sync !== false) for (const sc of project.scenes) for (const o of sc.layers || []) if (o.kind === 'briefing' && o.style.sync !== false) o.geom = g && JSON.parse(JSON.stringify(g));
     // “zoom to location” scenes fly to the new place
-    if (ll) for (const sc of project.scenes) if (sc.briefZoom) { const sec = sc.camera?.keys?.at(-1)?.t || 8; sc.camera = { ...sc.camera, ...zoomCamera(ll, sec) }; }
+    if (ll) for (const sc of project.scenes) if (sc.briefZoom && !zoomOf(sc).own) applyZoom(sc, { ll });
     renderLayerEditor(); commitLayers();
   }
   /** Briefing frames with “Same text on every scene” share their text, dates, images and look across the project. */
@@ -2780,6 +2815,13 @@ export function createEditor() {
     if (!k) return;
     const L = selLayer && layerById(selLayer);
     if (!L) return;
+    if (k === 'bz') {
+      const sc = scene(), key = e.target.dataset.k, v = +e.target.value;
+      const out = e.target.nextElementSibling; if (out) out.textContent = `${v}${key === 'sec' ? ' s' : key === 'tilt' || key === 'rotate' ? '°' : key === 'spin' ? ' turns' : ''}`;
+      applyZoom(sc, { [key]: v, own: true }); rebuild(); repaint(); save();
+      return;
+    }
+    if (k === 'bzPlace') { if (e.type === 'change') flyZoomTo(e.target.value); return; }
     if (k === 'brPart') {
       pushUndo();
       const part = e.target.dataset.k;
@@ -3210,6 +3252,10 @@ export function createEditor() {
       else { const j = a === 'slUp' ? i - 1 : i + 1; if (j >= 0 && j < sl.length) [sl[i], sl[j]] = [sl[j], sl[i]]; }
       renderLayerEditor(); commitLayers();
     }
+    if (a === 'bzGo') flyZoomTo($('#layer-editor [data-act-input="bzPlace"]')?.value || '');
+    if (a === 'bzHere') { const c = map.getCenter(); pushUndo(); applyZoom(scene(), { ll: [c.lng, c.lat], place: '', own: true }); renderLayerEditor(); commitLayers(); toast('The zoom now ends at the middle of the map'); }
+    if (a === 'bzIncident') { const g = scene().layers.find((l) => l.kind === 'briefing' && l.geom)?.geom?.coordinates; if (!g) toast('Set the Incident location first'); else { pushUndo(); applyZoom(scene(), { ll: g, place: '', own: false }); renderLayerEditor(); commitLayers(); } }
+    if (a === 'bzPreview') { rebuild(); time = model?.trimIn || 0; setPlaying(true); }
     if (a === 'brSplit') {
       pushUndo();
       const ls = scene().layers, i = ls.indexOf(L);
@@ -4874,9 +4920,9 @@ export function createEditor() {
       let ll = fr?.geom?.coordinates;
       if (!ll && fr?.style.country) ll = countryLabelPoint(fr.style.country);
       if (!ll) { const c = map.getCenter(); ll = [c.lng, c.lat]; }
-      Object.assign(sc.camera, zoomCamera(ll, 8));
+      sc.briefZoom = { ...ZOOM_DEFAULTS, ll }; Object.assign(sc.camera, zoomCamera(ll, 8, 13, sc.briefZoom));
       Object.assign(sc.look, { globe: true, theme: sc.look.theme === 'classic' ? 'satellite' : sc.look.theme, placeNames: false });
-      sc.stillStart = 0; sc.stillEnd = 0.5; sc.briefZoom = true;
+      sc.stillStart = 0; sc.stillEnd = 0.5;
       sc.legs = [{ ...sc.legs[0], points: [] }];
       // right after the intro (or after the scene you are on)
       const intro = project.scenes.findIndex((x) => x.name === 'Intro');

@@ -51,6 +51,7 @@ export const BR_FORMS = {
     ['style.theme', 'Theme', 'select', Object.fromEntries(Object.entries(BR_THEMES).map(([k, t]) => [k, t.name]))],
     ['style._parts', 'Parts — untick to remove one', 'brparts', null, (L) => !L.style.only],
     ['style._split', 'Make every part its own layer', 'brsplit', null, (L) => !L.style.only],
+    ['style._zoom', 'Zoom to location — where and how the camera flies', 'brzoom', null, (L) => L.style.layout === 'zoom'],
     ['style._here', 'Incident location (globe, locator, place tag)', 'brhere'],
     ['style.sync', 'Same text on every scene', 'switch'],
     ['style.slides', 'Photos (slideshow)', 'slides', null, (L) => L.style.layout === 'photos'],
@@ -1183,13 +1184,20 @@ export const briefingLayers = (layout = 'A', style = {}, ll = null) => splitBrie
  * Camera for a “zoom to location” scene: one smooth, eased move from the globe straight down to the place.
  * ll [lng, lat]; returns { mode: 'keyframes', keys }.
  */
-export function zoomCamera(ll, seconds = 8, endZoom = 13) {
-  const k = (t, c, z, pitch = 0, ease = 'ease') => ({ t, view: { center: [r6(c[0]), r6(c[1])], zoomRef: z, bearing: 0, pitch }, ease });
-  return {
-    mode: 'keyframes',
-    keys: [k(0, [ll[0] - 30, clamp(ll[1] * 0.5, -45, 45)], 0.7), k(seconds * 0.85, ll, endZoom, 0, 'ease'), k(seconds, ll, endZoom + 0.25, 25, 'linear')],
-  };
+export function zoomCamera(ll, seconds = 8, endZoom = 13, o = {}) {
+  const tilt = clamp(+o.tilt || 0, 0, 75), rot = clamp(+o.rotate || 0, -180, 180), spin = clamp(+o.spin || 0, 0, 3);
+  const k = (t, c, z, bearing = 0, pitch = 0, ease = 'ease') => ({ t: +t.toFixed(2), view: { center: [r6(c[0]), r6(c[1])], zoomRef: +z.toFixed(3), bearing: +bearing.toFixed(1), pitch: +pitch.toFixed(1) }, ease });
+  const lat0 = clamp(ll[1] * 0.5, -45, 45), z0 = clamp(+o.startZoom || 0.7, 0, 4);
+  const keys = [];
+  if (spin > 0) {
+    // the globe turns first (whole turns), then the camera comes down
+    keys.push(k(0, [ll[0] - 30 - 360 * spin, lat0], z0, 0, 0, 'linear'), k(seconds * 0.35, [ll[0] - 30, lat0], z0 + 0.2, 0, 0, 'ease'));
+  } else keys.push(k(0, [ll[0] - 30, lat0], z0, 0, 0, 'ease'));
+  keys.push(k(seconds * 0.85, ll, endZoom, rot * 0.8, tilt * 0.6, 'ease'), k(seconds, ll, endZoom + 0.25, rot, tilt, 'linear'));
+  return { mode: 'keyframes', keys };
 }
+/** default fly settings of a “zoom to location” scene */
+export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '' };
 /** middle of a country by name (null while the outlines load) */
 export function countryPoint(name) { const c = (countriesByName(name) || [])[0]; return c ? labelPoint(c.polys) : null; }
 export { CUSTOM_POS };
