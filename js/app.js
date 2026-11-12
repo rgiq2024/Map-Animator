@@ -75,10 +75,10 @@ async function storyToProject(story, note) {
   location.hash = `#/p/${p.id}`;
   setTimeout(() => toast(note, 7000), 1200);
 }
-function newsDesk(preset = null) {
-  openNewsDesk({ aspect: 16 / 9, preset, onCreate: (story) => storyToProject(story, 'News video ready — press ▶ to preview. Check the facts against the sources, then Render video.') });
+function newsDesk(preset = null, auto = null) {
+  openNewsDesk({ aspect: 16 / 9, preset, auto, onCreate: (story) => storyToProject(story, 'News video ready — press ▶ to preview. Check the facts against the sources, then Render video.') });
 }
-document.addEventListener('click', (e) => { if (e.target.closest('[data-newsdesk]')) newsDesk(); });
+document.addEventListener('click', (e) => { if (e.target.closest('[data-newsdesk]')) newsDesk(); const a = e.target.closest('[data-autonews]'); if (a) newsDesk(null, a.dataset.autonews); });
 initDailyCard(document.getElementById('nd-daily'), (id) => newsDesk(id));
 
 window.mapAnimator = { editor, autoVideo, newsDesk };

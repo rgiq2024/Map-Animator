@@ -1,6 +1,6 @@
 name: Daily news feed
 
-# Every 24 hours: fetch today's disasters and incidents (USGS, NASA EONET, GDACS, GDELT news)
+# Every 24 hours: fetch today's disasters and incidents (USGS, NASA EONET, GDACS, GDELT news, NASA FIRMS fires)
 # into news/latest.json, then redeploy the site so the app's News desk shows them.
 on:
   schedule:
@@ -24,6 +24,8 @@ jobs:
         with:
           node-version: 20
       - name: Fetch incidents
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
         run: node tools/news-fetch.mjs
       - name: Commit the feed
         run: |

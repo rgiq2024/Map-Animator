@@ -60,6 +60,7 @@ import { TwinCity } from './twin.js';
 import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
+import { firmsKey, setFirmsKey, fetchFirms, bboxAround, packHotspots, parseLatLon } from './firms.js';
 import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers, zoomCamera, ZOOM_DEFAULTS, countryPoint as countryLabelPoint } from './briefing.js';
 import { findPlace } from './autostory.js';
 
@@ -1972,6 +1973,7 @@ export function createEditor() {
         else { L.style.source = 'countries'; L.style.countries ||= k === 'eventdots' ? 'Ukraine' : 'France'; toast('No area layer yet — using a country. Add a Boundary or Area and pick it in the settings.', 5200); }
       }
       if (k === 'elevprofile') { L.start = 0; L.duration = Math.max(4, (scene().duration || 10)); }
+      if (k === 'firms') { const c = map.getCenter(); L.style.center = `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`; toast(firmsKey() ? 'Press “Fetch hotspots now” in the settings' : 'Add your free NASA FIRMS MAP_KEY in the settings, then press “Fetch hotspots now”', 5200); }
       if (k === 'catmarkers') toast('Edit the categories and places (Category | longitude, latitude) in the settings', 4200);
       addLayer(L);
       if ((k === 'spotlight' && L.style.source === 'countries') || (k === 'regions' && L.style.source === 'countries')) {
@@ -2212,6 +2214,17 @@ export function createEditor() {
               ${rng('end', 'Zoom at the end', 3, 18, 0.25)}${rng('sec', 'Length', 3, 20, 0.5, ' s')}${rng('tilt', 'Tilt at the end', 0, 75, 1, '°')}${rng('rotate', 'Rotate (compass) at the end', -180, 180, 5, '°')}${rng('spin', 'Globe spins first', 0, 3, 0.25, ' turns')}${rng('startZoom', 'Start height (globe zoom)', 0, 4, 0.1)}
               <div class="btn-row"><button class="btn sm" data-act="bzPreview">▶ Preview the zoom</button></div>`;
           }
+        }
+        else if (type === 'firms') {
+          const n = (L.style.points || []).length, key = firmsKey();
+          h += `<h5>${label}</h5>
+            <label class="row"><span>Data</span><select data-b="style.source"><option value="saved" ${L.style.source !== 'live' ? 'selected' : ''}>Saved in the project (${n} hotspots)</option><option value="live" ${L.style.source === 'live' ? 'selected' : ''}>Live — fetch every time (needs a MAP_KEY)</option></select></label>
+            <div class="field"><span>Area centre (lat, lon) and radius</span><div class="btn-row"><input data-b="style.center" value="${esc(L.style.center || '')}" placeholder="e.g. 34.05, -118.25"><button class="btn sm" data-act="firmsHere">◎ Map centre</button></div></div>
+            <label class="row"><span>Radius</span><input type="number" data-b="style.km" value="${+L.style.km || 40}" min="2" max="500"> km</label>
+            <label class="row"><span>Days back</span><select data-b="style.days">${[1, 2, 3, 4, 5].map((d) => `<option value="${d}" ${(+L.style.days || 2) === d ? 'selected' : ''}>${d}</option>`).join('')}</select></label>
+            <label class="field"><span>NASA FIRMS MAP_KEY <small class="muted">— free from firms.modaps.eosdis.nasa.gov/api/map_key · kept only in this browser</small></span><input type="password" data-act-input="firmsKey" value="${esc(key)}" placeholder="32-character key"></label>
+            <div class="btn-row"><button class="btn sm primary" data-act="firmsFetch">🔥 Fetch hotspots now</button></div>
+            <p class="hint-line">VIIRS 375 m (NOAA-20 + Suomi NPP). Colour = fire radiative power. Without a key, fire stories from the News desk bring the last 24 h of hotspots with them.</p>`;
         }
         else if (type === 'brsplit') {
           h += `<div class="row"><span>${label}</span><button class="btn sm" data-act="brSplit">Split into layers</button></div>`;
@@ -2822,6 +2835,7 @@ export function createEditor() {
       return;
     }
     if (k === 'bzPlace') { if (e.type === 'change') flyZoomTo(e.target.value); return; }
+    if (k === 'firmsKey') { setFirmsKey(e.target.value); toast(e.target.value.trim() ? 'FIRMS key saved in this browser' : 'FIRMS key removed'); return; }
     if (k === 'brPart') {
       pushUndo();
       const part = e.target.dataset.k;
@@ -3251,6 +3265,17 @@ export function createEditor() {
       if (a === 'slDel') sl.splice(i, 1);
       else { const j = a === 'slUp' ? i - 1 : i + 1; if (j >= 0 && j < sl.length) [sl[i], sl[j]] = [sl[j], sl[i]]; }
       renderLayerEditor(); commitLayers();
+    }
+    if (a === 'firmsHere') { const c = map.getCenter(); pushUndo(); L.style.center = `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`; renderLayerEditor(); commitLayers(); }
+    if (a === 'firmsFetch') {
+      const ll = parseLatLon(L.style.center) || (() => { const c = map.getCenter(); return [c.lng, c.lat]; })();
+      btn.disabled = true; toast('Asking NASA FIRMS…');
+      try {
+        const list = await fetchFirms({ bbox: bboxAround(ll, +L.style.km || 40), days: +L.style.days || 2 });
+        pushUndo(); L.style.points = packHotspots(list); L.style.source = 'saved'; if (!L.style.center) L.style.center = `${ll[1].toFixed(4)}, ${ll[0].toFixed(4)}`;
+        renderLayerEditor(); commitLayers(); toast(list.length ? `${list.length} hotspots saved in the layer` : 'No active fires detected in that area');
+      } catch (err) { toast(err.message || 'FIRMS request failed', 5000); }
+      btn.disabled = false;
     }
     if (a === 'bzGo') flyZoomTo($('#layer-editor [data-act-input="bzPlace"]')?.value || '');
     if (a === 'bzHere') { const c = map.getCenter(); pushUndo(); applyZoom(scene(), { ll: [c.lng, c.lat], place: '', own: true }); renderLayerEditor(); commitLayers(); toast('The zoom now ends at the middle of the map'); }

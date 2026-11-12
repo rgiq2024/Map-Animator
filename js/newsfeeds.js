@@ -21,6 +21,8 @@ export const NEWS_CATS = {
 const EONET_CAT = { wildfires: 'wildfire', floods: 'flood', landslides: 'landslide', volcanoes: 'volcano', severeStorms: 'storm', drought: 'drought', tempExtremes: 'drought', earthquakes: 'earthquake', manmade: 'manmade' };
 const GDACS_CAT = { EQ: 'earthquake', FL: 'flood', TC: 'storm', VO: 'volcano', DR: 'drought', WF: 'wildfire' };
 
+import { clusterHotspots, hotspotsIn, bboxAround, packHotspots, hotspotStats } from './firms.js';
+
 const UA = { Accept: 'application/json' };
 async function getJSON(url, { timeout = 20000, headers = {} } = {}) {
   const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -209,4 +211,46 @@ export async function fetchIncidents({ cats = Object.keys(NEWS_CATS), hours = 24
     try { news = await fetchGDELT([...want], hours); } catch (e) { errors.GDELT = e.message || 'failed'; }
   }
   return { items: rankIncidents([...base, ...news]), errors, at: new Date().toISOString() };
+}
+
+// ---------------------------------------------------------------- NASA FIRMS: hotspots for fire stories, and new fire stories from big clusters
+const kmBetween = (a, b) => { const d = Math.PI / 180; return 6371 * Math.hypot((b[0] - a[0]) * d * Math.cos(((a[1] + b[1]) / 2) * d), (b[1] - a[1]) * d); };
+/**
+ * Adds the FIRMS hotspots near every wildfire story (packed, so they travel in the feed) and turns the biggest
+ * clusters with no story yet into new wildfire stories. reverse(ll) → { place, country } names a new cluster (optional).
+ */
+export async function addFireHotspots(items, world, { radiusKm = 40, maxPer = 900, newStories = 6, reverse = null } = {}) {
+  if (!world?.length) return items;
+  for (const it of items) {
+    if (it.cat !== 'wildfire' || !it.ll) continue;
+    const near = hotspotsIn(world, bboxAround(it.ll, radiusKm));
+    if (!near.length) continue;
+    const st = hotspotStats(near);
+    it.hotspots = packHotspots(near, maxPer);
+    it.facts = { ...(it.facts || {}), 'Active fire detections': `${st.count} (NASA FIRMS, 24 h)`, 'Strongest fire power': `${st.maxFrp} MW` };
+    it.severity = Math.max(it.severity || 0, st.count > 400 ? 2.6 : st.count > 120 ? 2 : 1.3);
+    it.alsoIn = [...new Set([...(it.alsoIn || []), 'NASA FIRMS'])];
+  }
+  const fires = items.filter((it) => it.cat === 'wildfire' && it.ll);
+  let made = 0;
+  for (const c of clusterHotspots(world, { minCount: 40 })) {
+    if (made >= newStories) break;
+    if (fires.some((f) => kmBetween(f.ll, c.ll) < radiusKm * 1.5)) continue;
+    let nm = null;
+    if (reverse) { try { nm = await reverse(c.ll); } catch { nm = null; } }
+    const place = nm?.place || '', country = nm?.country || '';
+    const where = [place, country].filter(Boolean).join(', ') || `${Math.abs(c.ll[1]).toFixed(2)}°${c.ll[1] >= 0 ? 'N' : 'S'} ${Math.abs(c.ll[0]).toFixed(2)}°${c.ll[0] >= 0 ? 'E' : 'W'}`;
+    const st = c.stats;
+    const it = {
+      id: `firms:${c.ll[0].toFixed(2)},${c.ll[1].toFixed(2)}:${new Date(st.t1).toISOString().slice(0, 10)}`, cat: 'wildfire', source: 'NASA FIRMS',
+      title: `Wildfire — ${st.count} active fire detections near ${where}`, place: place || where, country, ll: c.ll, time: st.t1,
+      severity: st.count > 600 ? 2.6 : st.count > 200 ? 2 : 1.4, sevText: `${st.count} hotspots · ${st.maxFrp} MW peak`,
+      url: `https://firms.modaps.eosdis.nasa.gov/map/#d:24hrs;@${c.ll[0].toFixed(2)},${c.ll[1].toFixed(2)},9z`,
+      facts: { 'Active fire detections': `${st.count} (NASA FIRMS, 24 h)`, 'Strongest fire power': `${st.maxFrp} MW`, 'Fire area spans': `about ${st.spanKm} km` },
+      hotspots: packHotspots(c.hotspots, maxPer), links: [],
+    };
+    it.links = [{ title: 'NASA FIRMS fire map', url: it.url, source: 'NASA FIRMS' }];
+    items.push(it); fires.push(it); made++;
+  }
+  return items;
 }

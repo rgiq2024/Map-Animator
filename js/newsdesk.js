@@ -1,12 +1,13 @@
 // AI news desk: finds today's disasters and incidents, then builds a whole news video for one of them:
 // fly / zoom to the incident → pre and post satellite images → damage & analysis → photos and videos → end card.
 // Text can be written by AI (your own Anthropic API key, kept in this browser) or by built-in templates.
-import { NEWS_CATS, fetchIncidents } from './newsfeeds.js';
+import { NEWS_CATS, fetchIncidents, addFireHotspots, rankIncidents } from './newsfeeds.js';
 import { parseBrief, resolvePlaces, buildStory, defaultBlocks, mkLayer as L, camKey as K, camView as V, destPoint as dest, pointGeom as pt, circleGeom as circle, REF_W, fmtLatLon } from './autostory.js';
 import { newScene, fitCamera } from './scene.js';
 import { pcScenes, pcRenders, pcDayTiles } from './pcsat.js';
 import { putMedia } from './store.js';
-import { applyBriefing } from './briefing.js';
+import { applyBriefing, briefFrame, splitBriefing, layoutBoxes, viewIntoWindow, zoomCamera, ZOOM_DEFAULTS } from './briefing.js';
+import { fetchFirms, fetchFirmsWorld, hotspotsIn, firmsKey, setFirmsKey, bboxAround, unpackHotspots, packHotspots, hotspotStats } from './firms.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -246,8 +247,153 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
   return story;
 }
 
+// ================================================================= disaster brief: Intro → Zoom to location → Pre & post → Photos → Analysis → End
+/** Hotspots for a fire story: from your FIRMS key (fresh, last 3 days) or the ones the daily feed brought along. */
+async function fireHotspots(inc, ll, onStatus) {
+  let list = inc.hotspots ? unpackHotspots(inc.hotspots) : [];
+  if (firmsKey()) {
+    onStatus('Asking NASA FIRMS for active fires…');
+    try { const bb = bboxAround(ll, 40); const l = hotspotsIn(await fetchFirms({ bbox: bb, days: 3 }), bb); if (l.length || !list.length) list = l; } catch (e) { onStatus(`FIRMS: ${e.message}`); }
+  }
+  return list;
+}
+const FIRE = (c) => c === 'wildfire';
+const FLOOD = (c) => c === 'flood' || c === 'flashflood';
+/**
+ * A whole GEO·BRIEF news video for one incident, always in this order:
+ * Intro · Zoom to location · Pre & post satellite · Photos · Analysis (FIRMS hotspots for fires, flood extent for floods) · End.
+ */
+export async function buildDisasterBrief(inc, text, media = [], opts = {}, onStatus = () => {}) {
+  const C = NEWS_CATS[inc.cat] || { name: 'Incident', event: 'place' };
+  const aspect = opts.aspect || 16 / 9;
+  const plan = parseBrief(inc.ll ? text.headline : `${text.headline}${text.place ? ` in ${text.place}` : ''}`);
+  Object.assign(plan, { title: text.headline, subtitle: text.subtitle, event: C.event || 'place' });
+  if (text.place) plan.place = text.place;
+  if (inc.ll) plan.coords = `${inc.ll[1]}, ${inc.ll[0]}`;
+  if (inc.country && !plan.context?.length) plan.context = [inc.country];
+  onStatus('Finding the place…');
+  const geo = await resolvePlaces(plan, onStatus);
+  if (!geo.place?.ll) throw new Error('Could not find the place on the map — type the place name in “Place”');
+  let focus = geo.place.ll;
+  const date = inc.time ? longDate(inc.time) : longDate(Date.now());
+  const sources = [inc.source, ...(inc.alsoIn || [])].filter((v, i, a) => v && a.indexOf(v) === i);
+  const credits = [];
+  // ---- fire: NASA FIRMS hotspots
+  let hot = [], st = null;
+  if (FIRE(inc.cat)) {
+    hot = await fireHotspots(inc, focus, onStatus);
+    st = hotspotStats(hot);
+    if (st) { credits.push('Active fires: NASA FIRMS (VIIRS 375 m)'); if (!inc.ll) focus = st.centre; }
+  }
+  const zoneKm = FIRE(inc.cat) ? Math.max(3, Math.min(30, st ? st.spanKm * 0.6 : 5)) : { flood: 6, flashflood: 3 }[inc.cat] || 4;
+  const half = zoneKm * 1000 * 1.25;
+  const vh = REF_W / aspect;
+  const fit = fitCamera([[dest(focus, 270, half)[0], dest(focus, 180, half)[1]], [dest(focus, 90, half)[0], dest(focus, 0, half)[1]]], REF_W, vh, 0.05);
+  const zClose = Math.min(15, Math.max(6, fit.zoom));
+  // ---- satellite before / after
+  let sat = null;
+  try { sat = await satPair(focus, inc.time, Math.min(zoneKm * 1.25, 12), inc.cat, onStatus); } catch (e) { sat = { error: e.message }; }
+  if (sat?.frames?.length) credits.push(sat.col?.startsWith('sentinel-1') ? 'Copernicus Sentinel-1 radar via Microsoft Planetary Computer' : 'Copernicus Sentinel-2 via Microsoft Planetary Computer');
+  // ---- photos
+  const items = media.filter((m) => m.kind === 'image');
+  if (opts.commons !== false && items.length < 4) {
+    onStatus('Looking for photos of the area…');
+    try { for (const p of await commonsPhotos(focus, 4 - items.length)) { items.push({ id: p.id, kind: 'image', name: p.title, credit: p.credit }); credits.push(`Photo: ${p.credit} (Wikimedia Commons)`); } } catch { /* none */ }
+  }
+  // ---- text for every frame
+  const facts = [...(text.facts || [])];
+  if (st) {
+    const hrs = Math.max(1, Math.round((st.t1 - st.t0) / 3600e3));
+    facts.unshift(`Active fire detections | ${st.count.toLocaleString('en-US')} in ${hrs} h`, `Strongest fire power | ${st.maxFrp} MW`, `Fire area spans | about ${st.spanKm} km`);
+  }
+  const assessment = st ? `${st.count.toLocaleString('en-US')} active fire detections (NASA FIRMS)` : inc.sevText || (text.analysis || [])[0] || '';
+  const fr = sat?.frames || [];
+  const spec = (f) => (f ? { url: f.url, date: f.date, minzoom: f.minzoom, maxzoom: f.maxzoom } : null);
+  const info = {
+    ll: focus, title: text.headline, sub: FIRE(inc.cat) ? 'Wildfire · satellite assessment' : FLOOD(inc.cat) ? 'Flood · satellite assessment' : 'Geospatial analysis',
+    kicker: 'Geospatial intelligence briefing', tag: C.name, date, place: text.place || geo.place?.name || '', country: geo.country?.name || geo.place?.country || inc.country || '',
+    event: C.name, eventKey: inc.cat, assessment, coords: fmtLatLon(focus), sources: [`Sources: ${sources.join(' · ')}`, ...credits].join(' · '),
+    before: spec(fr.length > 1 ? fr[0] : null), after: spec(fr.length > 1 ? fr.at(-1) : fr[0]), thumbZoom: Math.max(fr[0]?.minzoom || 0, Math.min(16, zClose - 0.4)),
+    geobrief: true, ticker: [text.subtitle, ...facts.map((f) => f.replace(' | ', ': '))].filter(Boolean).join('\n'), accent: FIRE(inc.cat) ? '#ff8a2a' : '#35c8ff',
+  };
+  const sat0 = { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, clouds: false };
+  const frameOf = (layout, extra = {}) => splitBriefing(briefFrame(info, layout, extra));
+  const boxesOf = (layout) => layoutBoxes(layout, aspect, !!(info.before || info.after), { header: true, ticker: false });
+  const inWindow = (sc, layout) => { const b = boxesOf(layout); if (b.win && sc.camera.keys?.length) sc.camera.keys = sc.camera.keys.map((k) => ({ ...k, view: viewIntoWindow(k.view, b.win, aspect) })); };
+  const scene = (name, look, keys, stillEnd = 0.4) => { const sc = newScene(name); Object.assign(sc.look, look); sc.camera.mode = 'keyframes'; sc.camera.keys = keys; sc.stillStart = 0; sc.stillEnd = stillEnd; sc.transition = 'scanwipe'; sc.transitionSeconds = 0.9; return sc; };
+  const scenes = [];
+  // 1 · Intro — title over a slowly turning globe
+  {
+    const g = [focus[0] - 25, Math.max(-45, Math.min(45, focus[1] * 0.5))];
+    const sc = scene('Intro', { ...sat0, globe: true }, [K(0, V(g, 0.9), 'linear'), K(6, V([g[0] + 8, g[1]], 1), 'linear')], 0.2);
+    sc.layers = frameOf('intro');
+    scenes.push(sc);
+  }
+  // 2 · Zoom to location — from space down to the place
+  {
+    const z = { ...ZOOM_DEFAULTS, ll: focus, place: info.place, sec: 8, end: Math.min(15, zClose + 0.6), tilt: FIRE(inc.cat) ? 35 : 25, spin: 0.5 };
+    const sc = scene('Zoom to location', { ...sat0, globe: true }, [], 0.5);
+    Object.assign(sc.camera, zoomCamera(focus, z.sec, z.end, z));
+    sc.briefZoom = z;
+    sc.layers = frameOf('zoom');
+    sc.layers.push(L('point', pt(focus), z.sec * 0.8, { duration: 0.8, name: 'Incident', style: { marker: 'ring', color: FIRE(inc.cat) ? '#ff6a00' : '#ff3b30', size: 1, effect: 'pulse', label: '' } }));
+    scenes.push(sc);
+  }
+  // 3 · Pre & post satellite
+  {
+    const D = 9, z = Math.max(zClose, fr[0]?.minzoom || 0);
+    const sc = scene('Pre & post satellite', sat0, [K(0, V(focus, z - 0.3), 'linear'), K(D, V(focus, z + 0.15), 'linear')], 0.3);
+    inWindow(sc, 'A');
+    if (fr.length) {
+      const per = fr.length > 1 ? 3.6 : 7;
+      const ts = L('timeseries', null, 0.4, { duration: +(fr.length * per).toFixed(2), name: sat.col.startsWith('sentinel-1') ? 'Sentinel-1 radar · before / after' : 'Sentinel-2 · before / after', style: { source: 'pc', pcCol: sat.col, pcLook: sat.look, pcFrom: fr[0].date, pcTo: fr.at(-1).date, pcCloud: 100, pcBbox: sat.bbox, frames: fr, opacity: 1, label: 'none', bar: false, per, fade: 1, credit: '' } });
+      ts.underFrame = true;
+      sc.layers.push(ts);
+    }
+    sc.layers.unshift(...frameOf('A', sat?.missingAfter ? { assessment: 'No clear image after the event yet' } : {}));
+    if (!fr.length) sc.layers.push(L('ttitle', null, 0.8, { duration: 0.6, name: 'No imagery note', style: { look: 'frame', kicker: 'Satellite', text: 'No clear satellite scene found yet', sub: sat?.error || 'Rebuild in a few days', position: 'bottom-right', size: 0.45, color: '#ffffff', accent: '#ffd23f', font: 'sans' } }));
+    scenes.push(sc);
+  }
+  // 4 · Photos — slideshow with a map inset
+  {
+    const sc = scene('Photos', sat0, [K(0, V(focus, zClose - 1.5), 'linear'), K(8, V(focus, zClose - 1.2, 8), 'linear')], Math.max(1, items.length * 3 + 1 - 8));
+    inWindow(sc, 'photos');
+    sc.layers = frameOf('photos', { slides: items.map((m) => ({ media: m.id, caption: m.name || '', credit: m.credit || '' })), slideTitle: FIRE(inc.cat) ? 'From the fire zone' : 'From the ground' });
+    sc.layers.push(L('point', pt(focus), 0.4, { duration: 0.8, name: 'Incident', style: { marker: 'ring', color: '#ff3b30', size: 1, effect: 'pulse', label: '' } }));
+    scenes.push(sc);
+  }
+  // 5 · Analysis — dashboard with the map: fire hotspots / flood extent
+  {
+    const D = 10;
+    const zA = FIRE(inc.cat) && st ? Math.max(7, Math.min(zClose, fitCamera([[st.bbox[0], st.bbox[1]], [st.bbox[2], st.bbox[3]]], REF_W, vh, 0.08).zoom)) : zClose - 0.4;
+    const sc = scene('Analysis', { ...sat0, placeNames: true }, [K(0, V(focus, zA - 0.5, -8, 20), 'ease'), K(D, V(focus, zA - 0.2, 8, 35), 'linear')], 0.4);
+    inWindow(sc, 'B');
+    sc.layers = frameOf('B');
+    if (hot.length) {
+      sc.layers.push(L('firms', null, 0.8, { duration: 6, anim: 'timeline', name: `Fire hotspots · NASA FIRMS (${hot.length})`, style: { source: 'saved', points: packHotspots(hot), center: `${focus[1].toFixed(4)}, ${focus[0].toFixed(4)}`, km: 40, days: 3, size: 1, glow: true, legend: true, legendTitle: 'Active fire detections', position: 'custom', pos: { x: 0.405, y: 0.63 }, credit: 'NASA FIRMS · VIIRS' } }));
+    } else {
+      sc.layers.push(L('area', circle(focus, zoneKm * 1000), 0.8, { duration: 2, name: FLOOD(inc.cat) ? 'Flooded area (approximate)' : 'Affected area (approximate)', style: { stroke: '#ffffff', fill: FIRE(inc.cat) ? '#ff5a1f' : '#2f80ff', fillOpacity: 0.25, dash: 'dashed', width: 2 } }));
+      if (FIRE(inc.cat)) sc.layers.push(L('ttitle', null, 1.2, { duration: 0.6, name: 'Hotspot note', style: { look: 'frame', kicker: 'NASA FIRMS', text: firmsKey() ? 'No active fires detected in the last 3 days' : 'Add a FIRMS MAP_KEY for live hotspots', sub: '', position: 'bottom-left', size: 0.4, color: '#ffffff', accent: '#ff8a2a', font: 'sans' } }));
+    }
+    if (inc.track?.length > 1) sc.layers.push(L('line', { type: 'LineString', coordinates: inc.track }, 1, { duration: 3, name: 'Reported positions', style: { color: '#ffd23f', width: 3, dash: 'solid', glow: true } }));
+    sc.layers.push(L('point', pt(focus), 0.5, { duration: 0.8, name: 'Incident', style: { marker: 'ring', color: '#ffffff', size: 0.9, effect: 'pulse', label: '' } }));
+    scenes.push(sc);
+  }
+  // 6 · End card
+  {
+    const sc = scene('End', sat0, [K(0, V(focus, zClose - 2), 'linear'), K(5, V(focus, zClose - 1.8, 6), 'linear')], 0.3);
+    sc.look.grade = { preset: 'custom', brightness: 0.35, contrast: 1.1, saturation: 0.3, warmth: -0.3, fade: 0 };
+    sc.layers = frameOf('end', { title: text.endText || text.headline });
+    scenes.push(sc);
+  }
+  scenes.at(-1).transition = 'none';
+  const story = { name: `${text.headline} — ${date}`, scenes, brand: { lower: false } };
+  if (opts.music) story.sound = { auto: true, v2: true, music: 'tension' };
+  return story;
+}
+
 // ================================================================= the dialog
-export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) {
+export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null, auto = null } = {}) {
   document.querySelector('.nd-modal')?.remove();
   const d = document.createElement('dialog');
   d.className = 'modal wide nd-modal';
@@ -260,11 +406,12 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
           <div class="nd-cats">${Object.entries(NEWS_CATS).map(([k, c]) => `<label class="nd-cat"><input type="checkbox" value="${k}" ${saved.cats.includes(k) ? 'checked' : ''}><span>${c.icon} ${esc(c.name)}</span></label>`).join('')}</div>
           <div class="nd-row"><select id="nd-hours"><option value="24" ${saved.hours === 24 ? 'selected' : ''}>Last 24 hours</option><option value="72" ${saved.hours === 72 ? 'selected' : ''}>Last 3 days</option><option value="168" ${saved.hours === 168 ? 'selected' : ''}>Last 7 days</option></select>
           <button class="btn sm primary" id="nd-search">Search now</button></div>
+          <div class="nd-row nd-auto"><button class="btn sm" id="nd-autofire" title="Takes the biggest fire story, adds NASA FIRMS hotspots and builds the whole video">🔥 Auto fire video</button><button class="btn sm" id="nd-autoflood" title="Takes the biggest flood story and builds the whole video">🌊 Auto flood video</button></div>
           <p class="muted small" id="nd-feedinfo"></p>
         </div>
         <div class="nd-list" id="nd-list"><p class="muted nd-empty">Loading today’s feed…</p></div>
       </aside>
-      <section class="nd-right" id="nd-right"><div class="nd-placeholder"><b>Pick a story</b><p class="muted">The list shows disasters and incidents from USGS, NASA EONET, GDACS and world news (GDELT), the biggest first. Choose one to build its video:</p><ol class="muted"><li>Fly / zoom to the incident</li><li>Pre and post satellite images (Sentinel)</li><li>Damage &amp; analysis</li><li>Photos and videos</li><li>End card</li></ol></div></section>
+      <section class="nd-right" id="nd-right"><div class="nd-placeholder"><b>Pick a story</b><p class="muted">The list shows disasters and incidents from USGS, NASA EONET, GDACS and world news (GDELT), the biggest first. Choose one to build its video:</p><ol class="muted"><li>Intro</li><li>Zoom to location</li><li>Pre and post satellite images (Sentinel)</li><li>Photos</li><li>Analysis — NASA FIRMS fire hotspots for fires, flood extent for floods</li><li>End card</li></ol><p class="muted">Or press <b>🔥 Auto fire video</b> / <b>🌊 Auto flood video</b> to build the biggest story in one go.</p></div></section>
     </div>
     <div class="modal-actions nd-actions"><button class="btn sm" id="nd-ai">AI settings</button><span class="muted small" id="nd-status"></span><button class="btn primary" id="nd-make" disabled>Create the video</button></div>`;
   document.body.append(d);
@@ -284,7 +431,7 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
     const P = LS.get('ma.newsparts', { fly: true, sat: true, analysis: true, media: true, end: true, commons: true, music: false, length: 60 });
     const row = (k, t, s) => `<label class="nd-part"><input type="checkbox" data-p="${k}" ${P[k] ? 'checked' : ''}><span><b>${t}</b><small>${s}</small></span></label>`;
     return `${row('fly', '1 · Fly / zoom to the incident', 'From space down to the place, news map with the spot')}${row('sat', '2 · Pre and post satellite images', 'Real Sentinel-2 scenes before and after the date (radar for floods if cloudy)')}${row('analysis', '3 · Damage &amp; analysis', 'Affected area or shaking rings, callout and a facts card')}${row('media', '4 · Photos and videos', 'Your files below, plus photos of the area from Wikimedia Commons')}${row('end', '5 · End card', 'Closing line and the sources')}
-      <div class="nd-row"><label class="nd-mini">Layout <select data-p="layout"><option value="briefing" ${!P.layout || P.layout === 'briefing' ? 'selected' : ''}>Briefing — framed map, globe, before / after panels</option><option value="geobrief" ${P.layout === 'geobrief' ? 'selected' : ''}>GEO·BRIEF — header bar, intro card, breaking ticker</option><option value="classic" ${P.layout === 'classic' ? 'selected' : ''}>Classic — full-screen map, lower third and ticker</option></select></label></div>
+      <div class="nd-row"><label class="nd-mini">Layout <select data-p="layout"><option value="disaster" ${!P.layout || P.layout === 'disaster' ? 'selected' : ''}>Disaster brief — Intro · Zoom to location · Pre &amp; post · Photos · Analysis · End</option><option value="briefing" ${P.layout === 'briefing' ? 'selected' : ''}>Briefing — framed map, globe, before / after panels</option><option value="geobrief" ${P.layout === 'geobrief' ? 'selected' : ''}>GEO·BRIEF — header bar, intro card, breaking ticker</option><option value="classic" ${P.layout === 'classic' ? 'selected' : ''}>Classic — full-screen map, lower third and ticker</option></select></label></div>
       <div class="nd-row"><label class="nd-mini"><input type="checkbox" data-p="commons" ${P.commons ? 'checked' : ''}> Photos of the area from Wikimedia Commons</label><label class="nd-mini"><input type="checkbox" data-p="music" ${P.music ? 'checked' : ''}> Music</label></div>`;
   };
   function renderRight() {
@@ -342,9 +489,9 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
     const cfg = aiConfig();
     const box = document.createElement('div');
     box.className = 'nd-aibox';
-    box.innerHTML = `<b>AI settings</b><p class="muted small">Optional. Your Anthropic API key is kept only in this browser and sent only to api.anthropic.com when you press “Write with AI”.</p><label><span>API key</span><input type="password" id="nd-key" value="${esc(cfg.key)}" placeholder="sk-ant-…"></label><label><span>Model</span><input id="nd-model" value="${esc(cfg.model)}"></label><div class="nd-row"><button class="btn sm primary" id="nd-save">Save</button><button class="btn sm" id="nd-forget">Remove key</button></div>`;
+    box.innerHTML = `<b>AI &amp; data settings</b><p class="muted small">Optional. Your Anthropic API key is kept only in this browser and sent only to api.anthropic.com when you press “Write with AI”.</p><label><span>API key</span><input type="password" id="nd-key" value="${esc(cfg.key)}" placeholder="sk-ant-…"></label><label><span>Model</span><input id="nd-model" value="${esc(cfg.model)}"></label><label><span>NASA FIRMS MAP_KEY <small class="muted">(free: firms.modaps.eosdis.nasa.gov/api/map_key — live fire hotspots for any place)</small></span><input type="password" id="nd-firms" value="${esc(firmsKey())}" placeholder="32-character key"></label><div class="nd-row"><button class="btn sm primary" id="nd-save">Save</button><button class="btn sm" id="nd-forget">Remove key</button></div>`;
     $('#nd-right').prepend(box);
-    box.querySelector('#nd-save').onclick = () => { LS.set(AI_KEY, { key: box.querySelector('#nd-key').value.trim(), model: box.querySelector('#nd-model').value.trim() || 'claude-haiku-5-5' }); box.remove(); status('AI settings saved'); if (cur) renderRight(); };
+    box.querySelector('#nd-save').onclick = () => { setFirmsKey(box.querySelector('#nd-firms').value); LS.set(AI_KEY, { key: box.querySelector('#nd-key').value.trim(), model: box.querySelector('#nd-model').value.trim() || 'claude-haiku-5-5' }); box.remove(); status('AI settings saved'); if (cur) renderRight(); };
     box.querySelector('#nd-forget').onclick = () => { LS.set(AI_KEY, { key: '', model: cfg.model }); box.remove(); status('Key removed'); if (cur) renderRight(); };
   };
   async function search() {
@@ -361,12 +508,50 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
     $('#nd-search').disabled = false;
   }
   $('#nd-search').onclick = search;
+  // ---- one click: the biggest fire / flood story → the whole video
+  async function firesFromFirms() {
+    if (!firmsKey()) return false;
+    status('Asking NASA FIRMS for today’s fires worldwide…');
+    try {
+      const world = await fetchFirmsWorld();
+      const reverse = async (ll) => { const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=8&lat=${ll[1]}&lon=${ll[0]}&accept-language=en`); const a = (r.ok ? await r.json() : null)?.address || {}; await new Promise((res) => setTimeout(res, 1000)); return { place: a.county || a.state_district || a.state || a.city || '', country: a.country || '' }; };
+      await addFireHotspots(items, world, { reverse, newStories: 3 });
+      items = rankIncidents(items);
+      renderList();
+      return true;
+    } catch (e) { status(`FIRMS: ${e.message}`); return false; }
+  }
+  async function autoVideo(kind) {
+    const cats = kind === 'fire' ? ['wildfire'] : ['flood', 'flashflood'];
+    const find = () => items.findIndex((x) => cats.includes(x.cat) && x.ll);
+    for (const b of d.querySelectorAll('.nd-auto button')) b.disabled = true;
+    try {
+      let i = find();
+      if (i < 0) {
+        status(`No ${kind} story in the list — searching live…`);
+        try { const r = await fetchIncidents({ cats, hours: 72, sources: { usgs: false, eonet: true, gdacs: true, gdelt: false }, onStatus: status }); items = rankIncidents([...items, ...r.items]); renderList(); } catch { /* try FIRMS below */ }
+        i = find();
+      }
+      if (kind === 'fire' && i < 0) { await firesFromFirms(); i = find(); }
+      if (i < 0) throw new Error(`No ${kind === 'fire' ? 'wildfire' : 'flood'} with a location found right now — try Search now or a longer time window`);
+      pick(i);
+      if (aiConfig().key) { status('Writing the text with AI…'); try { text = { ...text, ...(await aiWrite(cur)) }; renderRight(); } catch { /* the template text is fine */ } }
+      const P = LS.get('ma.newsparts', {});
+      const story = await buildDisasterBrief(cur, text, [], { aspect, commons: P.commons !== false, music: !!P.music }, status);
+      d.close(); d.remove();
+      await onCreate?.(story, { incident: cur, text });
+    } catch (e) { status(e.message || 'Could not build the video'); }
+    for (const b of d.querySelectorAll('.nd-auto button')) b.disabled = false;
+  }
+  $('#nd-autofire').onclick = () => autoVideo('fire');
+  $('#nd-autoflood').onclick = () => autoVideo('flood');
   $('#nd-make').onclick = async () => {
     if (!cur) return;
     const P = LS.get('ma.newsparts', { fly: true, sat: true, analysis: true, media: true, end: true, commons: true, music: false });
     $('#nd-make').disabled = true;
     try {
-      const story = await buildNewsStory(cur, text, P, media, { aspect, length: 60, commons: P.commons !== false, music: !!P.music, layout: P.layout || 'briefing' }, status);
+      const lay = P.layout || 'disaster';
+      const story = lay === 'disaster' ? await buildDisasterBrief(cur, text, media, { aspect, commons: P.commons !== false, music: !!P.music }, status) : await buildNewsStory(cur, text, P, media, { aspect, length: 60, commons: P.commons !== false, music: !!P.music, layout: lay }, status);
       d.close(); d.remove();
       await onCreate?.(story, { incident: cur, text });
     } catch (e) { status(e.message || 'Could not build the video'); $('#nd-make').disabled = false; }
@@ -382,7 +567,8 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null } = {}) 
       $('#nd-feedinfo').textContent = `Daily feed · updated ${new Date(daily.at).toLocaleString()} · press Search now for the latest`;
       renderList();
       if (preset != null) { const i = items.findIndex((x) => x.id === preset); if (i >= 0) pick(i); }
-    } else search();
+    } else if (!auto) search();
+    if (auto) autoVideo(auto);
   })();
 }
 
