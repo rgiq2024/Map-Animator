@@ -15,7 +15,17 @@ export function defaultBrand() {
     country: 'NEPAL', place: 'BUDHI GANDAKI RIVER', date: `${d.getDate()} - ${M[d.getMonth()]} - ${d.getFullYear()}`,
     ticker: 'Heavy rain upstream raises the level of water downstream | 5 people reported missing. | 96 people evacuated from riverside villages',
     speed: 1, color: '#292a66', font: BRAND_FONT, animate: true,
+    // the logo strip as it was last placed (any project) is the starting point for new projects
+    ...lastLogoPlacement(),
   };
+}
+const LOGO_KEYS = ['header', 'logo', 'logoName', 'headerScale', 'headerPlace', 'headerY', 'headerX', 'headerSpread', 'leftX', 'rightX', 'lowerY'];
+function lastLogoPlacement() {
+  try { const v = JSON.parse(localStorage.getItem('ma.logoPlacement') || 'null'); return v && typeof v === 'object' ? Object.fromEntries(LOGO_KEYS.filter((k) => k in v).map((k) => [k, v[k]])) : {}; } catch { return {}; }
+}
+/** Remember where the logo strip was placed (its file, size and position) for the next new project. */
+export function rememberLogoPlacement(b) {
+  try { localStorage.setItem('ma.logoPlacement', JSON.stringify(Object.fromEntries(LOGO_KEYS.map((k) => [k, b?.[k]])))); } catch { /* private mode */ }
 }
 
 // Antarctica Expanded (supplied with the project) for the lower third and ticker

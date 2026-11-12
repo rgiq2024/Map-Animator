@@ -53,7 +53,7 @@ import { readRouteFile, readLayerFile } from './importers.js';
 import { geocode, snapRoute, searchBoundaries } from './services.js';
 import { saveProject } from './store.js';
 import { fetchRailways, trackAlongRail } from './railsnap.js';
-import { setActiveBrand, defaultBrand, drawBranding, preloadBrand, loadBrandFonts } from './branding.js';
+import { rememberLogoPlacement, setActiveBrand, defaultBrand, drawBranding, preloadBrand, loadBrandFonts } from './branding.js';
 import { initModernUI, sectionizeEditor } from './ui.js';
 import { AffectedBuildings } from './hazards.js';
 import { TwinCity } from './twin.js';
@@ -4215,10 +4215,11 @@ export function createEditor() {
     if (k === 'font') b.fontSet = true;
     if (k === 'font') for (const wt of [400, 700]) document.fonts?.load?.(`${wt} 24px "${b.font}"`).then(() => repaint()).catch(() => {});
     $('#brand-opts').hidden = !b.lower;
+    rememberLogoPlacement(b);
     save(); repaint();
   });
   $('#brand-logo-btn').onclick = () => $('#file-brand').click();
-  $('#brand-logo-reset').onclick = () => { const b = project.brand ||= defaultBrand(); b.logo = ''; b.logoName = ''; b.header = true; renderBrandSettings(); save(); preloadBrand(b).then(repaint); };
+  $('#brand-logo-reset').onclick = () => { const b = project.brand ||= defaultBrand(); b.logo = ''; b.logoName = ''; b.header = true; rememberLogoPlacement(b); renderBrandSettings(); save(); preloadBrand(b).then(repaint); };
   $('#file-brand').addEventListener('change', async (e) => {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;
@@ -4226,6 +4227,7 @@ export function createEditor() {
     await putMedia(id, f);
     const b = project.brand ||= defaultBrand();
     b.logo = id; b.logoName = f.name; b.header = true;
+    rememberLogoPlacement(b);
     renderBrandSettings(); save();
     await preloadBrand(b); repaint();
     toast('Logo strip updated', 2400);
@@ -5127,6 +5129,7 @@ export function createEditor() {
       if (!project.sound?.v2) project.sound = { ...(project.sound || {}), auto: false, v2: true }; // sound is off until the user turns it on
       project.sound = { ...defaultSound(), ...(project.sound || {}) };
       project.brand = { ...defaultBrand(), ...(project.brand || {}) };
+      try { if (!localStorage.getItem('ma.logoPlacement') && project.brand?.header) rememberLogoPlacement(project.brand); } catch { /* */ }
       if (project.brand.font === 'Lexend' && !project.brand.fontSet) project.brand.font = defaultBrand().font;
       loadBrandFonts().then(() => repaint());
       preloadBrand(project.brand).then(() => repaint());
