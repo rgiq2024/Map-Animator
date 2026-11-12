@@ -10,7 +10,7 @@ export function defaultBrand() {
   const M = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   return {
     v: 1,
-    header: true, logo: '', logoName: '', headerScale: 1, headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, leftX: 0, rightX: 0, lowerY: 0,
+    _aligned: true, header: true, logo: '', logoName: '', headerScale: 1, headerAlign: 'edges', headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, leftX: 0, rightX: 0, lowerY: 0,
     lower: true,
     country: 'NEPAL', place: 'BUDHI GANDAKI RIVER', date: `${d.getDate()} - ${M[d.getMonth()]} - ${d.getFullYear()}`,
     ticker: 'Heavy rain upstream raises the level of water downstream | 5 people reported missing. | 96 people evacuated from riverside villages',
@@ -19,9 +19,9 @@ export function defaultBrand() {
     ...lastLogoPlacement(),
   };
 }
-const LOGO_KEYS = ['header', 'logo', 'logoName', 'headerScale', 'headerPlace', 'headerY', 'headerX', 'headerSpread', 'leftX', 'rightX', 'lowerY'];
+const LOGO_KEYS = ['header', 'logo', 'logoName', 'headerScale', 'headerAlign', 'headerPlace', 'headerY', 'headerX', 'headerSpread', 'leftX', 'rightX', 'lowerY'];
 function lastLogoPlacement() {
-  try { const v = JSON.parse(localStorage.getItem('ma.logoPlacement') || 'null'); return v && typeof v === 'object' ? Object.fromEntries(LOGO_KEYS.filter((k) => k in v).map((k) => [k, v[k]])) : {}; } catch { return {}; }
+  try { const v = JSON.parse(localStorage.getItem('ma.logoPlacement') || 'null'); if (v && !v.headerAlign) return v.logo ? { logo: v.logo, logoName: v.logoName } : {}; return v && typeof v === 'object' ? Object.fromEntries(LOGO_KEYS.filter((k) => k in v).map((k) => [k, v[k]])) : {}; } catch { return {}; }
 }
 /** Remember where the logo strip was placed (its file, size and position) for the next new project. */
 export function rememberLogoPlacement(b) {
@@ -69,6 +69,49 @@ function knockout(im) {
   knocked.set(im, out);
   return out;
 }
+// ---- logo strip geometry: size, place and the left / centre / right thirds
+const EDGE = 0.03, TOPM = 0.022;
+/** where the strip and its three parts go. Aligned (the default): the left logo sits on the left margin, the right logo on the right margin, the logos close to the top. */
+function stripGeom(b, im, x, y, w, h) {
+  const k = clamp(+b.headerScale || 1, 0.4, 2);
+  const iw = im.width || im.naturalWidth, ih = im.height || im.naturalHeight;
+  const dw = w * k, dh = dw * (ih / iw);
+  const aligned = b.headerAlign !== 'free';
+  const ink = inkBox(im);
+  let ly = b.headerPlace === 'bottom' ? y + h - dh - (b.lower ? h * 0.152 : 0) : y;
+  if (aligned) ly = b.headerPlace === 'bottom' ? ly + (1 - ink.y1) * dh - h * TOPM : y + h * TOPM - ink.y0 * dh;
+  ly += (+b.headerY || 0) * h;
+  const x0 = x + (w - dw) / 2 + (+b.headerX || 0) * w;
+  let sp = aligned ? 0 : (+b.headerSpread || 0) * w, lx = (+b.leftX || 0) * w, rx = (+b.rightX || 0) * w;
+  if (aligned && ink.l1 > ink.l0) {
+    lx += x + w * EDGE - (x0 + ink.l0 * dw);            // left logo's first pixel on the left margin
+    rx += x + w * (1 - EDGE) - (x0 + ink.r1 * dw);      // right logo's last pixel on the right margin
+  }
+  return { k, dw, dh, ly, sp, lx, rx, x0, ink };
+}
+const inkBoxes = new WeakMap();
+/** logo pixels of the strip: rows y0..y1, left third from l0, right third to r1 (fractions of the strip) */
+function inkBox(im) {
+  if (inkBoxes.has(im)) return inkBoxes.get(im);
+  let box = { y0: 0, y1: 1, l0: 0, l1: 0, r1: 1 };
+  try {
+    const src = knockout(im);
+    const c = document.createElement('canvas'); c.width = Math.min(900, src.width); c.height = Math.max(1, Math.round(c.width * (src.height / src.width)));
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, c.width, c.height);
+    const p = g.getImageData(0, 0, c.width, c.height).data, W = c.width, H = c.height;
+    let y0 = -1, y1 = -1, l0 = W, l1 = -1, r1 = -1;
+    for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) {
+      if (p[(yy * W + xx) * 4 + 3] <= 120) continue;
+      if (y0 < 0) y0 = yy; y1 = yy;
+      if (xx < W / 3) { l0 = Math.min(l0, xx); l1 = Math.max(l1, xx); }
+      if (xx >= (2 * W) / 3) r1 = Math.max(r1, xx);
+    }
+    if (y0 >= 0) box = { y0: y0 / H, y1: (y1 + 1) / H, l0: l1 >= 0 ? l0 / W : 0, l1: l1 >= 0 ? (l1 + 1) / W : 0, r1: r1 >= 0 ? (r1 + 1) / W : 1 };
+  } catch { /* whole strip */ }
+  inkBoxes.set(im, box);
+  return box;
+}
+
 // ---- where the logo strip ends, so layouts (briefing frames) can keep clear of it
 let activeBrand = null;
 export const setActiveBrand = (b) => { activeBrand = b || null; };
@@ -97,9 +140,7 @@ export function brandSafeArea(fw, fh) {
   if (!im) return { top: 0, bottom: 0 };
   const iw = im.width || im.naturalWidth, ih = im.height || im.naturalHeight;
   if (!iw || !ih) return { top: 0, bottom: 0 };
-  const k = clamp(+b.headerScale || 1, 0.4, 2), dh = fw * k * (ih / iw);
-  let ly = b.headerPlace === 'bottom' ? fh - dh - (b.lower ? fh * 0.152 : 0) : 0;
-  ly += (+b.headerY || 0) * fh;
+  const { dh, ly } = stripGeom(b, im, 0, 0, fw, fh);
   const [e0, e1] = inkExtent(im);
   const gap = fh * 0.02;
   return b.headerPlace === 'bottom' ? { top: 0, bottom: Math.max(0, (fh - (ly + e0 * dh) + gap) / fh) } : { top: Math.max(0, (ly + e1 * dh + gap) / fh), bottom: 0 };
@@ -125,17 +166,10 @@ export function drawBranding(ctx, brand, frame, unit, t) {
   if (brand.header) {
     const im = headerImage(brand);
     if (im) {
-      const k = clamp(+brand.headerScale || 1, 0.4, 2);
       const iw = im.width || im.naturalWidth, ih = im.height || im.naturalHeight;
-      const dw = w * k, dh = dw * (ih / iw);
-      // top or bottom of the frame, then nudged up / down
-      let ly = brand.headerPlace === 'bottom' ? y + h - dh - (brand.lower ? h * 0.152 : 0) : y;
-      ly += (+brand.headerY || 0) * h;
-      // spread: the left and right thirds of the strip move out to the sides (logos keep their shape); move: the whole strip left / right
-      const sp = (+brand.headerSpread || 0) * w, mx = (+brand.headerX || 0) * w;
-      const lx = (+brand.leftX || 0) * w, rx = (+brand.rightX || 0) * w;
-      const x0 = x + (w - dw) / 2 + mx;
-      if (sp || lx || rx) {
+      const G = stripGeom(brand, im, x, y, w, h);
+      const { dw, dh, ly, sp, lx, rx, x0 } = G;
+      if (sp || Math.abs(lx) > 0.5 || Math.abs(rx) > 0.5) {
         // the strip's own background is made see-through first, so moving its thirds leaves no seams
         const src = knockout(im);
         // one even shade across the top instead of the strip's own (so the moved parts join up)

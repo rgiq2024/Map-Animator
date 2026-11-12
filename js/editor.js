@@ -4201,7 +4201,7 @@ export function createEditor() {
     const b = project.brand ||= defaultBrand();
     $('#brand-header').checked = !!b.header; $('#brand-lower').checked = !!b.lower;
     $('#brand-scale').value = b.headerScale || 1;
-    $('#brand-place-logo').value = b.headerPlace || 'top'; $('#brand-headery').value = +b.headerY || 0; $('#brand-spread').value = +b.headerSpread || 0; $('#brand-headerx').value = +b.headerX || 0; $('#brand-leftx').value = +b.leftX || 0; $('#brand-rightx').value = +b.rightX || 0; $('#brand-lowery').value = +b.lowerY || 0;
+    $('#brand-place-logo').value = b.headerPlace || 'top'; $('#brand-align').value = b.headerAlign || 'edges'; $('#brand-headery').value = +b.headerY || 0; $('#brand-spread').value = +b.headerSpread || 0; $('#brand-headerx').value = +b.headerX || 0; $('#brand-leftx').value = +b.leftX || 0; $('#brand-rightx').value = +b.rightX || 0; $('#brand-lowery').value = +b.lowerY || 0;
     for (const k of ['country', 'place', 'date', 'ticker', 'speed', 'color', 'font']) $(`#brand-${k}`).value = b[k] ?? '';
     $('#brand-animate').checked = b.animate !== false;
     $('#brand-opts').hidden = !b.lower;
@@ -4209,7 +4209,7 @@ export function createEditor() {
   }
   $('#brand-box').addEventListener('input', (e) => {
     const el = e.target; const b = project.brand ||= defaultBrand();
-    const k = { 'brand-header': 'header', 'brand-lower': 'lower', 'brand-scale': 'headerScale', 'brand-country': 'country', 'brand-place': 'place', 'brand-date': 'date', 'brand-ticker': 'ticker', 'brand-speed': 'speed', 'brand-color': 'color', 'brand-font': 'font', 'brand-animate': 'animate', 'brand-place-logo': 'headerPlace', 'brand-headery': 'headerY', 'brand-spread': 'headerSpread', 'brand-headerx': 'headerX', 'brand-leftx': 'leftX', 'brand-rightx': 'rightX', 'brand-lowery': 'lowerY' }[el.id];
+    const k = { 'brand-header': 'header', 'brand-lower': 'lower', 'brand-scale': 'headerScale', 'brand-country': 'country', 'brand-place': 'place', 'brand-date': 'date', 'brand-ticker': 'ticker', 'brand-speed': 'speed', 'brand-color': 'color', 'brand-font': 'font', 'brand-animate': 'animate', 'brand-place-logo': 'headerPlace', 'brand-align': 'headerAlign', 'brand-headery': 'headerY', 'brand-spread': 'headerSpread', 'brand-headerx': 'headerX', 'brand-leftx': 'leftX', 'brand-rightx': 'rightX', 'brand-lowery': 'lowerY' }[el.id];
     if (!k) return;
     b[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
     if (k === 'font') b.fontSet = true;
@@ -4219,7 +4219,7 @@ export function createEditor() {
     save(); repaint();
   });
   $('#brand-logo-btn').onclick = () => $('#file-brand').click();
-  $('#brand-logo-reset').onclick = () => { const b = project.brand ||= defaultBrand(); b.logo = ''; b.logoName = ''; b.header = true; Object.assign(b, { headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, leftX: 0, rightX: 0, headerScale: 1 }); rememberLogoPlacement(b); renderBrandSettings(); save(); preloadBrand(b).then(repaint); };
+  $('#brand-logo-reset').onclick = () => { const b = project.brand ||= defaultBrand(); b.logo = ''; b.logoName = ''; b.header = true; Object.assign(b, { headerAlign: 'edges', headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, leftX: 0, rightX: 0, headerScale: 1 }); rememberLogoPlacement(b); renderBrandSettings(); save(); preloadBrand(b).then(repaint); };
   $('#file-brand').addEventListener('change', async (e) => {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;
@@ -5129,6 +5129,8 @@ export function createEditor() {
       if (!project.sound?.v2) project.sound = { ...(project.sound || {}), auto: false, v2: true }; // sound is off until the user turns it on
       project.sound = { ...defaultSound(), ...(project.sound || {}) };
       project.brand = { ...defaultBrand(), ...(project.brand || {}) };
+      // older projects: the logos snap to the edges now; earlier hand adjustments start from zero
+      if (!project.brand._aligned) { Object.assign(project.brand, { headerAlign: 'edges', headerSpread: 0, leftX: 0, rightX: 0, headerY: 0, headerX: 0, _aligned: true }); }
       try { if (!localStorage.getItem('ma.logoPlacement') && project.brand?.header) rememberLogoPlacement(project.brand); } catch { /* */ }
       if (project.brand.font === 'Lexend' && !project.brand.fontSet) project.brand.font = defaultBrand().font;
       loadBrandFonts().then(() => repaint());
