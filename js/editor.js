@@ -4873,6 +4873,7 @@ export function createEditor() {
       at = (intro >= 0 ? intro : sceneIdx) + 1;
       if (!fr?.geom) setTimeout(() => toast('Tip: set the Incident location in the briefing settings and the zoom flies there', 6000), 1500);
     }
+    if (briefLayout || frame) { const prev = project.scenes[at - 1] || last; if (prev && (!prev.transition || prev.transition === 'cut')) { prev.transition = 'scanwipe'; prev.transitionSeconds = 0.9; } }
     if (briefLayout) sc.name = { intro: 'Intro', zoom: 'Zoom to location', A: 'Analysis', B: 'Dashboard', full: 'Full view', photos: 'Photos', end: 'End' }[briefLayout] || sc.name;
     project.scenes.splice(at, 0, sc);
     selectScene(at, true);

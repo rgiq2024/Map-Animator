@@ -128,6 +128,7 @@ export function createHome({ open }) {
           const sc = i ? newScene(name, p.scenes[0].look) : Object.assign(p.scenes[0], { name });
           sc.lineSeconds = sec; sc.stillStart = 0; sc.stillEnd = Math.max(1, sec - 1.2);
           sc.layers = briefingLayers(lay, common);
+          sc.transition = 'scanwipe'; sc.transitionSeconds = 0.9;
           if (lay === 'zoom') { Object.assign(sc.camera, zoomCamera([20, 25], sec)); sc.briefZoom = true; sc.stillEnd = 0.5; Object.assign(sc.look, { globe: true, theme: 'satellite', placeNames: false }); }
           return sc;
         });

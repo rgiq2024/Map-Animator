@@ -144,7 +144,7 @@ export function drawNewTransition(ctx, tr, snap, cur, e, W, H, frame) {
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(Math.max(0.01, sx), 1 - 0.1 * Math.sin(a)); ctx.drawImage(e < 0.5 ? snap : cur, -W / 2, -H / 2); ctx.restore();
   }
 }
-export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through', slide: 'Slide in', push: 'Push', whip: 'Whip pan', iris: 'Circle reveal', flash: 'Flash', blur: 'Blur dissolve', glitch: 'Glitch', spin: 'Spin zoom', bars: 'Venetian blinds', pixelate: 'Pixelate', filmburn: 'Film burn', lightleak: 'Light leak flash', ink: 'Ink bleed', luma: 'Noise dissolve', zoomblur: 'Zoom blur', slideup: 'Slide up', doors: 'Doors open', cube: '3D cube turn', pageturn: 'Page turn', newsspin: 'Newspaper spin', shatter: 'Shatter', mosaic: 'Tile mosaic', checker: 'Checkerboard', diagonal: 'Diagonal wipe', clock: 'Clock wipe', diamond: 'Diamond reveal', split: 'Split open', slidedown: 'Slide down', slideright: 'Slide from left', zoomin: 'Zoom in (new scene grows)', rgbsplit: 'RGB split', lightsweep: 'Light sweep', stripes: 'Diagonal stripes', flipcard: 'Card flip', stinger: 'Your video (stinger)' };
+export const TRANSITIONS = { cut: 'Cut', fadeBlack: 'Dip to black', fadeWhite: 'Dip to white', dissolve: 'Cross dissolve', wipe: 'Wipe', zoom: 'Zoom through', slide: 'Slide in', push: 'Push', whip: 'Whip pan', iris: 'Circle reveal', flash: 'Flash', blur: 'Blur dissolve', glitch: 'Glitch', spin: 'Spin zoom', bars: 'Venetian blinds', pixelate: 'Pixelate', filmburn: 'Film burn', lightleak: 'Light leak flash', ink: 'Ink bleed', luma: 'Noise dissolve', zoomblur: 'Zoom blur', slideup: 'Slide up', doors: 'Doors open', cube: '3D cube turn', pageturn: 'Page turn', newsspin: 'Newspaper spin', shatter: 'Shatter', mosaic: 'Tile mosaic', checker: 'Checkerboard', diagonal: 'Diagonal wipe', clock: 'Clock wipe', diamond: 'Diamond reveal', split: 'Split open', slidedown: 'Slide down', slideright: 'Slide from left', zoomin: 'Zoom in (new scene grows)', rgbsplit: 'RGB split', scanwipe: 'Scan line wipe (briefing)', lightsweep: 'Light sweep', stripes: 'Diagonal stripes', flipcard: 'Card flip', stinger: 'Your video (stinger)' };
 
 /**
  * @param o.scenes array of scenes
@@ -368,6 +368,16 @@ async function forEachFrame(o, ctx, emit, canvas) {
         ctx.save();
         if (prevTr === 'dissolve') { ctx.globalAlpha = 1 - e; ctx.drawImage(snap, 0, 0); }
         if (prevTr === 'wipe') { ctx.beginPath(); ctx.rect(width * e, 0, width * (1 - e), height); ctx.clip(); ctx.drawImage(snap, 0, 0); ctx.restore(); ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(width * e - 2, 0, 4, height); }
+        if (prevTr === 'scanwipe') {
+          // the new scene is revealed left → right behind a glowing cyan scan line; the old one dims as it goes
+          const ee = e < 0.5 ? 2 * e * e : 1 - (-2 * e + 2) ** 2 / 2, x = width * ee;
+          ctx.beginPath(); ctx.rect(x, 0, width - x, height); ctx.clip();
+          ctx.drawImage(snap, 0, 0); ctx.fillStyle = `rgba(2,8,16,${0.35 * ee})`; ctx.fillRect(0, 0, width, height);
+          ctx.restore(); ctx.save();
+          const bw = width * 0.06, gl = ctx.createLinearGradient(x - bw, 0, x, 0); gl.addColorStop(0, 'rgba(53,200,255,0)'); gl.addColorStop(1, 'rgba(53,200,255,0.35)');
+          ctx.fillStyle = gl; ctx.fillRect(x - bw, 0, bw, height);
+          ctx.shadowColor = '#35c8ff'; ctx.shadowBlur = width * 0.01; ctx.fillStyle = '#d8f4ff'; ctx.fillRect(x - width * 0.0012, 0, width * 0.0024, height);
+        }
         if (prevTr === 'zoom') { const k = 1 + e * 0.6; ctx.globalAlpha = 1 - e; ctx.translate(width / 2, height / 2); ctx.scale(k, k); ctx.drawImage(snap, -width / 2, -height / 2); }
         ctx.restore();
       }

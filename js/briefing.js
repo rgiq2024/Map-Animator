@@ -17,7 +17,8 @@ let MONO = '"JetBrains Mono", ui-monospace, monospace';
 let GLOBE_LOOK = 'land';
 /** looks: fonts, background and globe style */
 export const BR_THEMES = {
-  navy: { name: 'Navy — GEO·BRIEF', disp: '"Archivo", Inter, system-ui, sans-serif', sans: 'Inter, system-ui, sans-serif', mono: '"JetBrains Mono", ui-monospace, monospace', bg: '#050b14', bg2: '#0a1626', stars: false, grid: true, globe: 'land', glow: 1 },
+  navy: { name: 'Navy — GEO·BRIEF (Rajdhani type)', disp: '"Rajdhani", "Archivo", sans-serif', sans: '"Rajdhani", Inter, sans-serif', mono: '"Rajdhani", "JetBrains Mono", monospace', bg: '#050b14', bg2: '#0a1626', stars: false, grid: true, globe: 'land', glow: 1.2, font: 'Rajdhani' },
+  navyArchivo: { name: 'Navy — Archivo type (earlier look)', disp: '"Archivo", Inter, system-ui, sans-serif', sans: 'Inter, system-ui, sans-serif', mono: '"JetBrains Mono", ui-monospace, monospace', bg: '#050b14', bg2: '#0a1626', stars: false, grid: true, globe: 'land', glow: 1 },
   space: { name: 'Deep space — stars, grid globe, tech type', disp: '"Rajdhani", "Archivo", sans-serif', sans: '"Rajdhani", Inter, sans-serif', mono: '"Rajdhani", "JetBrains Mono", monospace', bg: '#010409', bg2: '#030b16', stars: true, grid: false, globe: 'grid', glow: 1.6, font: 'Rajdhani' },
 };
 const r6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -28,7 +29,7 @@ export const BR_KINDS = {
   briefmark: { name: 'Briefing marker', icon: '◉', geom: 'point', desc: 'A glowing ring on the map with a label box, e.g. “18:11Z — IMPACT”' },
   briefing: { name: 'Briefing frame', icon: '▣', geom: null, desc: 'Intelligence-briefing layout: the map in a window with a globe, title, info rows, locator, before / after images and a field strip' },
 };
-export const BR_ANIMS = { briefing: { fade: 'Fade in', build: 'Panels build in', none: 'Shown' }, briefmark: { pop: 'Pop in', fade: 'Fade in', none: 'Shown' } };
+export const BR_ANIMS = { briefing: { build: 'Build in — corner marks, then a scan line reveals each panel', fade: 'Fade in', none: 'Shown' }, briefmark: { pop: 'Pop in', fade: 'Fade in', none: 'Shown' } };
 export const BR_DEFAULTS = {
   briefmark: { anim: 'pop', duration: 0.8, style: { text: '18:11Z — IMPACT', sub: '', dx: -130, dy: -70, accent: '#35c8ff', ring: true, size: 1 } },
   briefing: { anim: 'build', duration: 1.2, style: {
@@ -36,7 +37,7 @@ export const BR_DEFAULTS = {
     date: '', place: '', country: '', event: '', eventIcon: 'alert', assessment: '', coords: '', sources: '',
     accent: '#35c8ff', bg: '#050b14', globe: true, before: null, after: null, photos: [], thumbZoom: 15, windowTag: true, scale: true,
     beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', beforeZoom: 1, afterZoom: 1, beforeX: 0, beforeY: 0, afterX: 0, afterY: 0,
-    theme: 'navy', logo: '', logo2: '', logoSize: 1, logo2Size: 1, logoPlace: 'top', slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'kenburns',
+    theme: 'navy', logo: '', logo2: '', logoSize: 1, logo2Size: 1, logoPlace: 'top', slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'scan',
     header: false, headerText: true, headerOrg: true, headerBrand: true, headerRight: true, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
   } },
@@ -54,7 +55,7 @@ export const BR_FORMS = {
     ['style.sync', 'Same text on every scene', 'switch'],
     ['style.slides', 'Photos (slideshow)', 'slides', null, (L) => L.style.layout === 'photos'],
     ['style.slideSec', 'Seconds per photo', 'range', [1, 10, 0.5], (L) => L.style.layout === 'photos'],
-    ['style.slideFx', 'Photo motion', 'select', { kenburns: 'Slow zoom (Ken Burns)', fade: 'Cross-fade only', slide: 'Slide across' }, (L) => L.style.layout === 'photos'],
+    ['style.slideFx', 'Photo motion', 'select', { scan: 'Scan wipe + slow zoom (briefing)', kenburns: 'Slow zoom with cross-fade', fade: 'Cross-fade only', slide: 'Slide across' }, (L) => L.style.layout === 'photos'],
     ['style.slideTitle', 'Photos — panel title', 'text', null, (L) => L.style.layout === 'photos'],
     ['style.header', 'Header bar (organisation · brand · briefing)', 'switch'],
     ['style.logo', 'Logo (left)', 'image'], ['style.logoSize', 'Logo — size', 'range', [0.3, 4, 0.05], (L) => !!L.style.logo],
@@ -557,6 +558,37 @@ function drawMark(ctx, L, tm, o) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- build-in effects (corner marks + scan line), drawn on top of the parts
+const PART_DELAY = { background: 0, frame: 0.1, win: 0.25, header: 0, logos: 0, ticker: 0.2, introGlobe: 0, introTitle: 0.5, globe: 0.15, title: 0.35, heading: 0.15, info: 0.55, locator: 0.35, side: 0.6, before: 0.7, after: 0.95, strip: 0.85, tag: 1.05, scale: 1.1, north: 1.1, titleBlock: 0.45, slide: 0.2, caption: 0.5, endTitle: 0.1, endFields: 0.5, endSources: 0.8 };
+let FX = [];
+function drawFx(ctx) {
+  for (const f of FX) {
+    const { x, y, w, h, rv, show, u, acc } = f;
+    ctx.save();
+    // corner marks grow in first
+    const g = clamp(rv / 0.3, 0, 1), l = Math.min(w, h) * 0.18 * g + 4 * u;
+    ctx.strokeStyle = acc; ctx.lineWidth = 2 * u; ctx.globalAlpha = clamp(rv * 4, 0, 1) * (1 - clamp((rv - 0.85) / 0.15, 0, 1));
+    ctx.beginPath();
+    ctx.moveTo(x, y + l); ctx.lineTo(x, y); ctx.lineTo(x + l, y);
+    ctx.moveTo(x + w - l, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + l);
+    ctx.moveTo(x + w, y + h - l); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w - l, y + h);
+    ctx.moveTo(x + l, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - l);
+    ctx.stroke();
+    // scan line at the reveal edge
+    if (show > 0 && show < 1) {
+      const ly = y + h * show;
+      ctx.globalAlpha = 1;
+      const band = ctx.createLinearGradient(0, ly - 40 * u, 0, ly);
+      band.addColorStop(0, hexA(acc, 0)); band.addColorStop(1, hexA(acc, 0.28));
+      ctx.fillStyle = band; ctx.fillRect(x, ly - 40 * u, w, 40 * u);
+      ctx.shadowColor = acc; ctx.shadowBlur = 12 * u; ctx.fillStyle = '#d8f4ff';
+      ctx.fillRect(x - 2 * u, ly - 1 * u, w + 4 * u, 2 * u);
+    }
+    ctx.restore();
+  }
+  FX = [];
+}
+
 // ================================================================= main draw
 export function drawBriefing(ctx, L, tm, o) {
   if (L.kind === 'briefmark') return drawMark(ctx, L, tm, o);
@@ -567,7 +599,9 @@ export function drawBriefing(ctx, L, tm, o) {
   if (TH.font && !fontsAsked.has(TH.font) && typeof document !== 'undefined' && document.fonts?.load) { fontsAsked.add(TH.font); Promise.all([500, 600, 700].map((w) => document.fonts.load(`${w} 20px "${TH.font}"`))).then(() => lastMapRepaint()).catch(() => {}); }
   const keep = [DISP, SANS, MONO, GLOBE_LOOK];
   DISP = TH.disp; SANS = TH.sans; MONO = TH.mono; GLOBE_LOOK = TH.globe;
+  FX = [];
   try { drawFrameBody(ctx, L, tm, o); } finally { [DISP, SANS, MONO, GLOBE_LOOK] = keep; }
+  drawFx(ctx);
   DISP = TH.disp; SANS = TH.sans; MONO = TH.mono;
   const s = L.style, u = fr.w / 1000, acc = s.accent || '#35c8ff';
   const k = tm.edit || L.anim === 'none' ? 1 : easeOut(clamp(tm.tau / 0.5, 0, 1));
@@ -600,6 +634,8 @@ function drawFrameBody(ctx, L, tm, o) {
   const kk = easeOut(k);
   const build = L.anim === 'build' && !tm.edit;
   const stage = (i) => (build ? clamp(kk * 4 - i * 0.6, 0, 1) : 1);
+  const tau = +tm.tau || 0;
+  const reveal = (key) => (build ? clamp((tau - (PART_DELAY[key] ?? 0.4)) / 0.7, 0, 1) : 1);
   ctx.save();
   ctx.globalAlpha *= tm.alpha * (L.anim === 'fade' && !tm.edit ? kk : 1);
   // every panel can be dragged on the video (positions are kept as style.pos_<key>)
@@ -608,10 +644,21 @@ function drawFrameBody(ctx, L, tm, o) {
   const sizeBox = (key, b) => { const S = sizeOf(key); return [b[0], b[1], b[2] * S.w, b[3] * S.h]; };
   const at = (key, b, box = false) => {
     if (!partOn(s, key)) { ctx.globalAlpha = 0; return [0, 0]; }
-    if (box) return placeAt(ctx, L, fr, b[0], b[1], b[2], b[3], { key, resize: true });
+    const rv = reveal(key);
+    if (box) {
+      const r = placeAt(ctx, L, fr, b[0], b[1], b[2], b[3], { key, resize: true });
+      if (rv < 1) {
+        // frame first (corner marks), then the content wipes in from the top behind a scan line
+        const p = 6 * u, show = clamp((rv - 0.25) / 0.75, 0, 1);
+        ctx.beginPath(); ctx.rect(b[0] - p, b[1] - p, b[2] + 2 * p, (b[3] + 2 * p) * show); ctx.clip();
+        FX.push({ x: b[0] + r[0], y: b[1] + r[1], w: b[2], h: b[3], rv, show, u, acc: s.accent || '#35c8ff' });
+      }
+      return r;
+    }
     const k = sizeOf(key).w;
     const r = placeAt(ctx, L, fr, b[0], b[1], b[2] * k, b[3] * k, { key, resize: true, uniform: true });
     if (k !== 1) { ctx.translate(b[0], b[1]); ctx.scale(k, k); ctx.translate(-b[0], -b[1]); }
+    if (rv < 1) { const e = easeOut(rv); ctx.globalAlpha *= e; ctx.beginPath(); ctx.rect(b[0] - 20 * u, b[1] - 40 * u, (b[2] + 40 * u) * e, b[3] + 80 * u); ctx.clip(); }
     return r;
   };
   // ---- background chrome with the window cut out
@@ -638,6 +685,13 @@ function drawFrameBody(ctx, L, tm, o) {
   // top hairline under the logo band
   if (!s.header) { ctx.strokeStyle = hexA(acc, 0.18); ctx.beginPath(); ctx.moveTo(fr.x + 0.03 * fr.w, fr.y + 0.15 * fr.h); ctx.lineTo(fr.x + 0.97 * fr.w, fr.y + 0.15 * fr.h); ctx.stroke(); }
   ctx.restore();
+  // the map inside the window wipes in from the top
+  const winR = win ? reveal('win') : 1;
+  if (win && winR < 1 && bgOn) {
+    const wy = win[1] + win[3] * easeOut(winR);
+    ctx.save(); ctx.fillStyle = TH.bg; ctx.fillRect(win[0] - 1, wy, win[2] + 2, win[1] + win[3] - wy + 1); ctx.restore();
+  }
+  if (win && winR < 1 && partOn(s, 'frame')) FX.push({ x: win[0], y: win[1], w: win[2], h: win[3], rv: winR, show: easeOut(winR), u, acc: s.accent || '#35c8ff', win: true });
   if (win && partOn(s, 'frame')) {
     ctx.strokeStyle = hexA(acc, 0.5); ctx.lineWidth = 1.2 * u; rr(ctx, win[0], win[1], win[2], win[3], 6 * u); ctx.stroke();
     brackets(ctx, win[0] - 3 * u, win[1] - 3 * u, win[2] + 6 * u, win[3] + 6 * u, u, acc, 18);
@@ -693,7 +747,7 @@ function drawFrameBody(ctx, L, tm, o) {
       const e = imageFor(sl.media);
       if (!e?.ready) { e?.p?.then(() => lastMapRepaint()); return; }
       ctx.save(); ctx.globalAlpha *= a;
-      const fx = s.slideFx || 'kenburns';
+      const fx = s.slideFx === 'fade' || s.slideFx === 'slide' ? s.slideFx : 'kenburns';
       const z = fx === 'kenburns' ? 1.02 + local * 0.09 : 1;
       const k0 = Math.max(sb[2] / e.w, sb[3] / e.h) * z, dw = e.w * k0, dh = e.h * k0;
       let ox = sb[0] + (sb[2] - dw) / 2, oy = sb[1] + (sb[3] - dh) / 2;
@@ -705,8 +759,18 @@ function drawFrameBody(ctx, L, tm, o) {
     const idxOf = (sl) => slides.indexOf(sl);
     if (n) {
       const fade = clamp(ph * per / 0.6, 0, 1);
-      if (idx > 0 && fade < 1) drawSlide(slides[idx - 1], 1, 1);
-      drawSlide(slides[idx], idx > 0 ? fade : 1, ph);
+      if ((s.slideFx || 'scan') === 'scan' && idx > 0 && fade < 1) {
+        // the next photo wipes in from the top behind a scan line
+        drawSlide(slides[idx - 1], 1, 1);
+        const e = easeOut(fade), ly = sb[1] + sb[3] * e;
+        ctx.save(); ctx.beginPath(); ctx.rect(sb[0], sb[1], sb[2], sb[3] * e); ctx.clip(); drawSlide(slides[idx], 1, ph); ctx.restore();
+        const band = ctx.createLinearGradient(0, ly - 50 * u, 0, ly); band.addColorStop(0, hexA(acc, 0)); band.addColorStop(1, hexA(acc, 0.3));
+        ctx.fillStyle = band; ctx.fillRect(sb[0], ly - 50 * u, sb[2], 50 * u);
+        ctx.save(); ctx.shadowColor = acc; ctx.shadowBlur = 12 * u; ctx.fillStyle = '#d8f4ff'; ctx.fillRect(sb[0], ly - 1 * u, sb[2], 2 * u); ctx.restore();
+      } else {
+        if (idx > 0 && fade < 1) drawSlide(slides[idx - 1], 1, 1);
+        drawSlide(slides[idx], idx > 0 ? fade : 1, ph);
+      }
       const g = ctx.createLinearGradient(0, sb[1] + sb[3] * 0.6, 0, sb[1] + sb[3]); g.addColorStop(0, 'rgba(3,9,18,0)'); g.addColorStop(1, 'rgba(3,9,18,0.85)');
       ctx.fillStyle = g; ctx.fillRect(sb[0], sb[1] + sb[3] * 0.6, sb[2], sb[3] * 0.4);
       const cap = slides[idx].caption || '';
@@ -908,9 +972,12 @@ function drawFrameBody(ctx, L, tm, o) {
     }
     if (win) {
       ctx.save(); ctx.globalAlpha *= stage(1);
+      ctx.save(); ctx.globalAlpha *= easeOut(reveal('tag'));
       if (s.windowTag !== false) placeTag(ctx, L, o, win[0] + 16 * u, win[1] + 16 * u, u, acc);
+      ctx.globalAlpha *= easeOut(reveal('north'));
       if (s.north !== false) northArrow(ctx, o, win[0] + win[2] - 34 * u, win[1] + 34 * u, u, acc, L);
-      if (s.scale !== false) scaleBar(ctx, o, ll, win[0] + 22 * u, win[1] + win[3] - 20 * u, u, acc, L);
+      ctx.restore();
+      if (s.scale !== false && reveal('scale') > 0.6) scaleBar(ctx, o, ll, win[0] + 22 * u, win[1] + win[3] - 20 * u, u, acc, L);
       ctx.restore();
     }
     ctx.restore();
@@ -1063,6 +1130,7 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
     if (boxes.win && sc.camera?.keys?.length) sc.camera.keys = sc.camera.keys.map((key) => ({ ...key, view: viewIntoWindow(key.view, boxes.win, aspect) }));
     if (layout === 'end') { sc.look.grade = { preset: 'custom', brightness: 0.35, contrast: 1.1, saturation: 0.3, warmth: -0.3, fade: 0 }; }
     sc.layers.unshift(...splitBriefing(lay));
+    sc.transition = 'scanwipe'; sc.transitionSeconds = 0.9;
   }
   story.brand = { ...(story.brand || {}), lower: false };
   if (info.geobrief) {
@@ -1074,7 +1142,7 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
     if (sc.camera.mode === 'keyframes' && sc.camera.keys?.length) sc.camera.keys = [{ ...sc.camera.keys[0], t: 0 }, { ...sc.camera.keys[0], t: 5 }];
     sc.stillStart = 0; sc.stillEnd = 0.5;
     sc.layers = splitBriefing(mk('intro'));
-    sc.transition = 'dissolve'; sc.transitionSeconds = 0.8;
+    sc.transition = 'scanwipe'; sc.transitionSeconds = 0.9;
     story.scenes.unshift(sc);
   }
   return story;
