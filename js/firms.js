@@ -235,12 +235,28 @@ export function drawFirms(ctx, L, tm, o, phase, { placeAt, track } = {}) {
   }
 }
 
-/** Every active fire in the world for the last 24 h: the area API with a key, else NASA's public 24 h VIIRS file. */
-export async function fetchFirmsWorld({ key = firmsKey(), source = 'VIIRS_NOAA20_NRT' } = {}) {
-  const url = key ? `${FIRMS}/api/area/csv/${encodeURIComponent(key)}/${source}/world/1` : FIRMS_PUBLIC_24H;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`FIRMS ${r.status}`);
-  return parseFirmsCSV(await r.text());
+/** Every active fire in the world for the last 24 h: the area API with a key, else NASA's public 24 h files. */
+export const FIRMS_PUBLIC = [
+  FIRMS_PUBLIC_24H,
+  `${FIRMS}/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv`,
+  `${FIRMS}/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_24h.csv`,
+  `${FIRMS}/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_24h.csv`,
+];
+export async function fetchFirmsWorld({ key = firmsKey(), source = 'VIIRS_NOAA20_NRT', log = null } = {}) {
+  const urls = key ? [`${FIRMS}/api/area/csv/${encodeURIComponent(key)}/${source}/world/1`, ...FIRMS_PUBLIC] : FIRMS_PUBLIC;
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { headers: { Accept: 'text/csv,*/*' } });
+      const txt = await r.text();
+      log?.(`${url.replace(/csv\/[^/]{20,}\//, 'csv/KEY/')} → ${r.status}, ${txt.length} bytes, “${txt.slice(0, 60).replace(/\s+/g, ' ')}”`);
+      if (!r.ok) throw new Error(`FIRMS ${r.status}`);
+      const list = parseFirmsCSV(txt);
+      if (list.length) return list;
+    } catch (e) { lastErr = e; }
+  }
+  if (lastErr) throw lastErr;
+  return [];
 }
 /** hotspots inside a bbox */
 export const hotspotsIn = (list, b) => list.filter((h) => h.ll[0] >= b[0] && h.ll[0] <= b[2] && h.ll[1] >= b[1] && h.ll[1] <= b[3]);

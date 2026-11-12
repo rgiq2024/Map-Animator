@@ -19,7 +19,7 @@ async function reverse(ll) {
 }
 try {
   console.log('Fetching NASA FIRMS active fires…');
-  const world = await fetchFirmsWorld({ key: process.env.FIRMS_MAP_KEY || '' });
+  const world = await fetchFirmsWorld({ key: process.env.FIRMS_MAP_KEY || '', log: (t) => console.log(t) });
   console.log(`${world.length} hotspots worldwide`);
   await addFireHotspots(r.items, world, { reverse });
   r.items = rankIncidents(r.items);
