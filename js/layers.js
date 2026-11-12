@@ -807,28 +807,35 @@ export function drawLayers(ctx, o, phase) {
 const UNDER_FRAME = new Set(['timeseries', 'capture', 'wxfield']);
 function drawLayersInner(ctx, o, phase) {
   let layers = o.scene.layers || [];
-  if (phase === 'below' && layers.some((l) => l.kind === 'briefing')) {
+  // scenes with a briefing frame are one stack: every layer is drawn whole, in the layer list order
+  // (so Bring to front / Send to back works between images, text and the frame's parts); map imagery stays at the bottom
+  if (layers.some((l) => l.kind === 'briefing')) {
+    if (phase !== 'below') return;
     const under = (l) => UNDER_FRAME.has(l.kind) || l.underFrame;
-    const imagery = layers.filter(under), frames = layers.filter((l) => l.kind === 'briefing');
-    layers = [...imagery, ...frames, ...layers.filter((l) => !under(l) && l.kind !== 'briefing')];
+    const order = [...layers.filter(under), ...layers.filter((l) => !under(l))];
+    for (const L of order) for (const ph of ['below', 'above', 'captions']) drawOne(ctx, o, L, ph);
+    return;
   }
+  for (const L of layers) drawOne(ctx, o, L, phase);
+}
+function drawOne(ctx, o, L, phase) {
   const { proj, unit, time, frame } = o;
   const tokens = o.tokens || {};
-  for (const L of layers) {
-    if (L.hidden) continue;
+  {
+    if (L.hidden) return;
     if (FX_KINDS[L.kind]) {
-      if (!fxPhases(L.kind).includes(phase)) continue;
+      if (!fxPhases(L.kind).includes(phase)) return;
       const tm = layerTiming(L, time);
-      if (!tm.visible) continue;
+      if (!tm.visible) return;
       try { drawFX(ctx, L, tm, o, phase); } catch (e) { console.warn('fx draw failed', L.id, e); }
-      continue;
+      return;
     }
     const below = L.kind === 'boundary' || L.kind === 'area' || L.kind === 'flood' || L.kind === 'line';
     const isCap = L.kind === 'caption';
-    if ((phase === 'below') !== below && !isCap) continue;
-    if (isCap !== (phase === 'captions')) continue;
+    if ((phase === 'below') !== below && !isCap) return;
+    if (isCap !== (phase === 'captions')) return;
     const tm = layerTiming(L, time);
-    if (!tm.visible) continue;
+    if (!tm.visible) return;
     try {
       if (L.kind === 'boundary' || L.kind === 'area') drawPolygonLayer(ctx, L, tm, proj, unit, frame);
       else if (L.kind === 'flood') drawFloodLayer(ctx, L, tm, proj, unit);

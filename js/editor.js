@@ -2262,7 +2262,7 @@ export function createEditor() {
       if (L.kind === 'iss') h += '<p class="hint-line">Tip: turn on the globe (Look step) and zoom out to see the whole orbit.</p>';
       if (L.kind === 'trajectory') h += '<p class="hint-line">Drag the end points on the map to move the launch site and the target.</p>';
     }
-    h += `<div class="btn-row">${L.geom ? '<button class="btn sm" data-act="zoom">Zoom to</button>' : ''}<button class="btn sm" data-act="up">Up</button><button class="btn sm" data-act="down">Down</button><button class="btn sm" data-act="dup">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>`;
+    h += `<div class="btn-row">${L.geom ? '<button class="btn sm" data-act="zoom">Zoom to</button>' : ''}<button class="btn sm" data-act="toFront" title="In front of every other layer">⤒ Bring to front</button><button class="btn sm" data-act="up" title="One step forward">↑ Forward</button><button class="btn sm" data-act="down" title="One step back">↓ Backward</button><button class="btn sm" data-act="toBack" title="Behind every other layer (in front of the briefing background)">⤓ Send to back</button><button class="btn sm" data-act="dup">Duplicate</button><button class="btn sm danger" data-act="del">Delete</button></div>`;
     box.innerHTML = h;
     sectionizeEditor(box, L.kind);
     box.hidden = false;
@@ -2838,6 +2838,14 @@ export function createEditor() {
     if (a === 'zoom') zoomToLayer(L);
     if (a === 'del') deleteLayer(L.id);
     if (a === 'dup') { const c = JSON.parse(JSON.stringify(L)); c.id = `ly_${Math.random().toString(36).slice(2, 9)}`; c.name = `${L.name} copy`; addLayer(c); }
+    if (a === 'toFront' && i < ls.length - 1) { pushUndo(); ls.splice(i, 1); ls.push(L); commitLayers(); toast('Brought to front'); }
+    if (a === 'toBack') {
+      pushUndo(); ls.splice(i, 1);
+      // just above the briefing background (and the map imagery under it), so it stays visible
+      let j = 0;
+      ls.forEach((o, k) => { if ((o.kind === 'briefing' && o.style?.only === 'background') || o.underFrame || ['timeseries', 'capture', 'wxfield'].includes(o.kind)) j = k + 1; });
+      ls.splice(j, 0, L); commitLayers(); toast('Sent to back');
+    }
     if (a === 'up' && i < ls.length - 1) { pushUndo(); [ls[i], ls[i + 1]] = [ls[i + 1], ls[i]]; commitLayers(); }
     if (a === 'down' && i > 0) { pushUndo(); [ls[i], ls[i - 1]] = [ls[i - 1], ls[i]]; commitLayers(); }
     if (a === 'atPlayhead') { pushUndo(); L.start = +time.toFixed(2); renderLayerEditor(); commitLayers(); }
