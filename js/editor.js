@@ -4219,7 +4219,7 @@ export function createEditor() {
     save(); repaint();
   });
   $('#brand-logo-btn').onclick = () => $('#file-brand').click();
-  $('#brand-logo-reset').onclick = () => { const b = project.brand ||= defaultBrand(); b.logo = ''; b.logoName = ''; b.header = true; rememberLogoPlacement(b); renderBrandSettings(); save(); preloadBrand(b).then(repaint); };
+  $('#brand-logo-reset').onclick = () => { const b = project.brand ||= defaultBrand(); b.logo = ''; b.logoName = ''; b.header = true; Object.assign(b, { headerPlace: 'top', headerY: 0, headerX: 0, headerSpread: 0, leftX: 0, rightX: 0, headerScale: 1 }); rememberLogoPlacement(b); renderBrandSettings(); save(); preloadBrand(b).then(repaint); };
   $('#file-brand').addEventListener('change', async (e) => {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;

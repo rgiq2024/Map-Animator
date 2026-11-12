@@ -462,7 +462,10 @@ function drawLogos(ctx, L, fr, u) {
 }
 function headerBar(ctx, L, fr, u, acc, k, scene) {
   // the project's logo strip at the top takes the header row, so the header keeps only its background then
-  const s0 = L.style, s = s0.headerText === false || brandSafeArea(fr.w, fr.h).top > 0 ? { ...s0, headerOrg: false, headerBrand: false, headerRight: false } : s0, h = fr.h * 0.085, y = fr.y;
+  // the project's logo strip at the top replaces the header text, and the header band grows to sit behind the whole strip
+  const safeTop = brandSafeArea(fr.w, fr.h).top;
+  const s0 = L.style, s = s0.headerText === false || safeTop > 0 ? { ...s0, headerOrg: false, headerBrand: false, headerRight: false } : s0, y = fr.y;
+  const h = Math.max(fr.h * 0.085, safeTop > 0 ? safeTop * fr.h - fr.h * 0.008 : 0);
   ctx.save(); ctx.globalAlpha *= k;
   const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(3,8,16,0.96)'); g.addColorStop(1, 'rgba(5,12,24,0.92)');
   ctx.fillStyle = g; ctx.fillRect(fr.x, y, fr.w, h);
@@ -1099,7 +1102,7 @@ export function applyBriefing(story, info, aspect = 16 / 9) {
   const mk = (layout, extra = {}) => ({
     id: `brief_${Math.random().toString(36).slice(2, 9)}`, kind: 'briefing', name: 'Briefing frame', visible: true, start: 0, duration: 1.2, hold: 0, anim: 'build',
     geom: info.ll ? { type: 'Point', coordinates: [r6(info.ll[0]), r6(info.ll[1])] } : null,
-    style: { ...BR_DEFAULTS.briefing.style, layout, title: info.title || '', sub: info.sub || 'Geospatial analysis', kicker: info.kicker || 'Geospatial intelligence briefing', tag: info.tag || info.event || '', date: info.date || '', place: info.place || '', country: info.country || '', event: info.event || '', eventIcon: iconFor(info.eventKey), assessment: info.assessment || '', coords: info.coords || '', sources: info.sources || '', accent: info.accent || '#35c8ff', before: info.before || null, after: info.after || null, photos: [], thumbZoom: info.thumbZoom || 15, ...(info.geobrief ? { header: false, tickerOn: true, ticker: info.ticker || '' } : {}), ...extra },
+    style: { ...BR_DEFAULTS.briefing.style, layout, title: info.title || '', sub: info.sub || 'Geospatial analysis', kicker: info.kicker || 'Geospatial intelligence briefing', tag: info.tag || info.event || '', date: info.date || '', place: info.place || '', country: info.country || '', event: info.event || '', eventIcon: iconFor(info.eventKey), assessment: info.assessment || '', coords: info.coords || '', sources: info.sources || '', accent: info.accent || '#35c8ff', before: info.before || null, after: info.after || null, photos: [], thumbZoom: info.thumbZoom || 15, ...(info.geobrief ? { header: true, tickerOn: true, ticker: info.ticker || '' } : {}), ...extra },
   });
   // before / after pictures the user gave (Auto video) show on every A-layout scene
   if (!info.before) for (const sc of story.scenes) { const c = sc.layers.find((l) => l.kind === 'compare'); if (c) { info.before = { media: c.style.media, date: c.style.labelA && c.style.labelA !== 'BEFORE' ? c.style.labelA : '' }; info.after = { media: c.style.media2, date: c.style.labelB && c.style.labelB !== 'AFTER' ? c.style.labelB : '' }; } }
