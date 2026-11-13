@@ -32,7 +32,7 @@ async function pcm(src) {
 }
 const db = (x) => 20 * Math.log10(Math.max(1e-9, x));
 /** onsets from a high-passed energy envelope (2.5 ms hops) */
-function onsets(a) {
+function onsets(a, minGap = 0.025) {
   // simple 1-pole high-pass so the clicks stand out
   const h = new Float32Array(a.length); let px = 0, py = 0;
   for (let i = 0; i < a.length; i++) { py = 0.97 * (py + a[i] - px); px = a[i]; h[i] = py; }
@@ -43,7 +43,7 @@ function onsets(a) {
   const out = [];
   for (let f = 6; f < n - 2; f++) {
     const prev = Math.min(...env.slice(f - 6, f));
-    if (env[f] > thr && env[f] - prev > 10 && (!out.length || f - out.at(-1).f > 10)) {
+    if (env[f] > thr && env[f] - prev > 10 && (!out.length || (f - out.at(-1).f) * hop > minGap * SR)) {
       let pk = f; for (let k = f; k < Math.min(n, f + 8); k++) if (env[k] > env[pk]) pk = k;
       out.push({ f, i: f * hop, peak: env[pk] });
     }
@@ -66,13 +66,13 @@ function cut(a, i0, len, fadeMs = 18, gate = 0) {
   if (pk > 0) for (let k = 0; k < out.length; k++) out[k] *= 0.7 / pk;  // ≈ −3 dB peak
   return out;
 }
-function strikes(a, { len = 0.15, iso = 0.09, max = 16, name = '', gate = 0.04 } = {}) {
-  const { list } = onsets(a);
+function strikes(a, { len = 0.15, iso = 0.09, max = 16, name = '', gate = 0.04, minGap = 0.025 } = {}) {
+  const { list } = onsets(a, minGap);
   const L = Math.round(SR * len), I = Math.round(SR * iso);
   const best = Math.max(...list.map((o) => o.peak));
   // a strike may be cut short by the next one (it fades out just before it), but needs ≥ iso seconds of its own
   list.forEach((o, k) => { o.room = k === list.length - 1 ? L : list[k + 1].i - o.i - Math.round(SR * 0.004); });
-  const ok = list.filter((o, k) => o.room > I && (k === 0 || o.i - list[k - 1].i > Math.round(SR * 0.06)) && o.peak > best - 14);
+  const ok = list.filter((o, k) => o.room > I && (k === 0 || o.i - list[k - 1].i > Math.round(SR * Math.max(0.06, minGap))) && o.peak > best - 14);
   log(`${name}: ${list.length} onsets, ${ok.length} clean`);
   // spread the picks over the recording
   const step = Math.max(1, ok.length / max), picks = [];
@@ -128,11 +128,11 @@ await mkdir(new URL('../sfx/', import.meta.url), { recursive: true });
 const credits = [];
 // typewriter
 const tw = await pcm(SRC.typewriter[0]); credits.push(SRC.typewriter[0].credit);
-let twHits = strikes(tw, { len: 0.13, iso: 0.085, max: 20, name: 'typewriter', gate: 0.05 });
+let twHits = strikes(tw, { len: 0.13, iso: 0.085, max: 20, name: 'typewriter', gate: 0.05, minGap: 0.075 });
 const ret = null; // the carriage return is built from real clicks in the app
 if (twHits.length < 10) {
   const tw2 = await pcm(SRC.typewriter[1]); credits.push(SRC.typewriter[1].credit);
-  twHits = twHits.concat(strikes(tw2, { len: 0.13, iso: 0.085, max: 20 - twHits.length, name: 'typewriter 2', gate: 0.05 }));
+  twHits = twHits.concat(strikes(tw2, { len: 0.13, iso: 0.085, max: 20 - twHits.length, name: 'typewriter 2', gate: 0.05, minGap: 0.075 }));
 }
 const bell = trimBell(await pcm(SRC.bell)); credits.push(SRC.bell.credit);
 const T = splitSpace(twHits, 3);
