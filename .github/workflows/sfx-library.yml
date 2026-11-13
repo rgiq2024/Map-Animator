@@ -1,0 +1,35 @@
+name: Sound library (typing)
+
+# Cuts real key strikes, space bars, a carriage return and a bell from openly licensed Wikimedia Commons
+# recordings into sfx/ (small WAV sprites + sfx/samples.json), then redeploys the site. Run it by hand.
+on: workflow_dispatch
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Build the sound sprites
+        run: node tools/sfx-build.mjs
+      - name: Commit
+        run: |
+          git config user.name "sfx-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sfx
+          if git diff --cached --quiet; then echo "No change"; exit 0; fi
+          git commit -m "Typing sound library"
+          git pull --rebase -q origin main
+          git push -q origin HEAD:main
+      - name: Redeploy the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
