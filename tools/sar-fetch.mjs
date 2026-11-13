@@ -155,13 +155,21 @@ async function fromTiffUrl(url) {
   if (!ga) throw new Error('empty image');
   let corners = null;
   try {
-    const full = imgs[0], [ox, oy] = full.getOrigin(), [rx, ry] = full.getResolution(), W = full.getWidth(), Hh = full.getHeight();
+    const full = imgs[0], W = full.getWidth(), Hh = full.getHeight(), fd = full.fileDirectory;
     const gk = full.getGeoKeys() || {};
     const epsg = gk.ProjectedCSTypeGeoKey || gk.GeographicTypeGeoKey;
-    const xy = [[ox, oy], [ox + rx * W, oy], [ox + rx * W, oy + ry * Hh], [ox, oy + ry * Hh]];
+    let xy;
+    const T = fd.ModelTransformation;
+    if (T && T.length >= 8) { const at = (c, r) => [T[0] * c + T[1] * r + T[3], T[4] * c + T[5] * r + T[7]]; xy = [at(0, 0), at(W, 0), at(W, Hh), at(0, Hh)]; }
+    else {
+      const tie = fd.ModelTiepoint, sc = fd.ModelPixelScale;
+      if (!tie || !sc) throw new Error('no georeference');
+      const ox = tie[3] - tie[0] * sc[0], oy = tie[4] + tie[1] * sc[1];
+      xy = [[ox, oy], [ox + sc[0] * W, oy], [ox + sc[0] * W, oy - sc[1] * Hh], [ox, oy - sc[1] * Hh]];
+    }
     corners = xy.map(([X, Y]) => toLonLat(X, Y, epsg)).every(Boolean) ? xy.map(([X, Y]) => toLonLat(X, Y, epsg)) : null;
     if (!corners && geoLog-- > 0) log(`  ${url.split('/').pop()}: CRS ${epsg} not converted`);
-  } catch { corners = null; }
+  } catch (e) { if (geoLog-- > 0) log(`  ${url.split('/').pop()}: ${e.message}`); corners = null; }
   return { img: sharp(ga, { raw: { width: w, height: h, channels: 2 } }), corners };
 }
 let geoLog = 3;
