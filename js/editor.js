@@ -2006,6 +2006,7 @@ export function createEditor() {
   document.addEventListener('click', (e) => { if (e.target.closest('[data-sar-library]')) openSarAdd(); });
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-docu')?.addEventListener('click', cartoAdd);
+  $('#add-trailer')?.addEventListener('click', cartoAdd);
   $('#add-globes')?.addEventListener('click', cartoAdd);
   // tracked callouts: link to a video layer and open the "pick the subject" window
   function openVTracker(L) {

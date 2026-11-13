@@ -38,7 +38,7 @@ export const fam = (font, fallback) => (font ? `"${font}", ${fallback}` : fallba
 export async function loadFonts(scene) {
   if (!document.fonts?.load) return;
   const want = new Set(['Archivo', 'Inter', 'Caveat']);
-  for (const L of scene.layers || []) if (L.style?.font) want.add(L.style.font);
+  for (const L of scene.layers || []) { if (L.style?.font) want.add(L.style.font); if (/^(slate|trailercard|movietitle|billing|hacktext)$/.test(L.kind)) ['Barlow Condensed', 'Syncopate', 'Michroma', 'Anton'].forEach((f) => want.add(f)); }
   for (const sg of scene.signs || []) if (sg.font) want.add(sg.font);
   await Promise.all([...want].flatMap((f) => [`400 24px "${f}"`, `700 24px "${f}"`, `900 24px "${f}"`].map((spec) => document.fonts.load(spec).catch(() => {}))));
 }

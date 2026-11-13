@@ -8,6 +8,8 @@ export const MUSIC = { none: 'None', trailer: 'Epic cinematic intro trailer (bra
 export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph', 'tiles', 'vortex', 'vessel', 'photocard', 'arpanel', 'linecallout', 'detect', 'textcallout', 'photofx', 'matchcut', 'newsbox', 'zoomframe', 'shape']);
 export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
+import { TEXT_SFX, trailerSoundEvents } from './trailer.js';
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const noiseCache = new WeakMap();
 function noise(ctx, kind = 'white') {
@@ -217,6 +219,58 @@ const SYN = {
   },
 };
 
+// text & title sounds (trailer typography)
+Object.assign(SYN, {
+  /** crisp digital ticks, one per character, evenly spaced (location slates) */
+  ticks(ctx, out, w, p) {
+    const n = Math.max(1, Math.min(120, Math.round(p.n || 10))), d = Math.max(0.05, p.dur || n / 22), v = p.vol ?? 1;
+    for (let i = 0; i < n; i++) {
+      const t = w + (i / n) * d;
+      const c = src(ctx, 'white', t, 0.02); const f = filt(ctx, 'bandpass', 5200 + (i % 3) * 700, 3);
+      const g = env(ctx, t, [[0.0008, 0.5 * v], [0.014, 0.001, 1]]);
+      c.connect(f).connect(g).connect(out);
+      const o = osc(ctx, 'sine', 3100 + (i % 4) * 140, t, 0.02); const og = env(ctx, t, [[0.0008, 0.05 * v], [0.012, 0.001, 1]]);
+      o.connect(og).connect(out);
+    }
+  },
+  /** mechanical keyboard: click + thump with a human rhythm */
+  keys(ctx, out, w, p) {
+    const n = Math.max(1, Math.min(120, Math.round(p.n || 10))), d = Math.max(0.1, p.dur || n * 0.09), v = p.vol ?? 1;
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < n; i++) {
+      const t = w + (i / n) * d + rnd() * (d / n) * 0.45;
+      const c = src(ctx, 'white', t, 0.04); const f = filt(ctx, 'bandpass', 2600 + rnd() * 1800, 1.4);
+      const g = env(ctx, t, [[0.001, 0.4 * v], [0.03, 0.001, 1]]);
+      c.connect(f).connect(g).connect(out);
+      const b = osc(ctx, 'sine', 160 + rnd() * 60, t, 0.05); const bg = env(ctx, t, [[0.002, 0.25 * v], [0.045, 0.001, 1]]);
+      b.connect(bg).connect(out);
+    }
+    if (p.enter) { const t = w + d + 0.12; const c = src(ctx, 'white', t, 0.07); const f = filt(ctx, 'bandpass', 1800, 1); const g = env(ctx, t, [[0.001, 0.6 * v], [0.06, 0.001, 1]]); c.connect(f).connect(g).connect(out); }
+  },
+  /** trailer title-card boom: deep sub drop, low noise burst, metallic ring, long tail */
+  boom(ctx, out, w, p) {
+    const v = p.vol ?? 1, rv = reverb(ctx, out);
+    const o = osc(ctx, 'sine', 62, w, 4); o.frequency.exponentialRampToValueAtTime(28, w + 3.5);
+    const g = env(ctx, w, [[0.008, 1.5 * v], [4, 0.001, 1]]); o.connect(g).connect(out);
+    const n = src(ctx, 'brown', w, 2.5); const nf = filt(ctx, 'lowpass', 900); nf.frequency.setValueAtTime(1800, w); nf.frequency.exponentialRampToValueAtTime(120, w + 2);
+    const ng = env(ctx, w, [[0.005, 1.4 * v], [2.4, 0.001, 1]]); n.connect(nf).connect(ng).connect(out); ng.connect(rv);
+    for (const [fr, a] of [[183, 0.12], [263, 0.08], [397, 0.06], [611, 0.035]]) { const m = osc(ctx, 'sine', fr, w, 3); const mg = env(ctx, w, [[0.01, a * v], [3, 0.001, 1]]); m.connect(mg).connect(out); mg.connect(rv); }
+    const c = src(ctx, 'white', w, 0.15); const cf = filt(ctx, 'highpass', 2500); const cg = env(ctx, w, [[0.002, 0.35 * v], [0.12, 0.001, 1]]); c.connect(cf).connect(cg).connect(rv);
+  },
+  /** scrambled data letters settling (glitch type-on) */
+  decode(ctx, out, w, p) {
+    const d = Math.max(0.2, p.dur || 0.8), v = p.vol ?? 1;
+    for (let t = 0; t < d; t += 0.028) {
+      const o = osc(ctx, 'square', 900 + Math.random() * 2600, w + t, 0.02); const f = filt(ctx, 'bandpass', 3000, 2);
+      const g = env(ctx, w + t, [[0.001, 0.07 * v], [0.018, 0.001, 1]]); o.connect(f).connect(g).connect(out);
+    }
+    SYN.beep(ctx, out, w + d, { freq: 1760, vol: v * 0.6 });
+  },
+  /** access granted chime */
+  granted(ctx, out, w, p) { [0, 0.11].forEach((t, i) => SYN.beep(ctx, out, w + t, { freq: [1320, 1980][i], vol: (p.vol ?? 1) * 1.2 })); },
+});
+
 // more library sounds
 Object.assign(SYN, {
   riser(ctx, out, w, p) {
@@ -422,6 +476,7 @@ export const SOUND_LIBRARY = {
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', rocket: 'Rocket launch' },
   'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
   'Military & radar': { radar: 'Radar sweep', acquire: 'Missile seeker growl', lockon: 'Lock-on tone', missilewarn: 'Missile warning', morse: 'Morse code (SOS)', comms: 'Radio chatter', teletype: 'Teletype', datalink: 'Data link', servo: 'Camera gimbal', klaxon: 'Klaxon', siren: 'Air-raid siren', countdown: 'Countdown beeps' },
+  'Text & titles': { ticks: 'Typing ticks (location slate)', keys: 'Keyboard typing', boom: 'Trailer boom (title card)', decode: 'Data decode (glitch type-on)', granted: 'Access granted' },
   'Ambience': { wind: 'Wind', rain: 'Rain', storm: 'Storm (wind, rain, thunder)', crowd: 'Crowd murmur' },
 };
 export const SOUND_NAMES = Object.assign({}, ...Object.values(SOUND_LIBRARY));
@@ -550,7 +605,8 @@ const MODE_SND = { plane: 'airliner', jet3d: 'jet', airliner3d: 'airliner', heli
 export function buildEvents(project, models) {
   const snd = { ...defaultSound(), ...(project.sound || {}) };
   const ev = [];
-  if (!snd.auto) { for (const c of project.sfx || []) if (!c.muted && SYN[c.type]) ev.push({ t: Math.max(0, +c.t || 0), type: c.type, p: { dur: +c.dur || 2.5, n: 16, vol: +c.vol || 1 } }); return ev.sort((a, b) => a.t - b.t); }
+  // without automatic sound, only the text layers that carry their own sound (trailer typography) play, plus placed sounds
+  const textOnly = !snd.auto;
   let off = 0;
   project.scenes.forEach((sc, si) => {
     const m = models[si];
@@ -558,7 +614,9 @@ export function buildEvents(project, models) {
     const push = (t, type, p = {}) => { if (t >= m.trimIn - 0.01 && t <= m.trimOut) { const pt = P(Math.max(m.trimIn, t)); if (pt != null) ev.push({ t: pt, type, p }); } };
     for (const L of sc.layers || []) {
       if (L.hidden || L.style?.sound === false) continue;
+      if (textOnly && !TEXT_SFX.has(L.kind)) continue;
       const s = L.style || {};
+      if (TEXT_SFX.has(L.kind)) { for (const e of trailerSoundEvents(L)) push(e.t, e.type, e.p); continue; }
       const D = Math.max(0.1, +L.duration || 1);
       const t0 = +L.start || 0;
       const vol = s.soundVol ?? 1;
@@ -767,6 +825,7 @@ export function buildEvents(project, models) {
         push(t0, 'explosion', { size: +s.size || 1, vol });
       }
     }
+    if (textOnly) { off += m.duration; return; }
     // route legs flown by aircraft, drones…
     for (const r of m.runs || []) {
       const t = MODE_SND[r.L.leg.mode];
@@ -818,4 +877,4 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
   if (snd.auto) scheduleMusic(ctx, mus, snd.music, from, to, when);
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (project.sfx || []).some((c) => !c.muted); };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => TEXT_SFX.has(L.kind) && !L.hidden && L.style?.sound !== false)); };

@@ -145,6 +145,8 @@ export function brandSafeArea(fw, fh) {
   const gap = fh * 0.02;
   return b.headerPlace === 'bottom' ? { top: 0, bottom: Math.max(0, (fh - (ly + e0 * dh) + gap) / fh) } : { top: Math.max(0, (ly + e1 * dh + gap) / fh), bottom: 0 };
 }
+/** Share of the frame height taken by the lower third at the bottom (0 when it is off). */
+export function brandLowerSafe() { const b = activeBrand; return b?.lower ? 0.152 + (+b.lowerY || 0) + 0.02 : 0; }
 /** Resolves when the logo strip is ready to draw (for export). */
 export function preloadBrand(brand) {
   loadBrandFonts();
