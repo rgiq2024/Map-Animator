@@ -148,6 +148,8 @@ export function createEditor() {
     floods = new TerrainFloods(map, (L) => { if (selLayer === L.id) renderLayerEditor(); rebuild(); save(); });
     models = new ModelLayer(map);
     wayback = new WaybackLayers(map);
+    // the camera's zoom range over a scene (for steady satellite imagery during slow zooms)
+    wayback.zoomRange = (sc) => { const m = buildScene(sc, frame.w, frame.h); let lo = Infinity, hi = -Infinity; for (let i = 0; i <= 60; i++) { const z = m.cameraAt((m.total * i) / 60)?.zoom; if (Number.isFinite(z)) { lo = Math.min(lo, z); hi = Math.max(hi, z); } } return Number.isFinite(lo) ? [lo, hi] : null; };
     affected = new AffectedBuildings(map);
     affected.onCount = () => repaint();
     twin = new TwinCity(map);
@@ -5204,6 +5206,8 @@ export function createEditor() {
       if (!map) initMap();
       project = p;
       project.scenes.forEach(migrateScene);
+      // zoom-to-location scenes made before the smooth flight: rebuild the camera as one continuous move
+      for (const sc of project.scenes) if (sc.briefZoom && sc.camera?.mode === 'keyframes' && (sc.camera.keys || []).length <= 5 && sc.layers?.some((l) => l.kind === 'briefing' && l.style?.layout === 'zoom')) { const ks = sc.camera.keys; applyZoom(sc, typeof sc.briefZoom === 'object' ? {} : { sec: +ks.at(-1).t || 8, end: +(ks.at(-2) || ks.at(-1)).view.zoomRef || 13, tilt: +ks.at(-1).view.pitch || 0, rotate: +ks.at(-1).view.bearing || 0 }); }
       project.audio ||= [];
       project.models ||= [];
       if (!project.sound?.v2) project.sound = { ...(project.sound || {}), auto: false, v2: true }; // sound is off until the user turns it on

@@ -40,12 +40,18 @@ export class WaybackLayers {
     if (!layers.length) return;
     const style = m.getStyle();
     const before = style.layers.find((l) => l.type === 'symbol' || l.id === 'ma-buildings' || l.id.startsWith('ma-flood'))?.id;
+    // a slow zoom inside one tile level: keep every frame on the same tile zoom, so the imagery does not jump / shimmer
+    // while new tiles arrive (MapLibre rounds raster tile zoom; capping maxzoom at the scene's rounded low zoom holds it)
+    let lock = null;
+    try { const r = this.zoomRange?.(scene); if (r && r[1] - r[0] <= 1.6) lock = Math.round(r[0]); } catch { lock = null; }
     for (const L of layers) {
       (L.style.frames || []).forEach((f, i) => {
         if (!f.url) return;
         const source = `ma-wb-${L.id}-${i}`, layer = `${source}-l`;
+        let maxz = f.maxzoom || (L.style.source === 'livesat' ? 9 : 19);
+        if (lock != null) maxz = Math.max(f.minzoom || 0, Math.min(maxz, lock));
         try {
-          m.addSource(source, { type: 'raster', tiles: [f.url], tileSize: 256, ...(f.minzoom ? { minzoom: f.minzoom } : {}), maxzoom: f.maxzoom || (L.style.source === 'livesat' ? 9 : 19), attribution: L.style.source === 'wayback' ? 'Esri World Imagery Wayback' : (L.style.credit || '') });
+          m.addSource(source, { type: 'raster', tiles: [f.url], tileSize: 256, ...(f.minzoom ? { minzoom: f.minzoom } : {}), maxzoom: maxz, attribution: L.style.source === 'wayback' ? 'Esri World Imagery Wayback' : (L.style.credit || '') });
           m.addLayer({ id: layer, type: 'raster', source, layout: { visibility: 'none' }, paint: { 'raster-opacity': 0, 'raster-fade-duration': 0 } }, before);
           this.ids.push({ layer, source, L, i });
         } catch (e) { console.warn('wayback layer', e); }

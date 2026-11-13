@@ -54,7 +54,7 @@ export const DF_ANIMS = {
   dashroute: { draw: 'Draws along the route', march: 'Draws, then the dashes march', none: 'Shown' },
 };
 export const DF_DEFAULTS = {
-  docinset: { anim: 'open', duration: 1.6, style: { shape: 'circle', src: 'satellite', media: '', zoom: 13, size: 1, dx: -170, dy: -150, title: '', titlePos: 'below', flag: '', frame: '#ffffff', ring: true, leader: 'straight', glow: true, dim: 0 } },
+  docinset: { anim: 'open', duration: 1.6, style: { shape: 'circle', src: 'satellite', media: '', zoom: 13, size: 1, dx: -170, dy: -150, title: '', titlePos: 'below', flag: '', frame: '#ffffff', anchor: 'screen', ring: true, leader: 'straight', glow: true, dim: 0 } },
   zonering: { anim: 'grow', duration: 1.6, style: { radiusKm: 370, look: 'gold', color: '#e9c46a', label: '', labelSide: 'right', labelLen: 90, dot: true, fill: true, width: 1 } },
   corridor: { anim: 'draw', duration: 1.4, style: { widthKm: 120, color: '#ffffff', text: 'Sovereign Territory', textSize: 1, opacity: 0.85 } },
   redmark: { anim: 'draw', duration: 0.9, style: { rx: 70, ry: 34, rot: -12, color: '#e01e2b', width: 1 } },
@@ -73,13 +73,16 @@ export const DF_FORMS = {
     ['style.title', 'Title', 'text'],
     ['style.titlePos', 'Title', 'select', { below: 'Below', above: 'Above', tag: 'White tag under the card', none: 'Hidden' }],
     ['style.flag', 'Flag (2-letter country code, e.g. us, fr, in)', 'text', null, (L) => L.style.shape === 'card' || L.style.shape === 'rect'],
-    ['style.leader', 'Line to the place', 'select', { straight: 'Straight', elbow: 'Elbow (down, then across)', none: 'None' }, (L) => L.style.shape !== 'bubble'],
-    ['style.ring', 'Small ring on the place', 'switch', null, (L) => L.style.shape !== 'bubble'],
+    ['style.leader', 'Line to the place', 'select', { straight: 'Straight', elbow: 'Elbow (across, then up / down)', none: 'None' }],
+    ['style.ring', 'Small ring on the place', 'switch'],
     ['style.frame', 'Frame colour', 'color'],
     ['style.glow', 'Soft glow', 'switch'],
     ['style.dim', 'Darken the imagery', 'range', [0, 0.8, 0.05]],
-    ['style.dx', 'Position ←→ (or drag it)', 'range', [-800, 800, 1], (L) => L.style.shape !== 'bubble'],
-    ['style.dy', 'Position ↑↓ (or drag it)', 'range', [-500, 500, 1], (L) => L.style.shape !== 'bubble'],
+    ['style.anchor', 'Lens / card', 'select', { screen: 'Stays put on the screen — line and ring follow the place', map: 'Moves with the map' }],
+    ['style.bx', 'Position ←→ (or drag it)', 'range', [0, 1, 0.005], (L) => L.style.anchor !== 'map'],
+    ['style.by', 'Position ↑↓ (or drag it)', 'range', [0, 1, 0.005], (L) => L.style.anchor !== 'map'],
+    ['style.dx', 'Offset from the place ←→', 'range', [-800, 800, 1], (L) => L.style.anchor === 'map'],
+    ['style.dy', 'Offset from the place ↑↓', 'range', [-500, 500, 1], (L) => L.style.anchor === 'map'],
   ],
   zonering: [
     ['style.radiusKm', 'Radius (km) — 370 km = 200 nautical miles (EEZ)', 'number', 1],
@@ -161,39 +164,19 @@ function drawDocInset(ctx, L, tm, o) {
   const Hh = shape === 'circle' || shape === 'bubble' ? W : W * (shape === 'card' ? 0.72 : 0.62);
   const S = Math.max(1, Math.abs(ctx.getTransform().a) || 1);
   ctx.save(); ctx.globalAlpha *= tm.alpha;
-  if (shape === 'bubble') {
-    // glass sphere on the place, label underneath
-    const k = still ? 1 : L.anim === 'fade' ? 1 : easeOut(seg(u, 0, 0.8));
-    const a = still ? 1 : L.anim === 'fade' ? u : seg(u, 0, 0.4);
-    const [dx, dy] = placeAt(ctx, L, fr, p[0] - W / 2, p[1] - W / 2, W, W, { key: 'box', resize: true, uniform: true });
-    const cx = p[0] + dx, cy = p[1] + dy, R = (W / 2) * k;
-    ctx.globalAlpha *= a;
-    const C = insetImage(L, o, ll, W, W, S, unit);
-    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.clip();
-    ctx.drawImage(C, cx - W / 2, cy - W / 2, W, W);
-    const v = ctx.createRadialGradient(cx, cy, R * 0.45, cx, cy, R);
-    v.addColorStop(0, 'rgba(6,14,26,0)'); v.addColorStop(1, 'rgba(6,14,26,0.75)');
-    ctx.fillStyle = v; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-    const hl = ctx.createLinearGradient(cx, cy - R, cx, cy);
-    hl.addColorStop(0, 'rgba(255,255,255,0.14)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = hl; ctx.fillRect(cx - R, cy - R, R * 2, R);
-    ctx.restore();
-    ctx.save();
-    if (s.glow !== false) { ctx.shadowColor = hexA(col, 0.7); ctx.shadowBlur = 22 * unit; }
-    ctx.strokeStyle = hexA(col, 0.75); ctx.lineWidth = 2.2 * unit; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 7); ctx.stroke();
-    ctx.restore();
-    if (s.title && s.titlePos !== 'none' && k > 0.9) {
-      ctx.font = `400 ${30 * unit * sz}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      const g = ctx.createLinearGradient(cx - R, 0, cx + R, 0); g.addColorStop(0, '#c9d3e0'); g.addColorStop(1, '#8fe3ff');
-      ctx.fillStyle = g; ctx.globalAlpha *= seg(u, 0.75, 1) || (still ? 1 : 0);
-      ctx.fillText(s.title, cx, cy + R * 0.82);
+  // box centre: fixed on the screen (the line and the small ring follow the place) or pinned to the map
+  let bx, by;
+  if (s.anchor === 'map') { bx = p[0] + (+s.dx || 0) * unit - W / 2; by = p[1] + (+s.dy || 0) * unit - Hh / 2; }
+  else {
+    if (s.bx == null || s.by == null) {
+      // first time: start where the offset puts it, then stay there on the screen
+      s.bx = +clamp((p[0] + (+s.dx || 0) * unit - fr.x) / fr.w, 0.05, 0.95).toFixed(4);
+      s.by = +clamp((p[1] + (+s.dy || 0) * unit - fr.y) / fr.h, 0.08, 0.92).toFixed(4);
     }
-    ctx.restore();
-    return;
+    bx = fr.x + fr.w * +s.bx - W / 2; by = fr.y + fr.h * +s.by - Hh / 2;
   }
-  // box centre (draggable) and the line to it
-  let bx = p[0] + (+s.dx || 0) * unit - W / 2, by = p[1] + (+s.dy || 0) * unit - Hh / 2;
-  const [dx, dy] = placeAt(ctx, L, fr, bx, by, W, Hh, { key: 'box' });
+  const round = shape === 'circle' || shape === 'bubble';
+  const [dx, dy] = placeAt(ctx, L, fr, bx, by, W, Hh, { key: 'box', resize: true, uniform: true });
   bx += dx; by += dy;
   const cx = bx + W / 2, cy = by + Hh / 2;
   const kLine = still || L.anim === 'fade' || L.anim === 'zoom' ? 1 : easeOut(seg(u, 0, 0.4));
@@ -202,13 +185,13 @@ function drawDocInset(ctx, L, tm, o) {
   ctx.globalAlpha *= fade;
   // attach point on the box edge
   let ax, ay;
-  if (shape === 'circle') { const ang = Math.atan2(p[1] - cy, p[0] - cx); ax = cx + Math.cos(ang) * W / 2; ay = cy + Math.sin(ang) * W / 2; }
+  if (round) { const ang = Math.atan2(p[1] - cy, p[0] - cx); ax = cx + Math.cos(ang) * W / 2; ay = cy + Math.sin(ang) * W / 2; }
   else if (s.leader === 'elbow') { ax = cx; ay = p[1] > cy ? by + Hh : by; }
   else { ax = clamp(p[0], bx, bx + W); ay = clamp(p[1], by, by + Hh); if (ax > bx && ax < bx + W && ay > by && ay < by + Hh) { ax = cx; ay = by + Hh; } }
   if (s.ring !== false && L.anim !== 'zoom') smallRing(ctx, p[0], p[1], 6.5 * unit, col, unit);
   if (s.leader !== 'none') {
     ctx.save(); ctx.strokeStyle = hexA(col, 0.9); ctx.lineWidth = 1.4 * unit;
-    const pts = s.leader === 'elbow' && shape !== 'circle' ? [[p[0], p[1]], [ax, p[1]], [ax, ay]] : [[p[0], p[1]], [ax, ay]];
+    const pts = s.leader === 'elbow' && !round ? [[p[0], p[1]], [ax, p[1]], [ax, ay]] : [[p[0], p[1]], [ax, ay]];
     path(ctx, partial(pts, kLine)); ctx.stroke(); ctx.restore();
   }
   if (kBox <= 0.01) { ctx.restore(); return; }
@@ -217,17 +200,27 @@ function drawDocInset(ctx, L, tm, o) {
   if (L.anim === 'zoom' && !still) { const k = kBox; w = W * (0.08 + 0.92 * k); h = Hh * (0.08 + 0.92 * k); ox = p[0] + (cx - p[0]) * k - w / 2; oy = p[1] + (cy - p[1]) * k - h / 2; }
   else { w = W * (0.4 + 0.6 * kBox); h = Hh * (0.4 + 0.6 * kBox); ox = cx - w / 2; oy = cy - h / 2; ctx.globalAlpha *= clamp(kBox * 1.6, 0, 1); }
   const C = insetImage(L, o, ll, W, Hh, S, unit);
-  const rad = shape === 'circle' ? w / 2 : 8 * unit * sz;
-  const clipShape = () => { if (shape === 'circle') { ctx.beginPath(); ctx.arc(ox + w / 2, oy + h / 2, w / 2, 0, 7); } else rr(ctx, ox, oy, w, h, rad); };
+  const rad = round ? w / 2 : 8 * unit * sz;
+  const clipShape = () => { if (round) { ctx.beginPath(); ctx.arc(ox + w / 2, oy + h / 2, w / 2, 0, 7); } else rr(ctx, ox, oy, w, h, rad); };
   ctx.save();
-  if (s.glow !== false) { ctx.shadowColor = shape === 'circle' ? hexA(col, 0.55) : 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 26 * unit; }
+  if (s.glow !== false) { ctx.shadowColor = round ? hexA(col, shape === 'bubble' ? 0.75 : 0.55) : 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 26 * unit; }
   clipShape(); ctx.fillStyle = '#05080d'; ctx.fill();
   ctx.restore();
   ctx.save(); clipShape(); ctx.clip();
   ctx.drawImage(C, 0, 0, C.width, C.height, ox, oy, w, h);
   if (shape === 'circle') { const v = ctx.createRadialGradient(ox + w / 2, oy + h / 2, w * 0.3, ox + w / 2, oy + h / 2, w / 2); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.35)'); ctx.fillStyle = v; ctx.fillRect(ox, oy, w, h); }
+  if (shape === 'bubble') {
+    // glass sphere: dark rim, light from the top
+    const R = w / 2, X = ox + R, Y = oy + R;
+    const v = ctx.createRadialGradient(X, Y, R * 0.45, X, Y, R); v.addColorStop(0, 'rgba(6,14,26,0)'); v.addColorStop(1, 'rgba(6,14,26,0.75)');
+    ctx.fillStyle = v; ctx.fillRect(ox, oy, w, h);
+    const hl = ctx.createLinearGradient(X, oy, X, Y); hl.addColorStop(0, 'rgba(255,255,255,0.16)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hl; ctx.fillRect(ox, oy, w, R);
+  }
   ctx.restore();
-  ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = (shape === 'circle' ? 3 : 2) * unit; clipShape(); ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.strokeStyle = shape === 'bubble' ? hexA(col, 0.75) : col; ctx.lineWidth = (shape === 'circle' ? 3 : shape === 'bubble' ? 2.2 : 2) * unit;
+  if (shape === 'bubble' && s.glow !== false) { ctx.shadowColor = hexA(col, 0.7); ctx.shadowBlur = 22 * unit; }
+  clipShape(); ctx.stroke(); ctx.restore();
   // flag and title
   const done = still ? 1 : seg(kBox, 0.85, 1);
   if (done > 0) {
@@ -235,7 +228,12 @@ function drawDocInset(ctx, L, tm, o) {
     const fl = s.flag && flagImg(s.flag);
     if (fl) { const fw = 58 * unit * sz, fh = fw * (fl.naturalHeight / fl.naturalWidth || 0.66); ctx.drawImage(fl, ox + 12 * unit, oy + 12 * unit, fw, fh); }
     const t = s.title, pos = s.titlePos || 'below';
-    if (t && pos !== 'none') {
+    if (t && pos !== 'none' && shape === 'bubble') {
+      const fs = 30 * unit * sz * (w / W);
+      ctx.font = `400 ${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      const g = ctx.createLinearGradient(ox, 0, ox + w, 0); g.addColorStop(0, '#c9d3e0'); g.addColorStop(1, '#8fe3ff');
+      ctx.fillStyle = g; ctx.fillText(t, ox + w / 2, oy + h * 0.91);
+    } else if (t && pos !== 'none') {
       const fs = 15 * unit * sz;
       ctx.font = `${pos === 'tag' ? 600 : 500} ${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       if (pos === 'tag') {

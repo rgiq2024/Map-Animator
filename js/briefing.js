@@ -1187,18 +1187,24 @@ export const briefingLayers = (layout = 'A', style = {}, ll = null) => splitBrie
  * ll [lng, lat]; returns { mode: 'keyframes', keys }.
  */
 export function zoomCamera(ll, seconds = 8, endZoom = 13, o = {}) {
+  // one continuous flight sampled into many linear keys, so the speed never stops and restarts between keys
   const tilt = clamp(+o.tilt || 0, 0, 75), rot = clamp(+o.rotate || 0, -180, 180), spin = clamp(+o.spin || 0, 0, 3);
-  const k = (t, c, z, bearing = 0, pitch = 0, ease = 'ease') => ({ t: +t.toFixed(2), view: { center: [r6(c[0]), r6(c[1])], zoomRef: +z.toFixed(3), bearing: +bearing.toFixed(1), pitch: +pitch.toFixed(1) }, ease });
+  const k = (t, c, z, bearing = 0, pitch = 0, ease = 'linear') => ({ t: +t.toFixed(3), view: { center: [r6(c[0]), r6(c[1])], zoomRef: +z.toFixed(3), bearing: +bearing.toFixed(2), pitch: +pitch.toFixed(2) }, ease });
   const lat0 = clamp(ll[1] * 0.5, -45, 45), z0 = clamp(+o.startZoom || 0.7, 0, 4);
+  const lon0 = ll[0] - 30 - 360 * spin, z1 = endZoom + 0.25;
+  const ss = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+  const sm = (x) => { x = clamp(x, 0, 1); return x * x * x * (x * (x * 6 - 15) + 10); };
+  const n = Math.max(10, Math.round(seconds * 5));
   const keys = [];
-  if (spin > 0) {
-    // the globe turns first (whole turns), then the camera comes down
-    keys.push(k(0, [ll[0] - 30 - 360 * spin, lat0], z0, 0, 0, 'linear'), k(seconds * 0.35, [ll[0] - 30, lat0], z0 + 0.2, 0, 0, 'ease'));
-  } else keys.push(k(0, [ll[0] - 30, lat0], z0, 0, 0, 'ease'));
-  keys.push(k(seconds * 0.85, ll, endZoom, rot * 0.8, tilt * 0.6, 'ease'), k(seconds, ll, endZoom + 0.25, rot, tilt, 'linear'));
+  for (let i = 0; i <= n; i++) {
+    const u = i / n, e = sm(u);
+    const ec = ss(e / 0.5); // the globe turns to the place while still high up, then the camera dives
+    const ez = e ** 2.2;
+    const ea = ss((e - 0.5) / 0.5);
+    keys.push(k(u * seconds, [lon0 + (ll[0] - lon0) * ec, lat0 + (ll[1] - lat0) * ec], z0 + (z1 - z0) * ez, rot * ea, tilt * ea));
+  }
   return { mode: 'keyframes', keys };
 }
-/** default fly settings of a “zoom to location” scene */
 export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '' };
 /** middle of a country by name (null while the outlines load) */
 export function countryPoint(name) { const c = (countriesByName(name) || [])[0]; return c ? labelPoint(c.polys) : null; }
