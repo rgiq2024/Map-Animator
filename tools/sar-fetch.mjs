@@ -86,6 +86,7 @@ async function iceye() {
   log(`ICEYE: ${refs.length} items`);
   const full = await pool(refs, 16, (u) => getJSON(u));
   return full.filter((it) => it?.bbox && it.assets?.['qlk-cog']).map((it) => ({
+    meta: it.assets['qlk-json']?.href || it.assets['grd-json']?.href || '',
     id: `iceye-${it.id}`, provider: 'ICEYE', date: it.properties.datetime, mode: it.properties['sar:instrument_mode'] || '', pol: (it.properties['sar:polarizations'] || []).join('/'),
     bbox: it.bbox, footprint: it.geometry?.coordinates?.[0], center: lonlatOf(it), src: { kind: 'tif', url: it.assets['qlk-cog'].href }, credit: '© ICEYE, CC BY 4.0', item: it.id,
   }));
@@ -169,7 +170,7 @@ async function fromTiffUrl(url) {
     }
     corners = xy.map(([X, Y]) => toLonLat(X, Y, epsg)).every(Boolean) ? xy.map(([X, Y]) => toLonLat(X, Y, epsg)) : null;
     if (!corners && geoLog-- > 0) log(`  ${url.split('/').pop()}: CRS ${epsg} not converted`);
-  } catch (e) { if (geoLog-- > 0) log(`  ${url.split('/').pop()}: ${e.message}`); corners = null; }
+  } catch { corners = null; }
   return { img: sharp(ga, { raw: { width: w, height: h, channels: 2 } }), corners };
 }
 let geoLog = 3;
@@ -201,10 +202,36 @@ async function fromPngUrl(url) {
   for (let i = 0; i < n; i++) { const v = data[i * c]; ga[i * 2] = v; ga[i * 2 + 1] = v ? 255 : 0; }
   return { img: sharp(ga, { raw: { width: info.width, height: info.height, channels: 2 } }), corners: null };
 }
+/** ICEYE quicklooks are in radar geometry: their corners come from the product metadata (first / last line × near / far range) */
+let iceLog = 2;
+async function iceyeCorners(url, bbox) {
+  const j = url ? await getJSON(url) : null;
+  if (!j) return null;
+  const found = {};
+  const inBox = (lon, lat) => lon >= bbox[0] - 0.2 && lon <= bbox[2] + 0.2 && lat >= bbox[1] - 0.2 && lat <= bbox[3] + 0.2;
+  const walk = (o, path = '') => {
+    if (!o || typeof o !== 'object') return;
+    for (const [k, v] of Object.entries(o)) {
+      const m = k.match(/(first|last)[_ ]?(near|far)|(near|far)[_ ]?(first|last)/i);
+      if (m && v != null) {
+        const nums = (Array.isArray(v) ? v.flat(3) : typeof v === 'object' ? Object.values(v) : String(v).split(/[ ,]+/)).map(Number).filter(Number.isFinite);
+        for (let i = 0; i + 1 < nums.length; i++) {
+          if (inBox(nums[i + 1], nums[i])) { found[(m[1] || m[4]).toLowerCase() + (m[2] || m[3]).toLowerCase()] = [nums[i + 1], nums[i]]; break; }
+          if (inBox(nums[i], nums[i + 1])) { found[(m[1] || m[4]).toLowerCase() + (m[2] || m[3]).toLowerCase()] = [nums[i], nums[i + 1]]; break; }
+        }
+      }
+      walk(v, `${path}.${k}`);
+    }
+  };
+  walk(j);
+  if (iceLog-- > 0) log(`  ICEYE corners: ${JSON.stringify(found)}`);
+  const c = [found.firstnear, found.firstfar, found.lastfar, found.lastnear];
+  return c.every(Boolean) ? c.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) : null;
+}
 async function preview(x) {
   let got;
   if (x.src.kind === 'png') got = await fromPngUrl(x.src.url);
-  else if (x.src.kind === 'tif') got = await fromTiffUrl(x.src.url);
+  else if (x.src.kind === 'tif') { got = await fromTiffUrl(x.src.url); if (!got.corners && x.provider === 'ICEYE') got.corners = await iceyeCorners(x.meta, x.bbox); }
   else {
     const keys = await umbraKeys(x.src.task);
     const base = x.src.name.replace(/^.*\//, '');
