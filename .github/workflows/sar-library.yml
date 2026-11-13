@@ -1,0 +1,50 @@
+name: SAR open-data library
+
+# Copies small preview images (never the full SAR products) from the open SAR programmes of
+# Capella Space, ICEYE and Umbra (all CC BY 4.0) into sar/, with sar/index.json, then redeploys the site.
+# Run it by hand from the Actions tab; it also tops up new images once a month.
+on:
+  schedule:
+    - cron: '41 3 7 * *'
+  workflow_dispatch:
+    inputs:
+      per_provider:
+        description: 'Previews per provider'
+        default: '70'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sar-library
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Tools
+        run: npm i --no-save --no-package-lock sharp@0.33.5 geotiff@2.1.3
+      - name: Fetch previews
+        env:
+          SAR_PER_PROVIDER: ${{ github.event.inputs.per_provider || '70' }}
+        run: node tools/sar-fetch.mjs
+      - name: Commit
+        run: |
+          git config user.name "sar-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sar
+          if git diff --cached --quiet; then echo "No change"; exit 0; fi
+          git commit -m "SAR open-data previews $(date -u +%F)"
+          git pull --rebase -q origin main
+          git push -q origin HEAD:main
+      - name: Redeploy the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
