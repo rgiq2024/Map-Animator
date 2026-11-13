@@ -4,6 +4,7 @@
 // biometric / ID scan windows, and an airborne camera (FLIR) data overlay.
 import { placeAt, CUSTOM_POS } from './place.js';
 import { H } from './cartofx.js';
+import { fitSchedule } from './typewriter.js';
 import { imageFor } from './geoimage.js';
 import { VIDEO_RECTS } from './screenfx.js';
 
@@ -558,7 +559,11 @@ function drawTitle(ctx, L, tm, o) {
       break;
     }
     case 'typewriter': {
-      const all = lines.join('\n'), n = Math.round(all.length * seg(k, 0, 0.85));
+      // human key rhythm (same schedule as the key sounds)
+      const all = lines.join('\n'), Dur = Math.max(0.3, +L.duration || 2);
+      const scd = fitSchedule(all + (s.sub ? `\n${s.sub}` : ''), +s.speed || 14, 0.6, Dur * 0.85);
+      const tNow = raw >= 1 ? 1e9 : raw * Dur;
+      const n = Math.min(all.length, scd.list.filter((e) => e.t <= tNow).length);
       const shown = all.slice(0, n).split('\n');
       ctx.font = font({ font: 'mono' }, 600, big * 0.7 * u); ctx.fillStyle = col; ctx.textAlign = 'left';
       shown.forEach((t, i) => ctx.fillText(t, x, y + i * lh * 0.8));

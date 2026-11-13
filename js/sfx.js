@@ -9,6 +9,7 @@ export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', '
 export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 import { TEXT_SFX, trailerSoundEvents } from './trailer.js';
+import { fitSchedule } from './typewriter.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const noiseCache = new WeakMap();
@@ -267,6 +268,39 @@ Object.assign(SYN, {
     }
     SYN.beep(ctx, out, w + d, { freq: 1760, vol: v * 0.6 });
   },
+  /** mechanical typewriter: p.hits = [[time, 'k'|'s'|'r'], …] — key strike, space bar, carriage return (+ bell) */
+  typewriter(ctx, out, w, p) {
+    const v = p.vol ?? 1;
+    let hits = p.hits;
+    if (!hits) { const n = Math.max(1, Math.round(p.n || 14)), d = p.dur || n / 11; hits = Array.from({ length: n }, (_, i) => [(i / n) * d * (0.9 + 0.2 * Math.sin(i * 7.3)), i % 6 === 5 ? 's' : 'k']); hits.push([d + 0.1, 'r']); }
+    let seed = 11; const R = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const rv = reverb(ctx, out);
+    for (const [dt, kind] of hits) {
+      const t = w + dt;
+      if (t < ctx.currentTime) continue;
+      if (kind === 'r') {
+        if (p.bell !== false) {
+          const bt = t - 0.02;
+          for (const [f, a, d] of [[2350, 0.16, 1.4], [3520, 0.07, 0.9], [5870, 0.03, 0.5]]) { const o = osc(ctx, 'sine', f, bt, d); const g = env(ctx, bt, [[0.002, a * v], [d, 0.001, 1]]); o.connect(g).connect(out); g.connect(rv); }
+        }
+        // lever ratchet and carriage sliding home, then the thunk
+        for (let i = 0; i < 14; i++) { const tt = t + 0.12 + i * 0.022; const c = src(ctx, 'white', tt, 0.012); const f = filt(ctx, 'bandpass', 3200, 2.5); const g = env(ctx, tt, [[0.001, 0.12 * v], [0.01, 0.001, 1]]); c.connect(f).connect(g).connect(out); }
+        const sl = src(ctx, 'pink', t + 0.12, 0.34); const sf = filt(ctx, 'bandpass', 900, 0.8); const sg = env(ctx, t + 0.12, [[0.04, 0.12 * v], [0.3, 0.001, 1]]); sl.connect(sf).connect(sg).connect(out);
+        const th = osc(ctx, 'sine', 95, t + 0.46, 0.12); const tg = env(ctx, t + 0.46, [[0.003, 0.55 * v], [0.1, 0.001, 1]]); th.connect(tg).connect(out);
+        const tc = src(ctx, 'white', t + 0.46, 0.04); const tf = filt(ctx, 'bandpass', 1400, 1); const tcg = env(ctx, t + 0.46, [[0.001, 0.35 * v], [0.035, 0.001, 1]]); tc.connect(tf).connect(tcg).connect(out);
+        continue;
+      }
+      const space = kind === 's', jit = 0.85 + R() * 0.3;
+      // the type bar hitting the platen: sharp click + woody knock + a little metal ring
+      const c = src(ctx, 'white', t, 0.03); const cf = filt(ctx, 'bandpass', (space ? 1600 : 2900) * jit, 1.2);
+      const cg = env(ctx, t, [[0.0006, (space ? 0.28 : 0.55) * v], [space ? 0.03 : 0.022, 0.001, 1]]); c.connect(cf).connect(cg).connect(out);
+      const k = osc(ctx, 'sine', (space ? 120 : 180) * jit, t, 0.07); k.frequency.exponentialRampToValueAtTime(70, t + 0.05);
+      const kg = env(ctx, t, [[0.001, (space ? 0.5 : 0.38) * v], [0.06, 0.001, 1]]); k.connect(kg).connect(out);
+      if (!space) { const m = osc(ctx, 'triangle', 1850 * jit, t, 0.05); const mf = filt(ctx, 'highpass', 1200); const mg = env(ctx, t, [[0.0008, 0.05 * v], [0.04, 0.001, 1]]); m.connect(mf).connect(mg).connect(out); }
+      // the key returning / escapement a moment later
+      const e = src(ctx, 'white', t + 0.045, 0.015); const ef = filt(ctx, 'highpass', 4000); const eg = env(ctx, t + 0.045, [[0.0008, 0.08 * v], [0.012, 0.001, 1]]); e.connect(ef).connect(eg).connect(out);
+    }
+  },
   /** access granted chime */
   granted(ctx, out, w, p) { [0, 0.11].forEach((t, i) => SYN.beep(ctx, out, w + t, { freq: [1320, 1980][i], vol: (p.vol ?? 1) * 1.2 })); },
 });
@@ -476,7 +510,7 @@ export const SOUND_LIBRARY = {
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', rocket: 'Rocket launch' },
   'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
   'Military & radar': { radar: 'Radar sweep', acquire: 'Missile seeker growl', lockon: 'Lock-on tone', missilewarn: 'Missile warning', morse: 'Morse code (SOS)', comms: 'Radio chatter', teletype: 'Teletype', datalink: 'Data link', servo: 'Camera gimbal', klaxon: 'Klaxon', siren: 'Air-raid siren', countdown: 'Countdown beeps' },
-  'Text & titles': { ticks: 'Typing ticks (location slate)', keys: 'Keyboard typing', boom: 'Trailer boom (title card)', decode: 'Data decode (glitch type-on)', granted: 'Access granted' },
+  'Text & titles': { typewriter: 'Typewriter (keys, bell, carriage return)', ticks: 'Typing ticks (location slate)', keys: 'Keyboard typing', boom: 'Trailer boom (title card)', decode: 'Data decode (glitch type-on)', granted: 'Access granted' },
   'Ambience': { wind: 'Wind', rain: 'Rain', storm: 'Storm (wind, rain, thunder)', crowd: 'Crowd murmur' },
 };
 export const SOUND_NAMES = Object.assign({}, ...Object.values(SOUND_LIBRARY));
@@ -614,7 +648,7 @@ export function buildEvents(project, models) {
     const push = (t, type, p = {}) => { if (t >= m.trimIn - 0.01 && t <= m.trimOut) { const pt = P(Math.max(m.trimIn, t)); if (pt != null) ev.push({ t: pt, type, p }); } };
     for (const L of sc.layers || []) {
       if (L.hidden || L.style?.sound === false) continue;
-      if (textOnly && !TEXT_SFX.has(L.kind)) continue;
+      if (textOnly && !TEXT_SFX.has(L.kind) && !(L.kind === 'ttitle' && L.style?.look === 'typewriter')) continue;
       const s = L.style || {};
       if (TEXT_SFX.has(L.kind)) { for (const e of trailerSoundEvents(L)) push(e.t, e.type, e.p); continue; }
       const D = Math.max(0.1, +L.duration || 1);
@@ -735,6 +769,10 @@ export function buildEvents(project, models) {
         else if (s.look === 'terminal' || s.look === 'telemetry') push(t0, 'type', { n: (s.text || '').length, dur: Math.max(0.5, D), vol: vol * 0.7 });
         else if (s.look === 'stamp') push(t0 + 0.12, 'braam', { vol: vol * 0.5 });
         else push(t0, 'glitch', { dur: 0.3, vol: vol * 0.6 });
+      } else if (L.kind === 'ttitle' && s.look === 'typewriter') {
+        const txt = String(s.text || '') + (s.sub ? `\n${s.sub}` : '');
+        const sc = fitSchedule(txt, +s.speed || 14, 0.6, D * 0.85);
+        push(t0, 'typewriter', { hits: sc.list.map((e) => [+e.t.toFixed(3), e.kind]), bell: false, vol: vol * 0.9 });
       } else if (L.kind === 'title') {
         const lk = s.look || 'opener';
         if (lk === 'opener' || lk === 'ending') push(t0, 'braam', { vol: vol * 0.8 });
@@ -877,4 +915,4 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
   if (snd.auto) scheduleMusic(ctx, mus, snd.music, from, to, when);
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => TEXT_SFX.has(L.kind) && !L.hidden && L.style?.sound !== false)); };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };
