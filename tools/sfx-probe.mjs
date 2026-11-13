@@ -1,6 +1,6 @@
-const api = 'https://commons.wikimedia.org/w/api.php?format=json&origin=*&';
+const api = 'https://commons.wikimedia.org/w/api.php?format=json&';
 const UA = { 'User-Agent': 'GIS-One-Map-Animator (github.com/rgiq2024/Map-Animator)' };
-const j = async (q) => (await fetch(api + q, { headers: UA })).json();
+const j = async (q) => { await new Promise((r) => setTimeout(r, 1500)); const r = await fetch(api + q, { headers: { ...UA, 'Api-User-Agent': UA['User-Agent'] } }); const t = await r.text(); try { return JSON.parse(t); } catch { console.log('NOTJSON', r.status, t.slice(0, 300)); return {}; } };
 const titles = new Set();
 for (const c of ['Category:Sounds of typewriters', 'Category:Typewriter sounds', 'Category:Audio files of typewriters', 'Category:Sounds of computer keyboards', 'Category:Computer keyboard sounds', 'Category:Keyboard sounds']) {
   const r = await j(`action=query&list=categorymembers&cmtitle=${encodeURIComponent(c)}&cmlimit=100&cmtype=file|subcat`);
