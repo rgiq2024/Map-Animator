@@ -1,14 +1,10 @@
-const head = async (u) => { try { const r = await fetch(u, { method: 'HEAD' }); return `${r.status} ${r.headers.get('content-length')} ${r.headers.get('content-type')}`; } catch (e) { return e.message; } };
 const u1 = 'https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/stac/2025/2025-06/2025-06-22/01e9fe39-3a6e-4458-a5d1-cf92eb21b961/01e9fe39-3a6e-4458-a5d1-cf92eb21b961.json';
 const j = await (await fetch(u1)).json();
-console.log(JSON.stringify(Object.entries(j.assets).slice(0, 3), null, 1).slice(0, 1500));
-console.log(JSON.stringify(j.links).slice(0, 800));
-const mm = Object.entries(j.assets).find(([k]) => /_MM\.tif$/.test(k) && !/CSI/.test(k));
-const href = mm && (mm[1].href || '');
-console.log('MM href', href, href && await head(new URL(href, u1).href));
-const base = 'https://iceye-open-data-catalog.s3.amazonaws.com/data/dwell-fine/ICEYE_4EKGVZ_20251110T124428Z_7004635_X42_SLEDF/ICEYE_4EKGVZ_20251110T124428Z_7004635_X42_SLEDF';
-for (const s of ['_QLK.tif', '_THM.png', '_GRD.tif']) console.log('ICEYE', s, await head(base + s));
-console.log('CAPELLA thumb', await head('https://capella-open-data.s3.amazonaws.com/data/2021/2/26/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730_thumb.png'));
-console.log('CAPELLA preview', await head('https://capella-open-data.s3.amazonaws.com/data/2021/2/26/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730_preview.tif'));
-const q = await (await fetch(base + '_QLK.json')).json().catch(() => null);
-console.log('QLK json', JSON.stringify(q).slice(0, 1200));
+console.log('PROPS', JSON.stringify(j.properties).slice(0, 2500));
+const B = 'https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/';
+for (const q of ['?list-type=2&delimiter=/&prefix=sar-data/', '?list-type=2&delimiter=/&prefix=sar-data/task-data/', '?list-type=2&delimiter=/&prefix=sar-data/tasks/&max-keys=5']) {
+  const t = await (await fetch(B + q)).text();
+  console.log('\nLIST', q, t.replace(/<LastModified>.*?<\/LastModified>|<ETag>.*?<\/ETag>|<StorageClass>.*?<\/StorageClass>/g, '').slice(0, 1500));
+}
+const t = await (await fetch(B + '?list-type=2&prefix=' + encodeURIComponent('sar-data/tasks/') + '&max-keys=40')).text();
+console.log('\nKEYS', [...t.matchAll(/<Key>(.*?)<\/Key><Size>(\d+)/g)].map((m) => m[1] + ' ' + m[2]).join('\n'));
