@@ -103,6 +103,7 @@ export const TY_FORMS = {
     ['style.color', 'Text colour', 'color'], ['style.accent', 'Accent', 'color'], ['style.bg', 'Box colour', 'color', null, lk('boxreveal', 'lowerthird', 'stacked', 'counter', 'paragraph', 'marker', 'facts')],
     ['style.shadow', 'Soft shadow', 'switch'],
     ['style.position', 'Position', 'select', POS9], ['style.size', 'Size', 'range', [0.3, 4, 0.05]],
+    ['style.textSound', 'Text sound', 'select', { auto: 'Automatic (when Sound is on)', typewriter: 'Typewriter (mechanical keys + bell)', keyboard: 'Computer keyboard', digital: 'Digital interface ticks', ticks: 'Light typing ticks', none: 'None' }],
   ],
   measure: [
     ['style.look', 'Style', 'select', { ticks: 'End ticks + label (15.5 FT)', arrows: 'Arrows both ends', dashed: 'Dashed with dots', bracket: 'Bracket' }],

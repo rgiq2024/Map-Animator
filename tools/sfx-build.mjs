@@ -151,6 +151,10 @@ for (const s of SRC.keyboard) {
 const K = splitSpace(kbHits, 3);
 const kbS = sprite({ keys: K.keys, space: K.space });
 await writeFile(new URL('../sfx/keyboard.wav', import.meta.url), kbS.wav);
-await writeFile(new URL('../sfx/samples.json', import.meta.url), JSON.stringify({ at: new Date().toISOString(), sets: { typewriter: { file: 'sfx/typewriter.wav', ...twS.idx }, keyboard: { file: 'sfx/keyboard.wav', ...kbS.idx } }, credits }, null, 1));
+// keep sets added by hand (e.g. the digital interface ticks)
+let prev = {}; try { prev = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../sfx/samples.json', import.meta.url), 'utf8')); } catch { prev = {}; }
+const keepSets = Object.fromEntries(Object.entries(prev.sets || {}).filter(([k]) => !['typewriter', 'keyboard'].includes(k)));
+const keepCredits = (prev.credits || []).filter((c) => !credits.includes(c) && !/Commons/.test(c));
+await writeFile(new URL('../sfx/samples.json', import.meta.url), JSON.stringify({ at: new Date().toISOString(), sets: { typewriter: { file: 'sfx/typewriter.wav', ...twS.idx }, keyboard: { file: 'sfx/keyboard.wav', ...kbS.idx }, ...keepSets }, credits: [...credits, ...keepCredits] }, null, 1));
 log(`typewriter: ${T.keys.length} keys, ${T.space.length} spaces, return ${ret ? 'yes' : 'no'}, bell yes — ${Math.round(twS.wav.length / 1024)} kB`);
 log(`keyboard: ${K.keys.length} keys, ${K.space.length} spaces — ${Math.round(kbS.wav.length / 1024)} kB`);

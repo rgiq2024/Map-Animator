@@ -18,7 +18,7 @@ import { FX_FORMS } from './fx.js';
 import { MC_EDIT, hlRects } from './storyfx.js';
 import { ModelLayer, BUILTIN_MODELS, inspectModelFile } from './models3d.js';
 import { seekScene, videoFor, pauseAllVideos } from './videofx.js';
-import { buildEvents, defaultSound, MUSIC, SFX_KINDS, hasSound } from './sfx.js';
+import { buildEvents, defaultSound, MUSIC, MUSIC_TRACKS, SFX_KINDS, hasSound } from './sfx.js';
 import { hitGizmo, gizmoDrag } from './gizmo.js';
 import { zoomSpeedAt } from './renderer.js';
 import { drawZoomBlur } from './effects.js';
@@ -4341,7 +4341,9 @@ export function createEditor() {
   function renderSoundSettings() {
     renderBrandSettings();
     const snd = project.sound ||= defaultSound();
-    $('#snd-music').innerHTML = Object.entries(MUSIC).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    $('#snd-music').innerHTML = `<option value="none">None</option><optgroup label="Music tracks">${Object.entries(MUSIC_TRACKS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('')}</optgroup><optgroup label="Generated score">${Object.entries(MUSIC).filter(([k]) => k !== 'none').map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</optgroup>`;
+    $('#snd-musstart').value = +snd.musicStart || 0;
+    $('#snd-start-row').hidden = !MUSIC_TRACKS[snd.music];
     $('#snd-auto').checked = !!snd.auto;
     $('#snd-sfxvol').value = snd.sfxVolume;
     $('#snd-music').value = snd.music || 'none';
@@ -4352,14 +4354,17 @@ export function createEditor() {
   $('#snd-box').addEventListener('input', (e) => {
     const el = e.target;
     const snd = project.sound ||= defaultSound();
-    const k = { 'snd-auto': 'auto', 'snd-sfxvol': 'sfxVolume', 'snd-music': 'music', 'snd-musvol': 'musicVolume', 'snd-wind': 'zoomWind' }[el.id];
+    const k = { 'snd-auto': 'auto', 'snd-sfxvol': 'sfxVolume', 'snd-music': 'music', 'snd-musvol': 'musicVolume', 'snd-wind': 'zoomWind', 'snd-musstart': 'musicStart' }[el.id];
     if (!k) return;
-    snd[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+    snd[k] = el.type === 'checkbox' ? el.checked : el.type === 'range' || el.type === 'number' ? +el.value : el.value;
     $('#snd-opts').hidden = !snd.auto;
+    $('#snd-start-row').hidden = !MUSIC_TRACKS[snd.music];
     eventsCache = null;
     save();
     if (playing) setPlaying(true);
   });
+  $('#snd-mus-play').onclick = async () => { const { previewMusic } = await import('./audio.js'); const id = $('#snd-music').value; if (!MUSIC_TRACKS[id]) { toast('Pick one of the music tracks to listen to it'); return; } toast('Loading the track…', 1500); await previewMusic(id); };
+  $('#snd-mus-stop').onclick = async () => { const { previewMusic } = await import('./audio.js'); previewMusic(null); };
   $('#snd-test').onclick = async () => {
     const { playFrom: pf } = await import('./audio.js');
     const demo = [{ t: 0, type: 'hudboot', p: {} }, { t: 0.5, type: 'whistle', p: { dur: 0.8 } }, { t: 1.3, type: 'explosion', p: { size: 1.2 } }, { t: 2.6, type: 'jet', p: { dur: 3 } }];

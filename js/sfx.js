@@ -4,13 +4,14 @@
 import { morseTimeline, MORSE_DELAY, SIGINT_DEFAULT } from './milhud.js';
 
 import { fenceAlertTimes } from './network.js';
+export { MUSIC_TRACKS };
 export const MUSIC = { none: 'None', trailer: 'Epic cinematic intro trailer (braams, ostinato, taiko)', heroic: 'Epic cinematic (heroic brass & choir)', tension: 'Tension (military)', epic: 'Epic (drums & brass)', ambient: 'Ambient (calm)', documentary: 'Documentary (piano)', space: 'Space (atmospheric)' };
 export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', 'satellite', 'iss', 'vehicle', 'hud', 'flicker', 'capture', 'model3d', 'videofx', 'target', 'hudtext', 'compare', 'timeseries', 'title', 'news', 'effect', 'cyclone', 'wxfield', 'forecast', 'front', 'collision', 'city3d', 'servicearea', 'odflow', 'netroute', 'geofence', 'crowd', 'blastzone', 'wildfire', 'twin', 'sensor', 'smartmap', 'legend', 'infocard', 'spectral', 'splitgrid', 'block', 'datapin', 'hexbadges', 'flowlines', 'beams', 'mesh', 'viewshed', 'fmv', 'kgraph', 'tiles', 'vortex', 'vessel', 'photocard', 'arpanel', 'linecallout', 'detect', 'textcallout', 'photofx', 'matchcut', 'newsbox', 'zoomframe', 'shape']);
 export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
-import { TEXT_SFX, trailerSoundEvents } from './trailer.js';
+import { TEXT_SFX, trailerSoundEvents, applyTextSound } from './trailer.js';
 import { fitSchedule } from './typewriter.js';
-import { playSample, samplesReady } from './samples.js';
+import { playSample, samplesReady, MUSIC_TRACKS, trackBuffer } from './samples.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const noiseCache = new WeakMap();
@@ -228,8 +229,9 @@ Object.assign(SYN, {
   ticks(ctx, out, w, p) {
     const n = Math.max(1, Math.min(120, Math.round(p.n || 10))), d = Math.max(0.05, p.dur || n / 22), v = p.vol ?? 1;
     if (samplesReady()) {
-      for (let i = 0; i < n; i++) {
-        const t = w + (i / n) * d;
+      const times = p.hits ? p.hits.filter((h) => h[1] !== 'r').map((h) => w + h[0]) : Array.from({ length: n }, (_, i) => w + (i / n) * d);
+      for (let i = 0; i < times.length; i++) {
+        const t = times[i];
         playSample(ctx, out, 'keyboard', 'keys', t, { vol: 0.55 * v, rate: 1.25, n: i, hp: 1800 });
         const o = osc(ctx, 'sine', 3100 + (i % 4) * 140, t, 0.02); const og = env(ctx, t, [[0.0008, 0.035 * v], [0.012, 0.001, 1]]); o.connect(og).connect(out);
       }
@@ -249,6 +251,7 @@ Object.assign(SYN, {
     const n = Math.max(1, Math.min(120, Math.round(p.n || 10))), d = Math.max(0.1, p.dur || n * 0.09), v = p.vol ?? 1;
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    if (samplesReady() && p.hits) { p.hits.forEach(([dt, k], i) => playSample(ctx, out, 'keyboard', k === 's' || k === 'r' ? 'space' : 'keys', w + dt, { vol: (0.75 + rnd() * 0.3) * v, rate: 0.95 + rnd() * 0.1, n: i })); return; }
     if (samplesReady()) {
       for (let i = 0; i < n; i++) { const t = w + (i / n) * d + rnd() * (d / n) * 0.45; playSample(ctx, out, 'keyboard', i % 7 === 6 ? 'space' : 'keys', t, { vol: (0.75 + rnd() * 0.3) * v, rate: 0.95 + rnd() * 0.1, n: i }); }
       if (p.enter) playSample(ctx, out, 'keyboard', 'space', w + d + 0.12, { vol: 1.1 * v, rate: 0.9, n: n + 1 });
@@ -329,6 +332,13 @@ Object.assign(SYN, {
       // the key returning / escapement a moment later
       const e = src(ctx, 'white', t + 0.045, 0.015); const ef = filt(ctx, 'highpass', 4000); const eg = env(ctx, t + 0.045, [[0.0008, 0.08 * v], [0.012, 0.001, 1]]); e.connect(ef).connect(eg).connect(out);
     }
+  },
+  /** digital interface text ticks (recorded) — one per letter; p.hits or n over dur */
+  digital(ctx, out, w, p) {
+    const v = p.vol ?? 1;
+    const hits = p.hits ? p.hits.filter((h) => h[1] !== 'r').map((h) => h[0]) : Array.from({ length: Math.max(1, Math.min(150, Math.round(p.n || 12))) }, (_, i, a) => (i / a.length) * (p.dur || a.length / 20));
+    if (samplesReady()) { hits.forEach((dt, i) => playSample(ctx, out, 'digital', 'keys', w + dt, { vol: 1.1 * v, rate: 0.97 + ((i * 37) % 7) / 100, n: i })); return; }
+    hits.forEach((dt) => SYN.beep(ctx, out, w + dt, { freq: 2400, vol: 0.25 * v }));
   },
   /** access granted chime */
   granted(ctx, out, w, p) { [0, 0.11].forEach((t, i) => SYN.beep(ctx, out, w + t, { freq: [1320, 1980][i], vol: (p.vol ?? 1) * 1.2 })); },
@@ -677,7 +687,7 @@ export function buildEvents(project, models) {
     const push = (t, type, p = {}) => { if (t >= m.trimIn - 0.01 && t <= m.trimOut) { const pt = P(Math.max(m.trimIn, t)); if (pt != null) ev.push({ t: pt, type, p }); } };
     for (const L of sc.layers || []) {
       if (L.hidden || L.style?.sound === false) continue;
-      if (textOnly && !TEXT_SFX.has(L.kind) && !(L.kind === 'ttitle' && L.style?.look === 'typewriter')) continue;
+      if (textOnly && !TEXT_SFX.has(L.kind) && !(L.kind === 'ttitle' && (L.style?.look === 'typewriter' || (L.style?.textSound && L.style.textSound !== 'auto')))) continue;
       const s = L.style || {};
       if (TEXT_SFX.has(L.kind)) { for (const e of trailerSoundEvents(L)) push(e.t, e.type, e.p); continue; }
       const D = Math.max(0.1, +L.duration || 1);
@@ -798,6 +808,8 @@ export function buildEvents(project, models) {
         else if (s.look === 'terminal' || s.look === 'telemetry') push(t0, 'type', { n: (s.text || '').length, dur: Math.max(0.5, D), vol: vol * 0.7 });
         else if (s.look === 'stamp') push(t0 + 0.12, 'braam', { vol: vol * 0.5 });
         else push(t0, 'glitch', { dur: 0.3, vol: vol * 0.6 });
+      } else if (L.kind === 'ttitle' && s.textSound && s.textSound !== 'auto') {
+        for (const e of applyTextSound(L, [])) push(e.t, e.type, e.p);
       } else if (L.kind === 'ttitle' && s.look === 'typewriter') {
         const txt = String(s.text || '') + (s.sub ? `\n${s.sub}` : '');
         const sc = fitSchedule(txt, +s.speed || 14, 0.6, D * 0.85);
@@ -928,6 +940,19 @@ export function buildEvents(project, models) {
   return ev.sort((a, b) => a.t - b.t);
 }
 
+/** a music file, looped if the video is longer, starting `start` seconds into the track */
+function scheduleTrack(ctx, out, id, from, to, when, start = 0) {
+  const buf = trackBuffer(id);
+  if (!buf || to <= from) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = buf.duration;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, when); g.gain.linearRampToValueAtTime(1, when + (from > 0 ? 0.25 : 0.05));
+  src.connect(g).connect(out);
+  src.start(when, (start + from) % buf.duration);
+  src.stop(when + (to - from) + 0.05);
+}
+
 /** Schedule events and music into a context. `from` = project time at context time `when`. */
 export function scheduleAll(ctx, out, project, events, from, to, when) {
   const snd = { ...defaultSound(), ...(project.sound || {}) };
@@ -941,7 +966,10 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
     const fn = SYN[e.type];
     if (fn) { try { fn(ctx, sfx, when + Math.max(0, e.t - from), e.p || {}); } catch (err) { console.warn('sfx', e.type, err); } }
   }
-  if (snd.auto) scheduleMusic(ctx, mus, snd.music, from, to, when);
+  if (snd.music && snd.music !== 'none') {
+    if (MUSIC_TRACKS[snd.music]) scheduleTrack(ctx, mus, snd.music, from, to, when, +snd.musicStart || 0);
+    else scheduleMusic(ctx, mus, snd.music, from, to, when);
+  }
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };

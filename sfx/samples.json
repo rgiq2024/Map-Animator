@@ -253,13 +253,115 @@
      0.1
     ]
    ]
+  },
+  "digital": {
+   "file": "sfx/digital.wav",
+   "keys": [
+    [
+     0.0,
+     0.0449
+    ],
+    [
+     0.0949,
+     0.04689
+    ],
+    [
+     0.19179,
+     0.0449
+    ],
+    [
+     0.28669,
+     0.04689
+    ],
+    [
+     0.38358,
+     0.0449
+    ],
+    [
+     0.47848,
+     0.04689
+    ],
+    [
+     0.57537,
+     0.0449
+    ],
+    [
+     0.67027,
+     0.04689
+    ],
+    [
+     0.76717,
+     0.0449
+    ],
+    [
+     0.86206,
+     0.06
+    ],
+    [
+     0.97206,
+     0.0449
+    ],
+    [
+     1.06696,
+     0.04689
+    ],
+    [
+     1.16385,
+     0.0449
+    ],
+    [
+     1.25875,
+     0.04689
+    ],
+    [
+     1.35565,
+     0.0449
+    ],
+    [
+     1.45054,
+     0.04689
+    ],
+    [
+     1.54744,
+     0.04689
+    ],
+    [
+     1.64433,
+     0.0449
+    ],
+    [
+     1.73923,
+     0.0449
+    ],
+    [
+     1.83413,
+     0.04689
+    ],
+    [
+     1.93102,
+     0.0449
+    ],
+    [
+     2.02592,
+     0.04689
+    ],
+    [
+     2.12281,
+     0.0449
+    ],
+    [
+     2.21771,
+     0.06
+    ]
+   ]
   }
  },
  "credits": [
-  "“WWS Typewriter” (Erika 5), Work with Sounds / Wikimedia Commons, CC BY 4.0",
-  "“Typewriter ding” by stubb, Wikimedia Commons, CC0",
-  "“Typing – Model M 1986”, Wikimedia Commons, CC0",
-  "“IBM M2 sound”, Wikimedia Commons, CC0",
-  "“Typing – Model M13 1999”, Wikimedia Commons, CC0"
+  "\u201cWWS Typewriter\u201d (Erika 5), Work with Sounds / Wikimedia Commons, CC BY 4.0",
+  "\u201cTypewriter ding\u201d by stubb, Wikimedia Commons, CC0",
+  "\u201cTyping \u2013 Model M 1986\u201d, Wikimedia Commons, CC0",
+  "\u201cIBM M2 sound\u201d, Wikimedia Commons, CC0",
+  "\u201cTyping \u2013 Model M13 1999\u201d, Wikimedia Commons, CC0",
+  "\u201cText digital interface\u201d by estudiocoati (your upload, Pixabay)"
  ]
 }

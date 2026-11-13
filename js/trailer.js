@@ -83,6 +83,8 @@ export const TR_FORMS = {
     ['style.color', 'Colour', 'color'], ['style.bg', 'Background', 'select', BGS], ['style.size', 'Size', 'range', [0.4, 3, 0.05]], ['style.sound', 'Sound', 'switch'],
   ],
 };
+export const TEXT_SOUNDS = { auto: 'Built-in for this style', typewriter: 'Typewriter (mechanical keys + bell)', keyboard: 'Computer keyboard', digital: 'Digital interface ticks', ticks: 'Light typing ticks', none: 'No typing sound' };
+for (const k of Object.keys(TR_FORMS)) TR_FORMS[k].push(['style.textSound', 'Text sound', 'select', TEXT_SOUNDS, (L) => L.style.sound !== false]);
 export const TR_SET = TEXT_SFX;
 export const trPhases = () => ['captions'];
 
@@ -107,8 +109,25 @@ function hackTL(L) {
   const n = String(s.line1 || '').length + String(s.line2 || '').length;
   return { D, box: 0.3, t0: 0.3, dur: Math.min(D * 0.55, Math.max(0.4, n / 22)), n };
 }
+// ---------------------------------------------------------------- the text sound each layer can choose
+const TYPE_SYN = { typewriter: 'typewriter', keyboard: 'keys', digital: 'digital', ticks: 'ticks' };
+const TYPING = new Set(['ticks', 'keys', 'typewriter', 'type', 'digital']);
+const textOf = (s) => ['text', 'title', 'main', 'top', 'sub', 'kicker', 'place', 'line1', 'line2', 'fields', 'pre'].map((k) => (typeof s[k] === 'string' ? s[k].replace(/\|/g, '') : '')).join('');
+/** swaps the typing sounds of a layer for the one its “Text sound” names (or adds one), keeps the rest */
+export function applyTextSound(L, ev) {
+  const s = L.style || {}, ch = s.textSound || 'auto';
+  if (ch === 'auto') return ev;
+  const rest = ev.filter((e) => !TYPING.has(e.type));
+  if (ch === 'none') return rest;
+  const typing = ev.filter((e) => TYPING.has(e.type));
+  const type = TYPE_SYN[ch];
+  if (typing.length) return [...rest, ...typing.map((e) => ({ ...e, type, p: { ...e.p, bell: ch === 'typewriter' ? e.p.bell : false } }))];
+  const n = textOf(s).replace(/\s+/g, ' ').length || 10, D = Math.max(0.3, +L.duration || 2);
+  return [...rest, { t: (+L.start || 0) + 0.05, type, p: { n, dur: Math.min(D * 0.8, n / 16), vol: s.soundVol ?? 1 } }];
+}
 /** sound events (layer time) for a text layer */
-export function trailerSoundEvents(L) {
+export function trailerSoundEvents(L) { return applyTextSound(L, trailerSoundEventsRaw(L)); }
+function trailerSoundEventsRaw(L) {
   const s = L.style || {}, t0 = +L.start || 0, vol = s.soundVol ?? 1, ev = [];
   if (s.sound === false || L.anim === 'none') return ev;
   const P = (t, type, p = {}) => ev.push({ t: t0 + t, type, p: { vol, ...p, vol: (p.vol ?? 1) * vol } });

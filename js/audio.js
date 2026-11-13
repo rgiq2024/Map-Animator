@@ -2,7 +2,7 @@
 // start of the whole video). Used for live preview and mixed + encoded into the MP4 on export.
 import { getMedia, putMedia } from './store.js';
 import { scheduleAll, hasSound, previewSound } from './sfx.js';
-import { loadSamples } from './samples.js';
+import { loadSamples, readyTrack, MUSIC_TRACKS } from './samples.js';
 loadSamples();
 
 export const SR = 48000;
@@ -75,7 +75,7 @@ export async function mixProject(project, duration, events = []) {
   const tracks = (project.audio || []).filter((t) => !t.muted);
   const synth = hasSound(project);
   if ((!tracks.length && !synth) || !(duration > 0)) return null;
-  if (synth) await loadSamples();
+  if (synth) { await loadSamples(); if (MUSIC_TRACKS[project.sound?.music]) await readyTrack(project.sound.music); }
   const off = new OfflineAudioContext(2, Math.ceil(duration * SR), SR);
   let any = false;
   if (synth) {
@@ -109,7 +109,7 @@ export async function playFrom(project, pt, rate = 1, events = [], until = Infin
   if ((!tracks.length && !hasSound(project)) || rate !== 1) return;
   const ctx = ctxLive();
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
-  if (hasSound(project)) await loadSamples();
+  if (hasSound(project)) { await loadSamples(); if (MUSIC_TRACKS[project.sound?.music]) await readyTrack(project.sound.music); }
   const now = ctx.currentTime + 0.05;
   if (hasSound(project)) {
     liveBus = masterBus(ctx, ctx.destination);
@@ -197,4 +197,21 @@ export async function previewLibSound(type, vol = 1) {
   const bus = masterBus(ctx, ctx.destination);
   previewSound(ctx, bus, type, { vol });
   setTimeout(() => { try { bus.disconnect(); } catch { /* ignore */ } }, 7000);
+}
+
+/** Listen to a music track (or stop it). */
+let musicPreview = null;
+export async function previewMusic(id) {
+  try { musicPreview?.stop(); } catch { /* ended */ }
+  musicPreview = null;
+  if (!id || !MUSIC_TRACKS[id]) return false;
+  const ctx = ctxLive();
+  if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+  const buf = await readyTrack(id);
+  if (!buf) return false;
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const g = ctx.createGain(); g.gain.value = 0.8; src.connect(g).connect(ctx.destination);
+  src.start(); src.stop(ctx.currentTime + 20);
+  musicPreview = src;
+  return true;
 }
