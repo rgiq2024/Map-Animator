@@ -60,6 +60,7 @@ import { TwinCity } from './twin.js';
 import { sampleData } from './smartmap.js';
 import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePath, fenceEvents, fmtDur, fmtLen } from './network.js';
 import { simplify, formatDistance, bounds } from './geo.js';
+import { openSarLibrary, sarStyleOf, quadOf as sarQuad } from './sar.js';
 import { firmsKey, setFirmsKey, fetchFirms, bboxAround, packHotspots, parseLatLon } from './firms.js';
 import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers, zoomCamera, ZOOM_DEFAULTS, countryPoint as countryLabelPoint } from './briefing.js';
 import { findPlace } from './autostory.js';
@@ -1990,6 +1991,19 @@ export function createEditor() {
     pendingName = b.dataset.name || null;
     showHint({ docinset: 'Click the place to show close up — then drag the lens where you want it', zonering: 'Click the centre of the zone', corridor: 'Click the start and the end of the band — then press Finish', redmark: 'Click what to circle', measureline: 'Click along the runway / road — then press Finish', stemlabel: 'Click the place to label', dashroute: 'Click along the route — then press Finish', photopin: 'Click the place for the photo pin — then choose the photo in its settings', leader: 'Click the place the label points to', spokes: 'Click the home / base — then add the places in its settings', lights: 'Click along the runway — then press Finish', fireplume: 'Click the site', missiles: 'Click the launch site, then the target — then press Finish', bigarrow: 'Click along the arrow’s path — then press Finish', inset: 'Click the place to zoom into — then drag the box where you want it', rangerings: 'Click the base the rings are measured from', territory: 'Click around the area under control — then press Finish', units: 'Click the path the units drive along — then press Finish', blast: 'Click where the explosion is', portrait: 'Click the place the portrait belongs to' }[k] || 'Click on the map');
   };
+  function fitSar(L) { const q = sarQuad(L.style); if (!q) return; const xs = q.map((p) => p[0]), ys = q.map((p) => p[1]); flyToBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], 0.08); }
+  function openSarAdd() {
+    const c = map.getCenter();
+    openSarLibrary({ near: [c.lng, c.lat], onPick: (it) => {
+      const L = newLayer('sarimage', null, { start: newStart() });
+      Object.assign(L.style, sarStyleOf(it));
+      L.name = `SAR · ${it.place || it.provider}`;
+      addLayer(L);
+      fitSar(L);
+      toast('Pick a colour grade and a blend mode in the settings — the provider credit stays on the video (CC BY 4.0)', 5200);
+    } });
+  }
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-sar-library]')) openSarAdd(); });
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-docu')?.addEventListener('click', cartoAdd);
   $('#add-globes')?.addEventListener('click', cartoAdd);
@@ -2217,6 +2231,11 @@ export function createEditor() {
               ${rng('end', 'Zoom at the end', 3, 18, 0.25)}${rng('sec', 'Length', 3, 20, 0.5, ' s')}${rng('tilt', 'Tilt at the end', 0, 75, 1, '°')}${rng('rotate', 'Rotate (compass) at the end', -180, 180, 5, '°')}${rng('spin', 'Globe spins first', 0, 3, 0.25, ' turns')}${rng('startZoom', 'Start height (globe zoom)', 0, 4, 0.1)}
               <div class="btn-row"><button class="btn sm" data-act="bzPreview">▶ Preview the zoom</button></div>`;
           }
+        }
+        else if (type === 'sarpick') {
+          const s2 = L.style;
+          h += `<h5>${label}</h5><div class="sar-cur">${s2.thumb ? `<img src="${esc(s2.thumb)}" alt="">` : ''}<div><b>${esc([s2.place, s2.country].filter(Boolean).join(', ') || 'No image yet')}</b><small>${esc(s2.provider || '')} · ${esc(String(s2.date || '').slice(0, 10))} · ${esc(String(s2.mode || '').replace(/_/g, ' '))}</small><small class="muted">${esc(s2.credit || '')}</small></div></div>
+            <div class="btn-row"><button class="btn sm primary" data-act="sarPick">📡 Choose another SAR image…</button><button class="btn sm" data-act="sarFit">⤢ Zoom to it</button></div>`;
         }
         else if (type === 'firms') {
           const n = (L.style.points || []).length, key = firmsKey();
@@ -3269,6 +3288,8 @@ export function createEditor() {
       else { const j = a === 'slUp' ? i - 1 : i + 1; if (j >= 0 && j < sl.length) [sl[i], sl[j]] = [sl[j], sl[i]]; }
       renderLayerEditor(); commitLayers();
     }
+    if (a === 'sarPick') { const c = map.getCenter(); openSarLibrary({ near: [c.lng, c.lat], onPick: (it) => { pushUndo(); Object.assign(L.style, sarStyleOf(it)); L.name = `SAR · ${it.place || it.provider}`; renderLayerEditor(); commitLayers(); fitSar(L); } }); }
+    if (a === 'sarFit') fitSar(L);
     if (a === 'firmsHere') { const c = map.getCenter(); pushUndo(); L.style.center = `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`; renderLayerEditor(); commitLayers(); }
     if (a === 'firmsFetch') {
       const ll = parseLatLon(L.style.center) || (() => { const c = map.getCenter(); return [c.lng, c.lat]; })();

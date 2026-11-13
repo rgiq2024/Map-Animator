@@ -38,6 +38,7 @@ import { BR_KINDS, BR_ANIMS, BR_DEFAULTS, BR_FORMS, BR_SET, brPhases, drawBriefi
 import { GL_KINDS, GL_ANIMS, GL_DEFAULTS, GL_FORMS, GL_SET, glPhases, drawGlobe3d } from './globefx.js';
 import { CF2_KINDS, CF2_ANIMS, CF2_DEFAULTS, CF2_FORMS, CF2_SET, cf2Phases, drawCarto2 } from './cartofx2.js';
 import { CF_KINDS, CF_ANIMS, CF_DEFAULTS, CF_FORMS, CF_SET, cfPhases, drawCarto, H as CFH } from './cartofx.js';
+import { SAR_KINDS, SAR_ANIMS, SAR_DEFAULTS, SAR_FORMS, SAR_SET, sarPhases, drawSar } from './sar.js';
 import { DF_KINDS, DF_ANIMS, DF_DEFAULTS, DF_FORMS, DF_SET, dfPhases, drawDocu } from './docufx.js';
 import { FIRMS_KINDS, FIRMS_ANIMS, FIRMS_DEFAULTS, FIRMS_FORMS, FIRMS_SET, firmsPhases, drawFirms } from './firms.js';
 import { HO_KINDS, HO_ANIMS, HO_DEFAULTS, HO_FORMS, HO_SET, hoPhases, drawHolo } from './holo.js';
@@ -75,6 +76,7 @@ export const FX_KINDS = {
   ...CF2_KINDS,
   ...FIRMS_KINDS,
   ...DF_KINDS,
+  ...SAR_KINDS,
   ...TW_KINDS,
   ...TH_KINDS,
   ...CH_KINDS,
@@ -134,6 +136,7 @@ export const FX_ANIMS = {
   ...CF2_ANIMS,
   ...FIRMS_ANIMS,
   ...DF_ANIMS,
+  ...SAR_ANIMS,
   ...TW_ANIMS,
   ...TH_ANIMS,
   ...CH_ANIMS,
@@ -189,6 +192,7 @@ export const FX_DEFAULTS = {
   ...CF2_DEFAULTS,
   ...FIRMS_DEFAULTS,
   ...DF_DEFAULTS,
+  ...SAR_DEFAULTS,
   ...TW_DEFAULTS,
   ...TH_DEFAULTS,
   ...CH_DEFAULTS,
@@ -251,6 +255,7 @@ export const FX_FORMS = {
   ...CF2_FORMS,
   ...FIRMS_FORMS,
   ...DF_FORMS,
+  ...SAR_FORMS,
   ...TW_FORMS,
   ...TH_FORMS,
   ...CH_FORMS,
@@ -1425,6 +1430,7 @@ export function drawFX(ctx, L, tm, o, phase) {
   if (HO_SET.has(L.kind)) { drawHolo(ctx, L, tm, o, phase); return; }
   if (CF_SET.has(L.kind)) { drawCarto(ctx, L, tm, o, phase); return; }
   if (CF2_SET.has(L.kind)) { drawCarto2(ctx, L, tm, o, phase); return; }
+  if (SAR_SET.has(L.kind)) { drawSar(ctx, L, tm, o, phase); return; }
   if (DF_SET.has(L.kind)) { drawDocu(ctx, L, tm, o, phase); return; }
   if (FIRMS_SET.has(L.kind)) { drawFirms(ctx, L, tm, o, phase, { placeAt, track: CFH.track }); return; }
   if (TW_SET.has(L.kind)) { drawTvWeather(ctx, L, tm, o, phase); return; }
@@ -1517,6 +1523,7 @@ export function fxPhases(kind) {
   if (CF2_SET.has(kind)) return cf2Phases(kind);
   if (FIRMS_SET.has(kind)) return firmsPhases(kind);
   if (DF_SET.has(kind)) return dfPhases(kind);
+  if (SAR_SET.has(kind)) return sarPhases(kind);
   if (TW_SET.has(kind)) return twPhases(kind);
   if (TH_SET.has(kind)) return thPhases(kind);
   if (CH_SET.has(kind)) return chPhases(kind);
