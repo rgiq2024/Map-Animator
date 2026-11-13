@@ -1,22 +1,14 @@
-// one-off: walk each open SAR STAC catalogue down to its first items and print their assets
-const roots = { capella: 'https://capella-open-data.s3.us-west-2.amazonaws.com/stac/capella-open-data-by-datetime/catalog.json', iceye: 'https://iceye-open-data-catalog.s3.amazonaws.com/collections/iceye-sar.json', umbra: 'https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/stac/2025/catalog.json' };
-const get = async (u) => (await fetch(u)).json();
-for (const [name, root] of Object.entries(roots)) {
-  console.log(`\n######## ${name}`);
-  let url = root, depth = 0;
-  try {
-    while (depth++ < 8) {
-      const j = await get(url);
-      const links = (j.links || []).filter((l) => l.rel === 'child' || l.rel === 'item');
-      console.log(`${j.type} ${j.id} — ${links.length} children/items; first: ${links.slice(0, 3).map((l) => l.rel + ':' + l.href).join(' , ')}`);
-      if (j.type === 'Feature') {
-        console.log(JSON.stringify({ id: j.id, bbox: j.bbox, geom: j.geometry?.type, props: Object.fromEntries(Object.entries(j.properties || {}).slice(0, 25)) }, null, 0).slice(0, 2000));
-        for (const [k, a] of Object.entries(j.assets || {})) console.log(`  asset ${k}: ${a.type} roles=${(a.roles || []).join('|')} ${a.href}`);
-        break;
-      }
-      const nx = links.find((l) => l.rel === 'item') || links[0];
-      if (!nx) break;
-      url = new URL(nx.href, url).href;
-    }
-  } catch (e) { console.log('ERR', e.message, url); }
-}
+const head = async (u) => { try { const r = await fetch(u, { method: 'HEAD' }); return `${r.status} ${r.headers.get('content-length')} ${r.headers.get('content-type')}`; } catch (e) { return e.message; } };
+const u1 = 'https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/stac/2025/2025-06/2025-06-22/01e9fe39-3a6e-4458-a5d1-cf92eb21b961/01e9fe39-3a6e-4458-a5d1-cf92eb21b961.json';
+const j = await (await fetch(u1)).json();
+console.log(JSON.stringify(Object.entries(j.assets).slice(0, 3), null, 1).slice(0, 1500));
+console.log(JSON.stringify(j.links).slice(0, 800));
+const mm = Object.entries(j.assets).find(([k]) => /_MM\.tif$/.test(k) && !/CSI/.test(k));
+const href = mm && (mm[1].href || '');
+console.log('MM href', href, href && await head(new URL(href, u1).href));
+const base = 'https://iceye-open-data-catalog.s3.amazonaws.com/data/dwell-fine/ICEYE_4EKGVZ_20251110T124428Z_7004635_X42_SLEDF/ICEYE_4EKGVZ_20251110T124428Z_7004635_X42_SLEDF';
+for (const s of ['_QLK.tif', '_THM.png', '_GRD.tif']) console.log('ICEYE', s, await head(base + s));
+console.log('CAPELLA thumb', await head('https://capella-open-data.s3.amazonaws.com/data/2021/2/26/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730_thumb.png'));
+console.log('CAPELLA preview', await head('https://capella-open-data.s3.amazonaws.com/data/2021/2/26/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730/CAPELLA_C02_SS_GEO_HH_20210226160714_20210226160730_preview.tif'));
+const q = await (await fetch(base + '_QLK.json')).json().catch(() => null);
+console.log('QLK json', JSON.stringify(q).slice(0, 1200));
