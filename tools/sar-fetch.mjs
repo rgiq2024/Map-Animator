@@ -92,9 +92,20 @@ async function iceye() {
 }
 const UMBRA = 'https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/';
 async function umbraKeys(taskId) {
-  const t = await (await fetch(`${UMBRA}?list-type=2&prefix=${encodeURIComponent(`sar-data/task-data/${taskId}/`)}`)).text();
-  return [...t.matchAll(/<Key>(.*?)<\/Key>/g)].map((m) => m[1].replace(/&amp;/g, '&'));
+  const keys = [];
+  for (const pre of [`sar-data/task-data/${taskId}/`, `sar-data/tasks/${taskId}/`]) {
+    let token = '';
+    for (let page = 0; page < 5; page++) {
+      const t = await (await fetch(`${UMBRA}?list-type=2&prefix=${encodeURIComponent(pre)}${token ? `&continuation-token=${encodeURIComponent(token)}` : ''}`)).text();
+      keys.push(...[...t.matchAll(/<Key>(.*?)<\/Key>/g)].map((m) => m[1].replace(/&amp;/g, '&')));
+      token = (t.match(/<NextContinuationToken>(.*?)<\/NextContinuationToken>/) || [])[1] || '';
+      if (!token) break;
+    }
+    if (keys.length) break;
+  }
+  return keys;
 }
+let umbraDebug = 3;
 async function umbra() {
   const refs = [...await crawl(`${UMBRA}stac/2025/catalog.json`), ...await crawl(`${UMBRA}stac/2024/catalog.json`)];
   log(`Umbra: ${refs.length} items`);
@@ -142,7 +153,36 @@ async function fromTiffUrl(url) {
   const nodata = pick.getGDALNoData?.() ?? null;
   const ga = stretch(r[0], w * h, nodata);
   if (!ga) throw new Error('empty image');
-  return sharp(ga, { raw: { width: w, height: h, channels: 2 } });
+  let corners = null;
+  try {
+    const full = imgs[0], [ox, oy] = full.getOrigin(), [rx, ry] = full.getResolution(), W = full.getWidth(), Hh = full.getHeight();
+    const gk = full.getGeoKeys() || {};
+    const epsg = gk.ProjectedCSTypeGeoKey || gk.GeographicTypeGeoKey;
+    const xy = [[ox, oy], [ox + rx * W, oy], [ox + rx * W, oy + ry * Hh], [ox, oy + ry * Hh]];
+    corners = xy.map(([X, Y]) => toLonLat(X, Y, epsg)).every(Boolean) ? xy.map(([X, Y]) => toLonLat(X, Y, epsg)) : null;
+    if (!corners && geoLog-- > 0) log(`  ${url.split('/').pop()}: CRS ${epsg} not converted`);
+  } catch { corners = null; }
+  return { img: sharp(ga, { raw: { width: w, height: h, channels: 2 } }), corners };
+}
+let geoLog = 3;
+/** projected → lon/lat for WGS84, Web Mercator and UTM (EPSG 326xx / 327xx) */
+function toLonLat(X, Y, epsg) {
+  const r5 = (v) => +v.toFixed(6);
+  if (epsg === 4326 || epsg === 4269) return [r5(X), r5(Y)];
+  if (epsg === 3857 || epsg === 900913) return [r5((X / 6378137) * 180 / Math.PI), r5((2 * Math.atan(Math.exp(Y / 6378137)) - Math.PI / 2) * 180 / Math.PI)];
+  if (epsg >= 32601 && epsg <= 32760) {
+    const zone = epsg % 100, south = epsg > 32700;
+    const a = 6378137, f = 1 / 298.257223563, k0 = 0.9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2);
+    const x = X - 500000, y = south ? Y - 10000000 : Y;
+    const M = y / k0, mu = M / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256));
+    const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+    const p1 = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) + (21 * e1 * e1 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu) + (151 * e1 ** 3 / 96) * Math.sin(6 * mu) + (1097 * e1 ** 4 / 512) * Math.sin(8 * mu);
+    const C1 = ep2 * Math.cos(p1) ** 2, T1 = Math.tan(p1) ** 2, N1 = a / Math.sqrt(1 - e2 * Math.sin(p1) ** 2), R1 = a * (1 - e2) / (1 - e2 * Math.sin(p1) ** 2) ** 1.5, D = x / (N1 * k0);
+    const lat = p1 - (N1 * Math.tan(p1) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4 / 24 + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6 / 720);
+    const lon = (D - (1 + 2 * T1 + C1) * D ** 3 / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5 / 120) / Math.cos(p1);
+    return [r5(lon * 180 / Math.PI + (zone - 1) * 6 - 180 + 3), r5(lat * 180 / Math.PI)];
+  }
+  return null;
 }
 async function fromPngUrl(url) {
   const r = await fetch(url);
@@ -151,19 +191,21 @@ async function fromPngUrl(url) {
   const n = info.width * info.height, c = info.channels;
   const ga = Buffer.alloc(n * 2);
   for (let i = 0; i < n; i++) { const v = data[i * c]; ga[i * 2] = v; ga[i * 2 + 1] = v ? 255 : 0; }
-  return sharp(ga, { raw: { width: info.width, height: info.height, channels: 2 } });
+  return { img: sharp(ga, { raw: { width: info.width, height: info.height, channels: 2 } }), corners: null };
 }
 async function preview(x) {
-  let img;
-  if (x.src.kind === 'png') img = await fromPngUrl(x.src.url);
-  else if (x.src.kind === 'tif') img = await fromTiffUrl(x.src.url);
+  let got;
+  if (x.src.kind === 'png') got = await fromPngUrl(x.src.url);
+  else if (x.src.kind === 'tif') got = await fromTiffUrl(x.src.url);
   else {
-    const key = (await umbraKeys(x.src.task)).find((k) => k.endsWith(x.src.name));
-    if (!key) throw new Error('file not found in the bucket');
-    img = await fromTiffUrl(UMBRA + key.split('/').map(encodeURIComponent).join('/'));
+    const keys = await umbraKeys(x.src.task);
+    const base = x.src.name.replace(/^.*\//, '');
+    const key = keys.find((k) => k.endsWith(base)) || keys.find((k) => /_(MM|GEC)\.tif$/i.test(k) && !/CSI/i.test(k));
+    if (!key) { if (umbraDebug-- > 0) log(`  umbra task ${x.src.task}: ${keys.length} files, e.g. ${keys.slice(0, 4).join(' | ')} — wanted ${base}`); throw new Error('file not found in the bucket'); }
+    got = await fromTiffUrl(UMBRA + key.split('/').map(encodeURIComponent).join('/'));
   }
-  const buf = await img.resize({ width: MAXPX, height: MAXPX, fit: 'inside', withoutEnlargement: true }).webp({ quality: 74, alphaQuality: 60 }).toBuffer({ resolveWithObject: true });
-  return buf;
+  const buf = await got.img.resize({ width: MAXPX, height: MAXPX, fit: 'inside', withoutEnlargement: true }).webp({ quality: 74, alphaQuality: 60 }).toBuffer({ resolveWithObject: true });
+  return { ...buf, corners: got.corners };
 }
 async function placeName(ll) {
   await sleep(1100);
@@ -190,11 +232,11 @@ for (const [name, fn] of [['Capella', capella], ['ICEYE', iceye], ['Umbra', umbr
   let ok = 0;
   for (const x of picks) {
     try {
-      const { data, info } = await preview(x);
+      const { data, info, corners } = await preview(x);
       const file = `thumbs/${x.id.replace(/[^\w-]+/g, '_').slice(0, 90)}.webp`;
       await writeFile(new URL(file, OUT), data);
       const nm = await placeName(x.center);
-      result.push({ id: x.id, provider: x.provider, date: x.date, mode: x.mode, pol: x.pol, place: nm.place, country: nm.country, bbox: x.bbox.map((v) => +(+v).toFixed(5)), footprint: (x.footprint || []).map((p) => [+(+p[0]).toFixed(5), +(+p[1]).toFixed(5)]), thumb: `sar/${file}`, w: info.width, h: info.height, kb: Math.round(data.length / 1024), credit: x.credit, item: x.item });
+      result.push({ id: x.id, provider: x.provider, date: x.date, mode: x.mode, pol: x.pol, place: nm.place, country: nm.country, bbox: x.bbox.map((v) => +(+v).toFixed(5)), footprint: (x.footprint || []).map((p) => [+(+p[0]).toFixed(5), +(+p[1]).toFixed(5)]), corners: corners || null, thumb: `sar/${file}`, w: info.width, h: info.height, kb: Math.round(data.length / 1024), credit: x.credit, item: x.item });
       ok++;
       if (ok % 10 === 0) log(`  ${name}: ${ok} previews`);
     } catch (e) { log(`  skip ${x.id}: ${e.message}`); }
