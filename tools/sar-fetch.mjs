@@ -202,36 +202,19 @@ async function fromPngUrl(url) {
   for (let i = 0; i < n; i++) { const v = data[i * c]; ga[i * 2] = v; ga[i * 2 + 1] = v ? 255 : 0; }
   return { img: sharp(ga, { raw: { width: info.width, height: info.height, channels: 2 } }), corners: null };
 }
-/** ICEYE quicklooks are in radar geometry: their corners come from the product metadata (first / last line × near / far range) */
-let iceLog = 2;
-async function iceyeCorners(url, bbox) {
+/** ICEYE quicklooks are rotated (shadows-down): their corners come from proj:transform (GDAL order) in the QLK metadata */
+async function iceyeCorners(url) {
   const j = url ? await getJSON(url) : null;
-  if (!j) return null;
-  const found = {};
-  const inBox = (lon, lat) => lon >= bbox[0] - 0.2 && lon <= bbox[2] + 0.2 && lat >= bbox[1] - 0.2 && lat <= bbox[3] + 0.2;
-  const walk = (o, path = '') => {
-    if (!o || typeof o !== 'object') return;
-    for (const [k, v] of Object.entries(o)) {
-      const m = k.match(/(first|last)[_ ]?(near|far)|(near|far)[_ ]?(first|last)/i);
-      if (m && v != null) {
-        const nums = (Array.isArray(v) ? v.flat(3) : typeof v === 'object' ? Object.values(v) : String(v).split(/[ ,]+/)).map(Number).filter(Number.isFinite);
-        for (let i = 0; i + 1 < nums.length; i++) {
-          if (inBox(nums[i + 1], nums[i])) { found[(m[1] || m[4]).toLowerCase() + (m[2] || m[3]).toLowerCase()] = [nums[i + 1], nums[i]]; break; }
-          if (inBox(nums[i], nums[i + 1])) { found[(m[1] || m[4]).toLowerCase() + (m[2] || m[3]).toLowerCase()] = [nums[i], nums[i + 1]]; break; }
-        }
-      }
-      walk(v, `${path}.${k}`);
-    }
-  };
-  walk(j);
-  if (iceLog-- > 0) log(`  ICEYE corners: ${JSON.stringify(found)} — ${JSON.stringify(j).replace(/\s+/g, ' ').slice(0, 6000)}`);
-  const c = [found.firstnear, found.firstfar, found.lastfar, found.lastnear];
-  return c.every(Boolean) ? c.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) : null;
+  const t = j?.properties?.['proj:transform'], sh = j?.properties?.['proj:shape'];
+  if (!t || t.length < 6 || !sh || !/4326/.test(String(j.properties['proj:code'] || j.properties['proj:epsg'] || ''))) return null;
+  const [H, W] = sh;
+  const at = (c, r) => [+(t[0] + t[1] * c + t[2] * r).toFixed(6), +(t[3] + t[4] * c + t[5] * r).toFixed(6)];
+  return [at(0, 0), at(W, 0), at(W, H), at(0, H)];
 }
 async function preview(x) {
   let got;
   if (x.src.kind === 'png') got = await fromPngUrl(x.src.url);
-  else if (x.src.kind === 'tif') { got = await fromTiffUrl(x.src.url); if (!got.corners && x.provider === 'ICEYE') got.corners = await iceyeCorners(x.meta, x.bbox); }
+  else if (x.src.kind === 'tif') { got = await fromTiffUrl(x.src.url); if (!got.corners && x.provider === 'ICEYE') got.corners = await iceyeCorners(x.meta); }
   else {
     const keys = await umbraKeys(x.src.task);
     const base = x.src.name.replace(/^.*\//, '');
