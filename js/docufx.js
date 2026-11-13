@@ -177,6 +177,7 @@ function drawDocInset(ctx, L, tm, o) {
   }
   const round = shape === 'circle' || shape === 'bubble';
   const [dx, dy] = placeAt(ctx, L, fr, bx, by, W, Hh, { key: 'box', resize: true, uniform: true });
+  ctx.translate(-dx, -dy); // placeAt moved the canvas; the box moves, the place and its ring stay
   bx += dx; by += dy;
   const cx = bx + W / 2, cy = by + Hh / 2;
   const kLine = still || L.anim === 'fade' || L.anim === 'zoom' ? 1 : easeOut(seg(u, 0, 0.4));

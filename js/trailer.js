@@ -8,6 +8,7 @@
 import { placeAt } from './place.js';
 import { H } from './cartofx.js';
 import { brandLowerSafe } from './branding.js';
+import { DOSSIER_KIND, DOSSIER_ANIM, DOSSIER_DEFAULT, DOSSIER_FORM, dossierSounds, drawDossier } from './dossier.js';
 
 const { clamp, easeOut } = H;
 const COND = '"Barlow Condensed","Oswald","Arial Narrow",sans-serif';
@@ -28,8 +29,10 @@ export const TR_KINDS = {
   billing: { name: 'Credits block', icon: '≡', geom: null, desc: 'Billing block — small “SCREENPLAY BY” labels over wide bold names, grouped' },
   hacktext: { name: 'Hacker text', icon: '⌁', geom: null, desc: 'Glowing boxed text that decodes letter by letter, a password field typing stars, or dossier fields — keyboard, glitch and beeps' },
 };
+Object.assign(TR_KINDS, DOSSIER_KIND);
 export const TEXT_SFX = new Set(Object.keys(TR_KINDS));
 export const TR_ANIMS = {
+  ...DOSSIER_ANIM,
   slate: { type: 'Typed letter by letter', fade: 'Fade in', none: 'Shown' },
   trailercard: { push: 'Fade up + slow push', tracking: 'Letters close in', flash: 'Flash then settle', none: 'Shown' },
   movietitle: { reveal: 'Rises out of the blur', fade: 'Fade in', none: 'Shown' },
@@ -37,6 +40,7 @@ export const TR_ANIMS = {
   hacktext: { decode: 'Decodes / types', fade: 'Fade in', none: 'Shown' },
 };
 export const TR_DEFAULTS = {
+  ...DOSSIER_DEFAULT,
   slate: { anim: 'type', duration: 5, style: { kicker: 'CLOSED SESSION', title: 'SENATE INTELLIGENCE COMMITTEE', place: '', align: 'right', kickerColor: '#dfe34a', color: '#ffffff', size: 1, speed: 24, spacing: 0.14, typeOut: true, shade: true, sound: true } },
   trailercard: { anim: 'push', duration: 3.6, style: { top: 'A MAJOR', main: 'MOVIE EVENT', sub: '', bg: 'black', metal: true, color: '#e9ebef', size: 1, sweep: true, sound: true, boom: true } },
   movietitle: { anim: 'reveal', duration: 5.5, style: { pre: "TOM CLANCY'S", title: 'JACK RYAN', sub: 'GHOST WAR', subColor: '#e2601b', glow: '#ff5a14', bg: 'fire', embers: true, size: 1, sound: true } },
@@ -45,6 +49,7 @@ export const TR_DEFAULTS = {
 };
 const BGS = { black: 'Black card', dim: 'Darken the map', none: 'Over the map' };
 export const TR_FORMS = {
+  ...DOSSIER_FORM,
   slate: [
     ['style.kicker', 'Kicker (yellow line)', 'text'], ['style.title', 'Title', 'text'], ['style.place', 'Place on the other side (optional)', 'text'],
     ['style.align', 'Side', 'select', { right: 'Bottom right', left: 'Bottom left', center: 'Bottom centre' }],
@@ -117,6 +122,8 @@ export function trailerSoundEvents(L) {
     if (s.sub) P(1.3, 'swoosh', { vol: 0.5 });
   } else if (L.kind === 'billing') {
     P(0, 'whoosh', { dur: 1.2, dir: 'down', vol: 0.4 });
+  } else if (L.kind === 'dossierhud') {
+    dossierSounds(L, P);
   } else if (L.kind === 'hacktext') {
     const T = hackTL(L);
     if (s.variant === 'password') { P(0.05, 'click', { vol: 0.8 }); P(T.a, 'keys', { n: T.n, dur: T.dur, enter: true }); P(T.ok, 'granted', {}); }
@@ -472,4 +479,5 @@ export function drawTrailer(ctx, L, tm, o, phase) {
   else if (L.kind === 'movietitle') drawMovieTitle(ctx, L, tm, o);
   else if (L.kind === 'billing') drawBilling(ctx, L, tm, o);
   else if (L.kind === 'hacktext') drawHack(ctx, L, tm, o);
+  else if (L.kind === 'dossierhud') drawDossier(ctx, L, tm, o);
 }
