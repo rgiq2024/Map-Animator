@@ -1,0 +1,10 @@
+name: SAR probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node tools/sar-probe.mjs https://capella-open-data.s3.us-west-2.amazonaws.com/stac/catalog.json https://iceye-open-data-catalog.s3-us-west-2.amazonaws.com/catalog.json https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/stac/catalog.json "https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/?list-type=2&delimiter=/" "https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/?list-type=2&delimiter=/&prefix=stac/" "https://umbra-open-data-catalog.s3.us-west-2.amazonaws.com/?list-type=2&delimiter=/&prefix=sar-data/" "https://iceye-open-data-catalog.s3-us-west-2.amazonaws.com/?list-type=2&delimiter=/"
