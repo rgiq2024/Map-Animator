@@ -1,5 +1,5 @@
 {
- "at": "2026-11-13T19:39:25.326Z",
+ "at": "2026-11-13T19:40:56.974Z",
  "sets": {
   "typewriter": {
    "file": "sfx/typewriter.wav",
@@ -10,39 +10,67 @@
     ],
     [
      0.18,
+     0.0883
+    ],
+    [
+     0.3183,
+     0.13
+    ],
+    [
+     0.4983,
+     0.13
+    ],
+    [
+     0.6783,
+     0.13
+    ],
+    [
+     0.8583,
      0.12322
     ],
     [
-     0.35322,
+     1.03152,
      0.13
     ],
     [
-     0.53322,
+     1.21152,
      0.13
     ],
     [
-     0.71322,
+     1.39152,
+     0.13
+    ],
+    [
+     1.57152,
+     0.13
+    ],
+    [
+     1.75152,
+     0.12571
+    ],
+    [
+     1.92723,
      0.13
     ]
    ],
    "space": [
     [
-     0.89322,
+     2.10723,
      0.13
     ],
     [
-     1.07322,
+     2.28723,
      0.0883
     ],
     [
-     1.21152,
+     2.42553,
      0.13
     ]
    ],
    "ret": [],
    "bell": [
     [
-     1.39152,
+     2.60553,
      1.03283
     ]
    ]
@@ -165,7 +193,6 @@
  },
  "credits": [
   "“WWS Typewriter” (Erika 5), Work with Sounds / Wikimedia Commons, CC BY 4.0",
-  "“Smith-Corona Prestige Auto 12 typing”, Wikimedia Commons, CC BY 3.0",
   "“Typewriter ding” by stubb, Wikimedia Commons, CC0",
   "“Typing – Model M 1986”, Wikimedia Commons, CC0",
   "“IBM M2 sound”, Wikimedia Commons, CC0",
