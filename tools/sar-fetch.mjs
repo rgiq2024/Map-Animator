@@ -224,7 +224,7 @@ async function iceyeCorners(url, bbox) {
     }
   };
   walk(j);
-  if (iceLog-- > 0) log(`  ICEYE corners: ${JSON.stringify(found)}`);
+  if (iceLog-- > 0) log(`  ICEYE corners: ${JSON.stringify(found)} — ${JSON.stringify(j).replace(/\s+/g, ' ').slice(0, 6000)}`);
   const c = [found.firstnear, found.firstfar, found.lastfar, found.lastnear];
   return c.every(Boolean) ? c.map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]) : null;
 }
