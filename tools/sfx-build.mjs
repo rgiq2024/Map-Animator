@@ -23,7 +23,7 @@ async function pcm(src) {
   const r = await fetch(src.url, { headers: UA });
   if (!r.ok) throw new Error(`${src.file}: ${r.status}`);
   const buf = Buffer.from(await r.arrayBuffer());
-  const p = spawnSync('ffmpeg', ['-v', 'error', '-i', 'pipe:0', '-ac', '1', '-ar', String(SR), '-f', 'f32le', 'pipe:1'], { input: buf, maxBuffer: 1 << 28 });
+  const p = spawnSync('ffmpeg', ['-v', 'error', '-i', 'pipe:0', '-af', 'highpass=f=90', '-ac', '1', '-ar', String(SR), '-f', 'f32le', 'pipe:1'], { input: buf, maxBuffer: 1 << 28 });
   if (p.status !== 0) throw new Error(`ffmpeg: ${p.stderr}`);
   const a = new Float32Array(p.stdout.buffer, p.stdout.byteOffset, p.stdout.length / 4);
   log(`${src.file}: ${(a.length / SR).toFixed(1)} s`);
@@ -51,8 +51,13 @@ function onsets(a) {
 }
 /** spectral brightness of a cut (zero-crossing rate is a cheap stand-in for the centroid) */
 const zcr = (a) => { let z = 0; for (let i = 1; i < a.length; i++) if ((a[i] >= 0) !== (a[i - 1] >= 0)) z++; return z / a.length; };
-function cut(a, i0, len, fadeMs = 18) {
-  const s = Math.max(0, i0 - Math.round(SR * 0.004)), out = a.slice(s, Math.min(a.length, s + len));
+function cut(a, i0, len, fadeMs = 18, gate = 0) {
+  // start right at the strike: the first sample above a third of the hit's peak, 2 ms before it
+  let pk0 = 0; for (let k = i0; k < Math.min(a.length, i0 + Math.round(SR * 0.05)); k++) pk0 = Math.max(pk0, Math.abs(a[k]));
+  let st = i0; while (st < a.length && Math.abs(a[st]) < pk0 * 0.33) st++;
+  const s = Math.max(0, st - Math.round(SR * 0.002)), out = a.slice(s, Math.min(a.length, s + len));
+  // decay gate: let the strike ring, then fade the room noise away
+  if (gate > 0) { const g0 = Math.round(SR * gate); for (let k = g0; k < out.length; k++) out[k] *= Math.exp(-(k - g0) / (SR * gate * 0.8)); }
   const f = Math.round(SR * fadeMs / 1000), fi = Math.round(SR * 0.0015);
   for (let k = 0; k < fi && k < out.length; k++) out[k] *= k / fi;
   for (let k = 0; k < f && k < out.length; k++) out[out.length - 1 - k] *= k / f;
@@ -60,16 +65,16 @@ function cut(a, i0, len, fadeMs = 18) {
   if (pk > 0) for (let k = 0; k < out.length; k++) out[k] *= 0.7 / pk;  // ≈ −3 dB peak
   return out;
 }
-function strikes(a, { len = 0.15, iso = 0.09, max = 16, name = '' } = {}) {
+function strikes(a, { len = 0.15, iso = 0.09, max = 16, name = '', gate = 0.04 } = {}) {
   const { list } = onsets(a);
   const L = Math.round(SR * len), I = Math.round(SR * iso);
   const best = Math.max(...list.map((o) => o.peak));
-  const ok = list.filter((o, k) => (k === list.length - 1 || list[k + 1].i - o.i > I) && (k === 0 || o.i - list[k - 1].i > Math.round(SR * 0.05)) && o.peak > best - 12);
+  const ok = list.filter((o, k) => (k === list.length - 1 || list[k + 1].i - o.i > Math.max(I, L + Math.round(SR * 0.02))) && (k === 0 || o.i - list[k - 1].i > Math.round(SR * 0.04)) && o.peak > best - 14);
   log(`${name}: ${list.length} onsets, ${ok.length} clean`);
   // spread the picks over the recording
   const step = Math.max(1, ok.length / max), picks = [];
   for (let k = 0; k < ok.length && picks.length < max; k += step) picks.push(ok[Math.floor(k)]);
-  return picks.map((o) => { const c = cut(a, o.i, L); return { c, z: zcr(c.slice(0, Math.round(SR * 0.03))), peak: o.peak }; });
+  return picks.map((o) => { const c = cut(a, o.i, L, 15, gate); return { c, z: zcr(c.slice(0, Math.round(SR * 0.03))), peak: o.peak }; });
 }
 /** the longest continuous loud stretch (carriage return / ratchet), 0.3–1.2 s */
 function carriage(a) {
@@ -120,12 +125,11 @@ await mkdir(new URL('../sfx/', import.meta.url), { recursive: true });
 const credits = [];
 // typewriter
 const tw = await pcm(SRC.typewriter[0]); credits.push(SRC.typewriter[0].credit);
-let twHits = strikes(tw, { len: 0.16, iso: 0.1, max: 18, name: 'typewriter' });
-let ret = carriage(tw);
-if (twHits.length < 8 || !ret) {
+let twHits = strikes(tw, { len: 0.13, iso: 0.13, max: 20, name: 'typewriter', gate: 0.055 });
+const ret = null; // the carriage return is built from real clicks in the app
+if (twHits.length < 10) {
   const tw2 = await pcm(SRC.typewriter[1]); credits.push(SRC.typewriter[1].credit);
-  if (twHits.length < 8) twHits = twHits.concat(strikes(tw2, { len: 0.16, iso: 0.1, max: 18 - twHits.length, name: 'typewriter 2' }));
-  ret ||= carriage(tw2);
+  twHits = twHits.concat(strikes(tw2, { len: 0.13, iso: 0.13, max: 20 - twHits.length, name: 'typewriter 2', gate: 0.055 }));
 }
 const bell = trimBell(await pcm(SRC.bell)); credits.push(SRC.bell.credit);
 const T = splitSpace(twHits, 3);
@@ -134,7 +138,7 @@ await writeFile(new URL('../sfx/typewriter.wav', import.meta.url), twS.wav);
 // computer keyboard
 let kbHits = [];
 for (const s of SRC.keyboard) {
-  try { const a = await pcm(s); const h = strikes(a, { len: 0.11, iso: 0.07, max: 8, name: s.file }); if (h.length) { kbHits = kbHits.concat(h); credits.push(s.credit); } } catch (e) { log(`skip ${s.file}: ${e.message}`); }
+  try { await new Promise((r) => setTimeout(r, 2500)); const a = await pcm(s); const h = strikes(a, { len: 0.1, iso: 0.1, max: 9, name: s.file, gate: 0.035 }); if (h.length) { kbHits = kbHits.concat(h); credits.push(s.credit); } } catch (e) { log(`skip ${s.file}: ${e.message}`); }
 }
 const K = splitSpace(kbHits, 3);
 const kbS = sprite({ keys: K.keys, space: K.space });
