@@ -77,7 +77,12 @@ function strikes(a, { len = 0.15, iso = 0.09, max = 16, name = '', gate = 0.04, 
   // spread the picks over the recording
   const step = Math.max(1, ok.length / max), picks = [];
   for (let k = 0; k < ok.length && picks.length < max; k += step) picks.push(ok[Math.floor(k)]);
-  return picks.map((o) => { const c = cut(a, o.i, Math.min(L, o.room), 12, gate); return { c, z: zcr(c.slice(0, Math.round(SR * 0.03))), peak: o.peak }; });
+  // keep the crisp ones: most of the energy in the first 25 ms (one clean strike, no stray clicks after)
+  const rms = (x) => Math.sqrt(x.reduce((q, v) => q + v * v, 0) / Math.max(1, x.length));
+  const all = picks.map((o) => { const c = cut(a, o.i, Math.min(L, o.room), 12, gate); const h = Math.round(SR * 0.025); return { c, z: zcr(c.slice(0, Math.round(SR * 0.03))), peak: o.peak, crisp: rms(c.slice(0, h)) / Math.max(1e-6, rms(c.slice(h))) }; });
+  const keep = all.filter((x) => x.crisp > 2.2);
+  log(`${name}: kept ${keep.length} crisp of ${all.length}`);
+  return keep.length >= 6 ? keep : all.sort((x, y) => y.crisp - x.crisp).slice(0, Math.max(6, keep.length));
 }
 /** the longest continuous loud stretch (carriage return / ratchet), 0.3–1.2 s */
 function carriage(a) {
@@ -128,7 +133,7 @@ await mkdir(new URL('../sfx/', import.meta.url), { recursive: true });
 const credits = [];
 // typewriter
 const tw = await pcm(SRC.typewriter[0]); credits.push(SRC.typewriter[0].credit);
-let twHits = strikes(tw, { len: 0.13, iso: 0.085, max: 20, name: 'typewriter', gate: 0.05, minGap: 0.075 });
+let twHits = strikes(tw, { len: 0.13, iso: 0.085, max: 30, name: 'typewriter', gate: 0.05, minGap: 0.075 });
 const ret = null; // the carriage return is built from real clicks in the app
 if (twHits.length < 10) {
   const tw2 = await pcm(SRC.typewriter[1]); credits.push(SRC.typewriter[1].credit);
@@ -141,7 +146,7 @@ await writeFile(new URL('../sfx/typewriter.wav', import.meta.url), twS.wav);
 // computer keyboard
 let kbHits = [];
 for (const s of SRC.keyboard) {
-  try { await new Promise((r) => setTimeout(r, 2500)); const a = await pcm(s); const h = strikes(a, { len: 0.1, iso: 0.08, max: 9, name: s.file, gate: 0.035 }); if (h.length) { kbHits = kbHits.concat(h); credits.push(s.credit); } } catch (e) { log(`skip ${s.file}: ${e.message}`); }
+  try { await new Promise((r) => setTimeout(r, 2500)); const a = await pcm(s); const h = strikes(a, { len: 0.1, iso: 0.08, max: 16, name: s.file, gate: 0.035 }); if (h.length) { kbHits = kbHits.concat(h); credits.push(s.credit); } } catch (e) { log(`skip ${s.file}: ${e.message}`); }
 }
 const K = splitSpace(kbHits, 3);
 const kbS = sprite({ keys: K.keys, space: K.space });
