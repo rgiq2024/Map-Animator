@@ -10,6 +10,7 @@ export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9,
 
 import { TEXT_SFX, trailerSoundEvents } from './trailer.js';
 import { fitSchedule } from './typewriter.js';
+import { playSample, samplesReady } from './samples.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const noiseCache = new WeakMap();
@@ -202,6 +203,7 @@ const SYN = {
   lock(ctx, out, w, p) { [0, 0.09, 0.18].forEach((t) => SYN.beep(ctx, out, w + t, { freq: 1800, vol: p.vol })); SYN.beep(ctx, out, w + 0.35, { freq: 2400, vol: p.vol }); },
   type(ctx, out, w, p) {
     const n = Math.max(1, Math.min(80, p.n || 10)), d = p.dur || 1;
+    if (samplesReady()) { for (let i = 0; i < n; i++) playSample(ctx, out, 'keyboard', 'keys', w + (i / n) * d + ((i * 37) % 11) / 11 * (d / n) * 0.4, { vol: 0.6 * (p.vol ?? 1), rate: 1, n: i }); return; }
     for (let i = 0; i < n; i++) {
       const t = w + (i / n) * d + Math.random() * 0.01;
       const c = src(ctx, 'white', t, 0.03); const f = filt(ctx, 'highpass', 2500);
@@ -225,6 +227,14 @@ Object.assign(SYN, {
   /** crisp digital ticks, one per character, evenly spaced (location slates) */
   ticks(ctx, out, w, p) {
     const n = Math.max(1, Math.min(120, Math.round(p.n || 10))), d = Math.max(0.05, p.dur || n / 22), v = p.vol ?? 1;
+    if (samplesReady()) {
+      for (let i = 0; i < n; i++) {
+        const t = w + (i / n) * d;
+        playSample(ctx, out, 'keyboard', 'keys', t, { vol: 0.55 * v, rate: 1.25, n: i, hp: 1800 });
+        const o = osc(ctx, 'sine', 3100 + (i % 4) * 140, t, 0.02); const og = env(ctx, t, [[0.0008, 0.035 * v], [0.012, 0.001, 1]]); o.connect(og).connect(out);
+      }
+      return;
+    }
     for (let i = 0; i < n; i++) {
       const t = w + (i / n) * d;
       const c = src(ctx, 'white', t, 0.02); const f = filt(ctx, 'bandpass', 5200 + (i % 3) * 700, 3);
@@ -239,6 +249,11 @@ Object.assign(SYN, {
     const n = Math.max(1, Math.min(120, Math.round(p.n || 10))), d = Math.max(0.1, p.dur || n * 0.09), v = p.vol ?? 1;
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    if (samplesReady()) {
+      for (let i = 0; i < n; i++) { const t = w + (i / n) * d + rnd() * (d / n) * 0.45; playSample(ctx, out, 'keyboard', i % 7 === 6 ? 'space' : 'keys', t, { vol: (0.75 + rnd() * 0.3) * v, rate: 0.95 + rnd() * 0.1, n: i }); }
+      if (p.enter) playSample(ctx, out, 'keyboard', 'space', w + d + 0.12, { vol: 1.1 * v, rate: 0.9, n: n + 1 });
+      return;
+    }
     for (let i = 0; i < n; i++) {
       const t = w + (i / n) * d + rnd() * (d / n) * 0.45;
       const c = src(ctx, 'white', t, 0.04); const f = filt(ctx, 'bandpass', 2600 + rnd() * 1800, 1.4);
@@ -274,6 +289,20 @@ Object.assign(SYN, {
     let hits = p.hits;
     if (!hits) { const n = Math.max(1, Math.round(p.n || 14)), d = p.dur || n / 11; hits = Array.from({ length: n }, (_, i) => [(i / n) * d * (0.9 + 0.2 * Math.sin(i * 7.3)), i % 6 === 5 ? 's' : 'k']); hits.push([d + 0.1, 'r']); }
     let seed = 11; const R = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    if (samplesReady()) {
+      // real recordings: a different strike each time, a touch of level / pitch variation
+      hits.forEach(([dt, kind], i) => {
+        const t = w + dt, r = R();
+        if (kind === 'r') {
+          if (p.bell !== false) playSample(ctx, out, 'typewriter', 'bell', t - 0.02, { vol: 0.55 * v });
+          for (let k = 0; k < 9; k++) playSample(ctx, out, 'keyboard', 'keys', t + 0.13 + k * 0.026, { vol: 0.13 * v, rate: 1.7 + R() * 0.2, n: i * 9 + k, hp: 1500 });
+          playSample(ctx, out, 'typewriter', 'space', t + 0.47, { vol: 0.95 * v, rate: 0.82, n: i });
+          return;
+        }
+        playSample(ctx, out, 'typewriter', kind === 's' ? 'space' : 'keys', t, { vol: (kind === 's' ? 0.75 : 0.85 + r * 0.25) * v, rate: 0.96 + R() * 0.08, n: i });
+      });
+      return;
+    }
     const rv = reverb(ctx, out);
     for (const [dt, kind] of hits) {
       const t = w + dt;

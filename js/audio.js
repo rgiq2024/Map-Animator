@@ -2,6 +2,8 @@
 // start of the whole video). Used for live preview and mixed + encoded into the MP4 on export.
 import { getMedia, putMedia } from './store.js';
 import { scheduleAll, hasSound, previewSound } from './sfx.js';
+import { loadSamples } from './samples.js';
+loadSamples();
 
 export const SR = 48000;
 const buffers = new Map();
@@ -73,6 +75,7 @@ export async function mixProject(project, duration, events = []) {
   const tracks = (project.audio || []).filter((t) => !t.muted);
   const synth = hasSound(project);
   if ((!tracks.length && !synth) || !(duration > 0)) return null;
+  if (synth) await loadSamples();
   const off = new OfflineAudioContext(2, Math.ceil(duration * SR), SR);
   let any = false;
   if (synth) {
@@ -106,6 +109,7 @@ export async function playFrom(project, pt, rate = 1, events = [], until = Infin
   if ((!tracks.length && !hasSound(project)) || rate !== 1) return;
   const ctx = ctxLive();
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+  if (hasSound(project)) await loadSamples();
   const now = ctx.currentTime + 0.05;
   if (hasSound(project)) {
     liveBus = masterBus(ctx, ctx.destination);
@@ -189,6 +193,7 @@ export async function encodeAudio(buffer, picked, muxer) {
 export async function previewLibSound(type, vol = 1) {
   const ctx = ctxLive();
   if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+  await loadSamples();
   const bus = masterBus(ctx, ctx.destination);
   previewSound(ctx, bus, type, { vol });
   setTimeout(() => { try { bus.disconnect(); } catch { /* ignore */ } }, 7000);
