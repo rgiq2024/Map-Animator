@@ -520,7 +520,7 @@ function textPanel(g, s, x, y, w, unit, T, n) {
   const K = s.kicker, ap = (t0) => clamp((T - t0) / 0.5, 0, 1);
   g.textAlign = 'left'; g.textBaseline = 'alphabetic';
   let cy = y;
-  if (K) { g.globalAlpha *= 1; g.font = `600 ${14 * unit}px ${MONO}`; g.fillStyle = s.accent; const a = ap(0.1); g.save(); g.globalAlpha *= a; g.fillText(K.toUpperCase().split('').join(String.fromCharCode(8202)), x, cy + 14 * unit); g.restore(); cy += 40 * unit; }
+  if (K) { const kt = K.toUpperCase().split('').join(String.fromCharCode(8202)); let fs = 14 * unit; g.font = `600 ${fs}px ${MONO}`; const kw = g.measureText(kt).width; if (kw > w) { fs *= w / kw; g.font = `600 ${fs}px ${MONO}`; } g.fillStyle = s.accent; g.save(); g.globalAlpha *= ap(0.1); g.fillText(kt, x, cy + 14 * unit); g.restore(); cy += 40 * unit; }
   const big = (txt, col, t0) => { if (!txt) return; g.font = `600 ${25 * unit}px ${SANS}`; const ls = wrap(g, txt, w); g.save(); g.globalAlpha *= ap(t0); g.fillStyle = col; ls.forEach((l, i) => g.fillText(l, x, cy + 25 * unit + i * 34 * unit)); g.restore(); cy += ls.length * 34 * unit + 18 * unit; };
   big(s.head1, '#ffffff', 0.35); big(s.head2, s.accent, 0.8);
   if (s.body) {
