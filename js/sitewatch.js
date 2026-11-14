@@ -10,6 +10,7 @@ import { imageFor } from './geoimage.js';
 import { waybackReleases } from './wayback.js';
 import { pcScenes, pcDayTiles, pcRenders } from './pcsat.js';
 import { brandSafeArea } from './branding.js';
+import { locator as drawLocator } from './briefing.js';
 
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -401,9 +402,9 @@ export async function fetchSitePasses(opts) {
 // ---------------------------------------------------------------- the layer
 export const SW_KINDS = { sitewatch: { name: 'Site watch — satellite passes', icon: '🛰', geom: null, desc: 'Dated satellite passes of a port or air base as a grid, a flip-through or a count dashboard, with ships / aircraft marked' } };
 export const SW_ANIMS = { sitewatch: { cascade: 'Passes appear one by one', fade: 'Fade in', none: 'Already there' } };
-export const SW_LAYOUTS = { grid: 'Grid of passes + headline (like a newspaper graphic)', flip: 'Flip through the passes, full frame', dashboard: 'Count dashboard (bar chart + numbers)', pair: 'First vs latest, side by side' };
+export const SW_LAYOUTS = { grid: 'Grid of passes + headline (like a newspaper graphic)', flip: 'Flip through the passes, full frame', dashboard: 'Count dashboard (bar chart + numbers)', pair: 'First vs latest, side by side', prepost: 'Pre and post — swipe from before to after' };
 export const SW_DEFAULTS = {
-  sitewatch: { layout: 'grid', kicker: 'FROM ORBIT', head1: 'A transponder can be switched off.', head2: 'A hull can’t hide from a satellite.', body: '', footer: '', frames: [], cols: 0, eventDay: '', eventLabel: '', countWord: 'ships', showCount: true, showBoxes: true, accent: '#ffc629', boxColor: '#ff4d3d', bg: '#0b0f16', bgAlpha: 0.94, flipSec: 1.4, site: '', textSize: 1 },
+  sitewatch: { layout: 'grid', kicker: 'FROM ORBIT', head1: 'A transponder can be switched off.', head2: 'A hull can’t hide from a satellite.', body: '', footer: '', frames: [], cols: 0, eventDay: '', eventLabel: '', countWord: 'ships', showCount: true, showBoxes: true, accent: '#ffc629', boxColor: '#ff4d3d', bg: '#0b0f16', bgAlpha: 0.94, flipSec: 1.4, site: '', textSize: 1, overview: true, ll: null, country: 'Iran', place: '', gridZoom: 'peak', zoomHold: 3, flipZoom: 'inout', zoomAmount: 0.35, preDay: '', postDay: '', preLabel: 'Pre', postLabel: 'Post' },
 };
 const LAYOUT_OPTS = Object.fromEntries(Object.entries(SW_LAYOUTS));
 export const SW_FORMS = {
@@ -419,6 +420,15 @@ export const SW_FORMS = {
     ['style.countWord', 'What is counted (ships, aircraft…)', 'text'],
     ['style.showCount', 'Show the count on each pass', 'switch'],
     ['style.showBoxes', 'Mark each ship / aircraft', 'switch'],
+    ['style.overview', 'Overview map (where the site is)', 'switch'],
+    ['style.gridZoom', 'Zoom into one pass, then back out', 'select', { peak: 'The pass with the most', latest: 'The latest pass', event: 'The first pass after the event', none: 'No zoom' }, (L) => L.style.layout === 'grid'],
+    ['style.zoomHold', 'Hold the zoom for (s)', 'range', [1, 10, 0.5], (L) => L.style.layout === 'grid' && L.style.gridZoom !== 'none'],
+    ['style.flipZoom', 'Zoom on each pass', 'select', { inout: 'Zoom in on each, zoom out at the end', in: 'Zoom in on each', none: 'No zoom' }, (L) => L.style.layout === 'flip'],
+    ['style.zoomAmount', 'Zoom amount', 'range', [0.05, 1.5, 0.05], (L) => L.style.layout === 'flip'],
+    ['style.preDay', 'Pre date (YYYY-MM-DD, empty = the pass before the event)', 'text', null, (L) => L.style.layout === 'prepost'],
+    ['style.postDay', 'Post date (empty = the latest pass)', 'text', null, (L) => L.style.layout === 'prepost'],
+    ['style.preLabel', 'Pre label', 'text', null, (L) => L.style.layout === 'prepost'],
+    ['style.postLabel', 'Post label', 'text', null, (L) => L.style.layout === 'prepost'],
     ['style.cols', 'Columns (0 = automatic)', 'range', [0, 8, 1], (L) => L.style.layout === 'grid'],
     ['style.flipSec', 'Seconds per pass', 'range', [0.4, 5, 0.1], (L) => L.style.layout === 'flip'],
     ['style.textSize', 'Text size', 'range', [0.6, 1.6, 0.05]],
@@ -462,20 +472,31 @@ function drawRich(g, line, x, y, font, boldFont, bold) {
 function chip(g, text, x, y, size, bg, fg, anchor = 'bl') {
   g.font = `600 ${size}px ${MONO}`;
   const w = g.measureText(text).width + size * 0.9, h = size * 1.55;
-  const X = anchor.includes('r') ? x - w : x, Y = anchor.includes('b') ? y - h : y;
+  const X = anchor === 'b' ? x - w / 2 : anchor.includes('r') ? x - w : x, Y = anchor.includes('b') ? y - h : y;
   g.fillStyle = bg; g.fillRect(X, Y, w, h);
   g.fillStyle = fg; g.textBaseline = 'middle'; g.textAlign = 'left'; g.fillText(text, X + size * 0.45, Y + h / 2 + 0.5);
   return { w, h, x: X, y: Y };
 }
 function imgOf(f) { const e = f?.media ? imageFor(f.media) : null; return e?.ready ? e : null; }
 /** draw one pass into a box (cover), with its markers */
-function drawPass(g, f, x, y, w, h, s, unit, a = 1, mark = 1, fit = 'cover') {
+/** where to zoom into a pass: the middle of its marked ships / aircraft (else the centre) */
+function focusOf(f) { const bs = f?.boxes || []; if (!bs.length) return [0.5, 0.5]; return [clamp(bs.reduce((t, b) => t + b.cx, 0) / bs.length, 0.25, 0.75), clamp(bs.reduce((t, b) => t + b.cy, 0) / bs.length, 0.25, 0.75)]; }
+function drawPass(g, f, x, y, w, h, s, unit, a = 1, mark = 1, fit = 'cover', zoom = 1) {
   const im = imgOf(f);
   g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
   g.fillStyle = '#121820'; g.fillRect(x, y, w, h);
   let ix = x, iy = y, iw = w, ih = h;
   if (im && fit === 'contain') { const kb = Math.max(w / im.w, h / im.h); g.globalAlpha = a * 0.35; g.filter = 'blur(14px) brightness(0.6)'; g.drawImage(im.bmp, x + (w - im.w * kb) / 2, y + (h - im.h * kb) / 2, im.w * kb, im.h * kb); g.filter = 'none'; g.globalAlpha = 1; }
-  if (im) { const k = fit === 'contain' ? Math.min(w / im.w, h / im.h) : Math.max(w / im.w, h / im.h); iw = im.w * k; ih = im.h * k; ix = x + (w - iw) / 2; iy = y + (h - ih) / 2; g.globalAlpha = a; g.drawImage(im.bmp, ix, iy, iw, ih); g.globalAlpha = 1; }
+  if (im) {
+    const k = fit === 'contain' ? Math.min(w / im.w, h / im.h) : Math.max(w / im.w, h / im.h); iw = im.w * k; ih = im.h * k; ix = x + (w - iw) / 2; iy = y + (h - ih) / 2;
+    if (zoom > 1.001) {
+      // zoom in towards the ships, drifting that spot to the middle of the box
+      const [fx, fy] = focusOf(f), px = ix + fx * iw, py = iy + fy * ih, t = clamp((zoom - 1) / 0.8, 0, 1);
+      const tx = px + (x + w / 2 - px) * t, ty = py + (y + h / 2 - py) * t;
+      iw *= zoom; ih *= zoom; ix = tx - fx * iw; iy = ty - fy * ih;
+    }
+    g.globalAlpha = a; g.drawImage(im.bmp, ix, iy, iw, ih); g.globalAlpha = 1;
+  }
   if (s.showBoxes !== false && mark > 0 && f.boxes?.length) {
     g.strokeStyle = s.boxColor || '#ff4d3d'; g.lineWidth = Math.max(1, 1.4 * unit); g.globalAlpha = mark;
     for (const b of f.boxes) {
@@ -484,6 +505,16 @@ function drawPass(g, f, x, y, w, h, s, unit, a = 1, mark = 1, fit = 'cover') {
     }
     g.globalAlpha = 1;
   }
+  g.restore();
+}
+function overview(g, s, x, y, w, h, unit) {
+  if (s.overview === false || !Array.isArray(s.ll)) return;
+  g.save();
+  g.fillStyle = 'rgba(6,10,16,0.88)'; g.fillRect(x, y, w, h);
+  g.strokeStyle = 'rgba(255,255,255,0.14)'; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  g.font = `600 ${9.5 * unit}px ${MONO}`; g.fillStyle = s.accent; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillText('OVERVIEW', x + 8 * unit, y + 15 * unit);
+  try { drawLocator(g, s.ll, s.country || 'Iran', x + 5 * unit, y + 21 * unit, w - 10 * unit, h - 26 * unit, unit, s.accent, s.place || ''); } catch { /* countries still loading */ }
   g.restore();
 }
 const framesOf = (s) => (s.frames || []).filter((f) => f.include !== false);
@@ -503,6 +534,7 @@ export function drawSiteWatch(ctx, L, tm, o) {
   if (lay === 'flip') drawFlip(g, s, frames, box, unit, T, L, tm);
   else if (lay === 'dashboard') drawDash(g, s, frames, box, unit, T, L);
   else if (lay === 'pair') drawPair(g, s, frames, box, unit, T, L);
+  else if (lay === 'prepost') drawPrePost(g, s, frames, box, unit, T, L, tm);
   else drawGrid(g, s, frames, box, unit, T, L);
   if (!n) { g.font = `500 ${16 * unit}px ${SANS}`; g.fillStyle = '#9aa4b2'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('No passes yet — use Site watch (home page) to fetch them', fr.x + fr.w * 0.62, fr.y + fr.h / 2); }
   // footer
@@ -535,10 +567,25 @@ function countTag(g, s, f, x, y, unit) {
   const t = `✓ ${f.count} ${f.count === 1 ? String(s.countWord || '').replace(/s$/, '') : s.countWord || ''}`.trim();
   chip(g, t, x, y, 10.5 * unit, 'rgba(10,14,20,0.82)', s.accent, 'tr');
 }
+/** which pass the grid zooms into */
+function zoomIndex(s, frames) {
+  const z = s.gridZoom || 'peak', n = frames.length;
+  if (z === 'none' || !n) return -1;
+  if (z === 'latest') return n - 1;
+  if (z === 'event') { const e = eventIndex(s, frames); return e >= 0 ? e : n - 1; }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(z)) { const i = frames.findIndex((f) => f.day >= z); return i >= 0 ? i : n - 1; }
+  let best = 0; frames.forEach((f, i) => { if ((f.count || 0) > (frames[best].count || 0)) best = i; }); return best;
+}
+export const gridZoomTimes = (n, hold = 3) => { const t0 = 0.5 + n * Math.min(0.22, 3 / Math.max(1, n)) + 1.6; return { t0, t1: t0 + 0.9, t2: t0 + 0.9 + hold, t3: t0 + 1.8 + hold }; };
 function drawGrid(g, s, frames, fr, unit, T, L) {
   const n = frames.length;
   const px = fr.x + fr.w * 0.045, pw = fr.w * 0.255;
-  textPanel(g, s, px, fr.y + fr.h * 0.085, pw, unit, T, n);
+  const ty = textPanel(g, s, px, fr.y + fr.h * 0.085, pw, unit, T, n);
+  if (s.overview !== false && Array.isArray(s.ll)) {
+    const oh = Math.min(fr.h * 0.3, pw * 0.72), oy = Math.max(ty + 18 * unit, fr.y + fr.h * (s.footer ? 0.86 : 0.92) - oh);
+    const u = easeOut((T - 1.4) / 0.6);
+    if (u > 0 && oy + oh <= fr.y + fr.h * 0.95) { g.save(); g.globalAlpha *= u; overview(g, s, px, oy, pw, oh, unit); g.restore(); }
+  }
   if (!n) return;
   const gx = fr.x + fr.w * 0.31, gy = fr.y + fr.h * 0.08, gw = fr.w * 0.67, gh = fr.h * (s.footer ? 0.8 : 0.86);
   const im0 = imgOf(frames[0]); const asp = im0 ? clamp(im0.w / im0.h, 0.6, 1.8) : 1.08;
@@ -548,6 +595,8 @@ function drawGrid(g, s, frames, fr, unit, T, L) {
   const cw = Math.min((gw - gap * (cols - 1)) / cols, ((gh - gap * (rows - 1)) / rows) * asp), ch = cw / asp;
   const ox = gx + (gw - (cw * cols + gap * (cols - 1))) / 2, oy = gy;
   const step = Math.min(0.22, 3 / Math.max(1, n)), ev = eventIndex(s, frames);
+  const zi = zoomIndex(s, frames), zt = gridZoomTimes(n, +s.zoomHold || 3);
+  const zu = zi < 0 || T >= 90 ? 0 : T < zt.t0 ? 0 : T < zt.t1 ? easeOut((T - zt.t0) / 0.9) : T < zt.t2 ? 1 : 1 - easeOut((T - zt.t2) / 0.9);
   frames.forEach((f, i) => {
     const t0 = 0.5 + i * step, u = L.anim === 'none' ? 1 : easeOut((T - t0) / 0.45);
     if (u <= 0) return;
@@ -564,6 +613,18 @@ function drawGrid(g, s, frames, fr, unit, T, L) {
       chip(g, s.eventLabel.toUpperCase(), x + 4 * unit, y + ch * 0.48, 11.5 * unit, s.accent, '#111', 'tl'); g.restore();
     }
   });
+  if (zu > 0) {
+    const c = zi % cols, r = Math.floor(zi / cols), x0 = ox + c * (cw + gap), y0 = oy + r * (ch + gap);
+    const W = gw, Hh = Math.min(gh, gw / asp), X1 = gx, Y1 = gy + (gh - Hh) / 2;
+    const bw = cw + (W - cw) * zu, bh = ch + (Hh - ch) * zu, bx = x0 + (X1 - x0) * zu, by = y0 + (Y1 - y0) * zu;
+    g.save(); g.globalAlpha *= 0.7 * zu; g.fillStyle = s.bg; g.fillRect(gx - 8 * unit, gy - 8 * unit, gw + 16 * unit, gh + 16 * unit); g.restore();
+    const f = frames[zi], kb = T > zt.t1 && T < zt.t2 ? 1 + 0.18 * clamp((T - zt.t1) / Math.max(0.5, zt.t2 - zt.t1), 0, 1) : T >= zt.t2 ? 1.18 * (1 - easeOut((T - zt.t2) / 0.9)) + easeOut((T - zt.t2) / 0.9) : 1;
+    drawPass(g, f, bx, by, bw, bh, s, unit, 1, 1, 'cover', kb);
+    g.strokeStyle = s.accent; g.lineWidth = 2 * unit; g.strokeRect(bx, by, bw, bh);
+    const cs = 11 + 7 * zu;
+    chip(g, f.label.toUpperCase(), bx + 8 * unit, by + bh - 8 * unit, cs * unit, 'rgba(8,11,16,0.86)', '#ffffff', 'bl');
+    if (s.showCount !== false) chip(g, `✓ ${f.count} ${f.count === 1 ? String(s.countWord || '').replace(/s$/, '') : s.countWord || ''}`.trim(), bx + bw - 8 * unit, by + 8 * unit, cs * unit, 'rgba(8,11,16,0.86)', s.accent, 'tr');
+  }
 }
 function drawFlip(g, s, frames, fr, unit, T, L, tm) {
   const n = frames.length; if (!n) return;
@@ -571,9 +632,12 @@ function drawFlip(g, s, frames, fr, unit, T, L, tm) {
   const pos = tm.edit ? n - 1 : clamp((T - 0.3) / per, 0, n - 1 + 0.999);
   const k = Math.floor(pos), u = pos - k;
   const ix = fr.x + fr.w * 0.03, iy = fr.y + fr.h * 0.06, iw = fr.w * 0.94, ih = fr.h * (s.footer ? 0.73 : 0.78);
-  drawPass(g, frames[k], ix, iy, iw, ih, s, unit, 1, 1, 'contain');
+  const fz = s.flipZoom || 'inout', zMax = 1 + (+s.zoomAmount || 0.35);
+  // each pass eases in towards its ships; the last one eases back out to the whole site
+  const zOf = (idx, uu) => { if (fz === 'none' || tm.edit) return 1; const e = easeOut(clamp(uu, 0, 1)); if (fz === 'inout' && idx === n - 1) { const out = clamp((T - 0.3 - (n - 1) * per - per * 0.5) / 1.2, 0, 1); return 1 + (zMax - 1) * Math.min(1, e * 2) * (1 - easeOut(out)); } return 1 + (zMax - 1) * e; };
+  drawPass(g, frames[k], ix, iy, iw, ih, s, unit, 1, 1, 'contain', zOf(k, u));
   const fade = clamp((u * per - (per - xf)) / xf, 0, 1);
-  if (fade > 0 && frames[k + 1]) drawPass(g, frames[k + 1], ix, iy, iw, ih, s, unit, fade, fade, 'contain');
+  if (fade > 0 && frames[k + 1]) drawPass(g, frames[k + 1], ix, iy, iw, ih, s, unit, fade, fade, 'contain', 1);
   const f = frames[fade > 0.5 && frames[k + 1] ? k + 1 : k];
   // date stamp + site + count
   const c1 = chip(g, f.label.toUpperCase(), ix + 14 * unit, iy + 14 * unit, 20 * unit, 'rgba(8,11,16,0.86)', '#ffffff', 'tl');
@@ -583,6 +647,7 @@ function drawFlip(g, s, frames, fr, unit, T, L, tm) {
     g.fillStyle = s.accent; g.font = `700 ${40 * unit}px ${SANS}`; g.textAlign = 'right'; g.textBaseline = 'alphabetic'; g.fillText(String(f.count), ix + iw - 28 * unit, iy + 60 * unit);
     g.fillStyle = '#ffffff'; g.font = `600 ${11 * unit}px ${MONO}`; g.textAlign = 'left'; g.fillText(String(s.countWord || '').toUpperCase(), ix + iw - bw - 2 * unit, iy + 34 * unit); g.fillText('ON THIS PASS', ix + iw - bw - 2 * unit, iy + 50 * unit); g.restore();
   }
+  if (s.overview !== false && Array.isArray(s.ll)) { const ow = Math.min(iw * 0.2, 260 * unit), oh = ow * 0.72; overview(g, s, ix + 14 * unit, iy + ih - oh - 14 * unit, ow, oh, unit); }
   // timeline strip
   const ty = iy + ih + 14 * unit, th = fr.h * 0.07, tw = iw, mxc = Math.max(1, ...frames.map((q) => q.count || 0)), ev = eventIndex(s, frames);
   frames.forEach((q, i) => {
@@ -637,6 +702,38 @@ function drawDash(g, s, frames, fr, unit, T, L) {
   const u = easeOut((T - 0.6) / 0.6);
   if (u > 0) { g.save(); g.globalAlpha *= u; drawPass(g, last, ix, iy, iw, ih, s, unit, 1, 1); chip(g, `LATEST · ${last.label.toUpperCase()}`, ix + 6 * unit, iy + ih - 6 * unit, 11 * unit, 'rgba(8,11,16,0.86)', '#fff', 'bl'); countTag(g, s, last, ix + iw - 6 * unit, iy + 6 * unit, unit); g.restore(); }
 }
+function prePostOf(s, frames) {
+  const n = frames.length, pick = (d, fb) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) return fb; let best = frames[0]; for (const f of frames) if (Math.abs(Date.parse(f.day) - Date.parse(d)) < Math.abs(Date.parse(best.day) - Date.parse(d))) best = f; return best; };
+  const ev = eventIndex(s, frames);
+  return [pick(s.preDay, ev > 0 ? frames[ev - 1] : frames[0]), pick(s.postDay, frames[n - 1])];
+}
+function drawPrePost(g, s, frames, fr, unit, T, L, tm) {
+  const n = frames.length; if (!n) return;
+  const [pre, post] = prePostOf(s, frames);
+  const x = fr.x + fr.w * 0.03, w = fr.w * 0.94, y = fr.y + fr.h * 0.13, h = fr.h * (s.footer ? 0.74 : 0.8);
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.font = `600 ${14 * unit}px ${MONO}`; g.fillStyle = s.accent; g.fillText((s.kicker || '').toUpperCase(), x, fr.y + fr.h * 0.055);
+  g.font = `600 ${22 * unit}px ${SANS}`; g.fillStyle = '#fff'; g.fillText(s.head1 || `${s.preLabel || 'Pre'} and ${s.postLabel || 'post'}`, x, fr.y + fr.h * 0.055 + 30 * unit);
+  // swipe: the post image is revealed from the right, then the divider settles in the middle
+  const sw = tm.edit ? 0.5 : T < 1 ? 1 : T < 3.2 ? 1 - 0.75 * easeOut((T - 1) / 2.2) : T < 4.4 ? 0.25 + 0.25 * easeOut((T - 3.2) / 1.2) : 0.5;
+  const dx = x + w * sw, z = tm.edit ? 1 : 1 + 0.12 * clamp((T - 4.4) / 4, 0, 1);
+  drawPass(g, pre, x, y, w, h, s, unit, 1, clamp((T - 0.4) / 0.4, 0, 1), 'cover', z);
+  g.save(); g.beginPath(); g.rect(dx, y, x + w - dx, h); g.clip(); drawPass(g, post, x, y, w, h, s, unit, 1, 1, 'cover', z); g.restore();
+  g.fillStyle = '#fff'; g.fillRect(dx - 1.5 * unit, y, 3 * unit, h);
+  g.beginPath(); g.arc(dx, y + h / 2, 13 * unit, 0, Math.PI * 2); g.fillStyle = s.accent; g.fill();
+  g.fillStyle = '#111'; g.font = `700 ${12 * unit}px ${SANS}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('‹ ›', dx, y + h / 2 + 0.5);
+  const lab = (t, d, X, right) => chip(g, `${t.toUpperCase()} · ${d.label.toUpperCase()}`, X, y + 10 * unit, 15 * unit, right ? s.accent : 'rgba(8,11,16,0.88)', right ? '#111' : '#fff', right ? 'tr' : 'tl');
+  lab(s.preLabel || 'Pre', pre, x + 10 * unit, false);
+  if (sw < 0.97) lab(s.postLabel || 'Post', post, x + w - 10 * unit, true);
+  if (s.showCount !== false && T > 4.4) {
+    const d = (post.count || 0) - (pre.count || 0), a = easeOut((T - 4.4) / 0.6);
+    g.save(); g.globalAlpha *= a;
+    chip(g, `${pre.count} ${s.countWord || ''}`.trim(), x + 10 * unit, y + 44 * unit, 12 * unit, 'rgba(8,11,16,0.86)', s.accent, 'tl');
+    chip(g, `${post.count} ${s.countWord || ''}`.trim(), x + w - 10 * unit, y + 44 * unit, 12 * unit, 'rgba(8,11,16,0.86)', s.accent, 'tr');
+    chip(g, `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)} ${s.countWord || ''}`.trim(), dx, y + h - 12 * unit, 16 * unit, s.accent, '#111', 'b');
+    g.restore();
+  }
+  if (s.overview !== false && Array.isArray(s.ll)) { const ow = Math.min(w * 0.18, 240 * unit), oh = ow * 0.72; overview(g, s, x + 10 * unit, y + h - oh - 10 * unit, ow, oh, unit); }
+}
 function drawPair(g, s, frames, fr, unit, T, L) {
   const n = frames.length; if (!n) return;
   const a = frames[0], b = frames[n - 1];
@@ -666,7 +763,7 @@ export function buildSiteStory(info, H) {
   const srcInfo = SW_SOURCES[source];
   const span = inc.length ? `${dayText(inc[0].day)} to ${dayText(inc[inc.length - 1].day)}` : '';
   const footer = `${srcInfo.short} · ${source === 'wayback' ? 'every distinct image of the site' : 'the clearest pass of each month'}, ${span} · ${srcInfo.credit}${info.target !== 'none' ? ` · ${word} marked ${info.detector === 'ai' ? 'by an AI detector' : 'automatically'}${info.checked ? ' and checked by eye' : ' — check before publishing'}` : ''}`;
-  const common = { site: siteName, kicker: `${shortName} from orbit`, frames: inc, countWord: word, showCount: info.target !== 'none', showBoxes: info.target !== 'none', eventDay: info.eventDay || '', eventLabel: info.eventLabel || '', footer, accent: info.accent || '#ffc629' };
+  const common = { site: siteName, kicker: `${shortName} from orbit`, frames: inc, countWord: word, showCount: info.target !== 'none', showBoxes: info.target !== 'none', eventDay: info.eventDay || '', eventLabel: info.eventLabel || '', footer, accent: info.accent || '#ffc629', ll: site.ll, country: 'Iran', place: shortName };
   const head1 = info.head1 ?? (word === 'aircraft' ? 'Aircraft come and go.' : 'A transponder can be switched off.');
   const head2 = info.head2 ?? (word === 'aircraft' ? 'The apron keeps the record.' : 'A hull can’t hide from a satellite.');
   const body = info.body ?? `${source === 'wayback' ? 'Every new high-resolution image' : 'The clearest pass of every month'}, ${inc.length ? `${monthText(inc[0].day)} to ${monthText(inc[inc.length - 1].day)}` : ''}: **${inc.length} in all**`;
@@ -679,10 +776,11 @@ export function buildSiteStory(info, H) {
   const scenes = [];
   { const z = { ...B.ZOOM_DEFAULTS, ll, place: siteName, sec: 8, end: zoomEnd, tilt: 0, rotate: 0, spin: 0 }; const sc = scene('Zoom to the site', [], 0.8); Object.assign(sc.camera, B.zoomCamera(ll, z.sec, z.end, z)); sc.briefZoom = z; sc.layers = frameOf('zoom'); scenes.push(sc); }
   const still = [K(0, V(ll, zoomEnd - 0.4), 'linear'), K(10, V(ll, zoomEnd - 0.2), 'linear')];
-  const gridDur = 1.5 + Math.min(3.4, inc.length * 0.22) + 5;
-  { const sc = scene('Pass grid', still, Math.max(0.5, gridDur - 10)); sc.layers = [L('sitewatch', null, 0, { duration: gridDur, anim: 'cascade', name: 'Site watch · grid', style: { ...SW_DEFAULTS.sitewatch, ...common, layout: 'grid', head1, head2, body } })]; scenes.push(sc); }
-  const flipDur = 0.6 + inc.length * 1.3 + 1;
-  { const sc = scene('Flip through', still, Math.max(0.5, flipDur - 10)); sc.layers = [L('sitewatch', null, 0, { duration: flipDur, anim: 'none', name: 'Site watch · flip-through', style: { ...SW_DEFAULTS.sitewatch, ...common, layout: 'flip', flipSec: 1.3, bgAlpha: 1 } })]; scenes.push(sc); }
+  const gridDur = gridZoomTimes(inc.length, 3).t3 + 2;
+  { const sc = scene('Pass grid', still, 0.5); sc.layers = [L('sitewatch', null, 0, { duration: gridDur, anim: 'cascade', name: 'Site watch · grid', style: { ...SW_DEFAULTS.sitewatch, ...common, layout: 'grid', head1, head2, body } })]; scenes.push(sc); }
+  const flipDur = 0.6 + inc.length * 1.3 + 2.2;
+  { const sc = scene('Flip through', still, 0.5); sc.layers = [L('sitewatch', null, 0, { duration: flipDur, anim: 'none', name: 'Site watch · flip-through', style: { ...SW_DEFAULTS.sitewatch, ...common, layout: 'flip', flipSec: 1.3, bgAlpha: 1 } })]; scenes.push(sc); }
+  if (inc.length >= 2) { const sc = scene('Pre and post', still, 0.5); sc.layers = [L('sitewatch', null, 0, { duration: 9, anim: 'none', name: 'Site watch · pre and post', style: { ...SW_DEFAULTS.sitewatch, ...common, layout: 'prepost', head1: info.eventDay ? `Before and after ${info.eventLabel || dayText(info.eventDay)}` : 'Then and now', bgAlpha: 1 } })]; scenes.push(sc); }
   if (info.target !== 'none') { const sc = scene('Count dashboard', still, 0.5); sc.layers = [L('sitewatch', null, 0, { duration: 8, anim: 'fade', name: 'Site watch · dashboard', style: { ...SW_DEFAULTS.sitewatch, ...common, layout: 'dashboard' } })]; scenes.push(sc); }
   { const sc = scene('End', [K(0, V(ll, zoomEnd - 1.5), 'linear'), K(5, V(ll, zoomEnd - 1.8, 8), 'linear')], 0.3); sc.layers = frameOf('end', { title: `${shortName} from orbit` }); sc.transition = 'none'; scenes.push(sc); }
   return { name: `${siteName} — satellite watch`, scenes, sound: { auto: true, v2: true, music: 'track:in-the-bardo', musicVolume: 0.35 }, brand: { lower: false } };

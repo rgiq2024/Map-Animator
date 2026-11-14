@@ -289,7 +289,7 @@ function thumb(ctx, spec, ll, x, y, w, h, u, acc, label, o, defZoom) {
 }
 
 // ---------------------------------------------------------------- locator (country in Mercator)
-function locator(ctx, ll, country, x, y, w, h, u, acc, place) {
+export function locator(ctx, ll, country, x, y, w, h, u, acc, place) {
   const C = allCountries();
   if (!C) return;
   const c = (ll && countryAt(ll)) || (country && (countriesByName(country) || [])[0]);
