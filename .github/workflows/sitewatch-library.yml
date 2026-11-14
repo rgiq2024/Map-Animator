@@ -1,0 +1,53 @@
+name: Site watch library (ready-made passes)
+
+# For key Iranian ports and naval bases: the clearest Sentinel-2 pass of every month for the last 15 months,
+# ships counted, saved in sites/watch/ so every user of the app gets them instantly. Refreshes on the 2nd and
+# 16th of each month; run it by hand from the Actions tab at any time (optionally only some site ids).
+on:
+  schedule:
+    - cron: '23 5 2,16 * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Only these site ids (comma-separated, empty = all)'
+        default: ''
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sitewatch-library
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Playwright
+        run: npm i --no-save --no-package-lock playwright@1.48.2 && npx playwright install --with-deps chromium
+      - name: Build
+        env:
+          WATCH_ONLY: ${{ github.event.inputs.only || '' }}
+        run: |
+          python3 -m http.server 8811 >/dev/null 2>&1 &
+          sleep 2
+          node tools/sitewatch-build.mjs
+      - name: Commit
+        run: |
+          git config user.name "sitewatch-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sites/watch
+          if git diff --cached --quiet; then echo "No change"; exit 0; fi
+          git commit -m "Site watch library $(date -u +%F)"
+          git pull --rebase -q origin main
+          git push -q origin HEAD:main
+      - name: Redeploy the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
