@@ -267,11 +267,29 @@ function dropStatic(frames, tol = 0.012) {
     f.count = f.boxes.length;
   }
 }
+/** Share of water around a point of an optical image (fractions in, 0..1 out) — used to drop "ships" on land. */
+function waterSampler(cv) {
+  const k = Math.min(1, 420 / Math.max(cv.width, cv.height)), W = Math.max(8, Math.round(cv.width * k)), H = Math.max(8, Math.round(cv.height * k));
+  const t = document.createElement('canvas'); t.width = W; t.height = H;
+  const g = t.getContext('2d', { willReadFrequently: true }); g.drawImage(cv, 0, 0, W, H);
+  const d = g.getImageData(0, 0, W, H).data, N = W * H, w = new Uint8Array(N);
+  for (let i = 0; i < N; i++) { const r = d[i * 4], gg = d[i * 4 + 1], b = d[i * 4 + 2], Y = 0.3 * r + 0.59 * gg + 0.11 * b; w[i] = (gg + b) / 2 > r * 1.04 && b < gg * 1.35 && Y < 160 ? 1 : 0; }
+  const W1 = W + 1, I = new Float64Array(W1 * (H + 1));
+  for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += w[y * W + x]; I[(y + 1) * W1 + x + 1] = I[y * W1 + x + 1] + row; } }
+  return (fx, fy, rf) => { const x = Math.round(fx * W), y = Math.round(fy * H), r = Math.max(2, Math.round(rf * W)); const x0 = Math.max(0, x - r), y0 = Math.max(0, y - r), x1 = Math.min(W, x + r + 1), y1 = Math.min(H, y + r + 1); return (I[y1 * W1 + x1] - I[y0 * W1 + x1] - I[y1 * W1 + x0] + I[y0 * W1 + x0]) / Math.max(1, (x1 - x0) * (y1 - y0)); };
+}
 async function detectAI(cv, target) {
   const { detectCanvas } = await import('./objdetect.js');
   const classes = new Set(target === 'aircraft' ? ['plane', 'helicopter'] : target === 'both' ? ['ship', 'plane', 'helicopter'] : ['ship']);
   const res = await detectCanvas(cv, { classes, minConf: 0.35 });
-  return res.map((r) => {
+  const wet = waterSampler(cv);
+  return res.filter((r) => {
+    if (r.cls !== 'ship') return true;
+    // a ship has water beside it: look in a ring about one hull-length wide
+    const xs = r.pts.map((p) => p[0] / cv.width), ys = r.pts.map((p) => p[1] / cv.height);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2, len = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    return r.conf >= 0.45 && wet(cx, cy, Math.max(0.02, len)) > 0.18;
+  }).map((r) => {
     const xs = r.pts.map((p) => p[0]), ys = r.pts.map((p) => p[1]);
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     return { cls: r.cls === 'plane' ? 'aircraft' : r.cls, ai: true, conf: +r.conf.toFixed(2), x0: x0 / cv.width, x1: x1 / cv.width, y0: y0 / cv.height, y1: y1 / cv.height, cx: (x0 + x1) / 2 / cv.width, cy: (y0 + y1) / 2 / cv.height, pts: r.pts.map(([x, y]) => [+(x / cv.width).toFixed(4), +(y / cv.height).toFixed(4)]) };
