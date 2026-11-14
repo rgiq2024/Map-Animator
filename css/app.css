@@ -1273,3 +1273,8 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 @media (max-width: 760px) { .sw-body { grid-template-columns: 1fr; overflow: auto; } .sw-list { max-height: 30vh; } }
 .sw-map { height: 250px; border-radius: 8px; overflow: hidden; background: #05070a; flex: none; }
 .sw-map .maplibregl-canvas { cursor: crosshair; }
+.sw-ready { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; padding: 6px; border: 1px solid #ffc62955; border-radius: 8px; background: #ffc6290d; }
+.sw-ready > b { font-size: 12.5px; } .sw-ready #sw-ready-list { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+.sw-chip { font: inherit; font-size: 11.5px; padding: 3px 8px; border-radius: 99px; border: 1px solid #ffc62966; background: transparent; color: inherit; cursor: pointer; }
+.sw-chip:hover { background: #ffc629; color: #111; }
+.sw-bolt { font-style: normal; color: #ffc629; } .sw-picked .btn { margin-top: 6px; align-self: flex-start; }

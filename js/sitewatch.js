@@ -43,6 +43,26 @@ export function loadSites() {
   sitesP ||= fetch(`sites/iran.json?v=${Math.floor(Date.now() / 36e5)}`).then((r) => (r.ok ? r.json() : null)).then((j) => (j?.sites?.length ? j : { sites: FALLBACK, source: '' })).catch(() => ({ sites: FALLBACK, source: '' }));
   return sitesP;
 }
+let watchP = null;
+/** Ready-made passes built by the “Site watch library” Action: { updated, sites: [{ id, name, ll, km, frames: [{ day, file, count, boxes }] }] } */
+export function loadWatchLibrary() {
+  watchP ||= fetch(`sites/watch/index.json?v=${Math.floor(Date.now() / 36e5)}`).then((r) => (r.ok ? r.json() : { sites: [] })).catch(() => ({ sites: [] }));
+  return watchP;
+}
+/** Turn a library entry into editable frames (images copied into the project so it stays self-contained). */
+export async function libraryFrames(entry, onStatus) {
+  const out = [];
+  let i = 0;
+  for (const f of entry.frames || []) {
+    onStatus?.(`Loading ${dayText(f.day)} (${++i} / ${entry.frames.length})…`);
+    const r = await fetch(`sites/watch/${f.file}`);
+    if (!r.ok) continue;
+    const blob = await r.blob();
+    const id = mediaId(); await putMedia(id, blob);
+    out.push({ day: f.day, label: dayText(f.day), media: id, w: f.w, h: f.h, url: URL.createObjectURL(blob), boxes: (f.boxes || []).map((b) => ({ ...b })), count: f.count ?? (f.boxes || []).length, include: f.include !== false, hazy: !!f.hazy, source: entry.source || 'esri_s2', sensor: 'Sentinel-2' });
+  }
+  return out;
+}
 export function siteBBox(ll, km) {
   const h = km / 2, dLat = h / 110.574, dLng = h / (111.32 * Math.cos(ll[1] * D2R));
   return [ll[0] - dLng, ll[1] - dLat, ll[0] + dLng, ll[1] + dLat];
@@ -667,6 +687,7 @@ export function openSiteWatch({ onCreate, helpers }) {
   <div class="sw-body">
     <div class="sw-left">
       <div class="sw-types" id="sw-types"><button type="button" class="on" data-t="">All</button>${Object.entries(SITE_TYPES).map(([k, v]) => `<button type="button" data-t="${k}">${v.icon} ${esc(v.name)}</button>`).join('')}</div>
+      <div class="sw-ready" id="sw-ready" hidden><b>⚡ Ready now</b> <small class="muted" id="sw-ready-when"></small><div id="sw-ready-list"></div></div>
       <input type="search" id="sw-q" placeholder="Search — e.g. Bandar Abbas, Bushehr, Chabahar, OIBB…">
       <div class="sw-list" id="sw-list"><p class="muted small">Loading the site list…</p></div>
       <details class="sw-custom"><summary>A place that isn’t listed</summary><div class="sw-row"><input id="sw-cname" placeholder="Name"><input id="sw-cll" placeholder="lat, lon — e.g. 27.106, 56.072"><select id="sw-ctype">${Object.entries(SITE_TYPES).map(([k, v]) => `<option value="${k}">${esc(v.one)}</option>`).join('')}</select><button type="button" class="btn sm" id="sw-cuse">Use</button></div></details>
@@ -694,7 +715,7 @@ export function openSiteWatch({ onCreate, helpers }) {
     const hits = q ? sites.filter((s) => hay(s).includes(q)) : [];
     const near = (s) => hits.some((h) => Math.hypot((h.ll[0] - s.ll[0]) * Math.cos(h.ll[1] * D2R), h.ll[1] - s.ll[1]) < 0.25);
     const xs = sites.filter((s) => (!type || s.type === type) && (!q || hits.includes(s) || near(s))).sort((a, b) => (hits.includes(b) ? 1 : 0) - (hits.includes(a) ? 1 : 0));
-    $('#sw-list').innerHTML = xs.length ? xs.map((s) => `<button type="button" class="sw-site${site?.id === s.id ? ' on' : ''}" data-id="${esc(s.id)}"><i>${SITE_TYPES[s.type]?.icon || '•'}</i><span><b>${esc(s.name)}</b><small>${esc(SITE_TYPES[s.type]?.one || '')}${s.icao ? ` · ${esc(s.icao)}` : ''}${s.local && s.local !== s.name ? ` · <span dir="rtl">${esc(s.local)}</span>` : ''}</small></span></button>`).join('') : '<p class="muted small">No site matches — add it below with its coordinates.</p>';
+    $('#sw-list').innerHTML = xs.length ? xs.map((s) => `<button type="button" class="sw-site${site?.id === s.id ? ' on' : ''}" data-id="${esc(s.id)}"><i>${SITE_TYPES[s.type]?.icon || '•'}</i><span><b>${esc(s.name)}${readyFor(s) ? ' <em class="sw-bolt" title="Ready-made passes available">⚡</em>' : ''}</b><small>${esc(SITE_TYPES[s.type]?.one || '')}${s.icao ? ` · ${esc(s.icao)}` : ''}${s.local && s.local !== s.name ? ` · <span dir="rtl">${esc(s.local)}</span>` : ''}</small></span></button>`).join('') : '<p class="muted small">No site matches — add it below with its coordinates.</p>';
   };
   let map = null;
   const boxGeo = () => { if (!site) return { type: 'FeatureCollection', features: [] }; const b = siteBBox(site.ll, +$('#sw-km').value); return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]]] } }; };
@@ -732,6 +753,9 @@ export function openSiteWatch({ onCreate, helpers }) {
     $('#sw-km').value = String(t?.km || 3);
     if (t?.target === 'aircraft') $('#sw-source').value = 'wayback';
     hint(); updateBox(true);
+    const ready = readyFor(s);
+    if (ready) $('#sw-picked').insertAdjacentHTML('beforeend', `<button type="button" class="btn sm sw-use-ready">⚡ Use the ready-made passes (${ready.frames.length}, updated ${esc(dayText(ready.updated))})</button>`);
+    $('#sw-picked .sw-use-ready')?.addEventListener('click', () => useLibrary(ready));
   };
   const hint = () => {
     const src = $('#sw-source').value, tg = $('#sw-target').value;
@@ -741,6 +765,28 @@ export function openSiteWatch({ onCreate, helpers }) {
       : src === 'pc_s1' ? 'Radar: ships show as bright points on dark water, through cloud and at night. Anything that never moves (piers, jetties) is removed.'
       : 'Ships are found as bright objects on or beside the water; anything that is there on almost every pass (piers, jetties) is removed. Check the counts — click a pass to correct it.';
   };
+  let library = { sites: [] };
+  const readyFor = (x) => library.sites.find((e) => e.id === x?.libId || (x && Math.hypot((e.ll[0] - x.ll[0]) * Math.cos(e.ll[1] * D2R), e.ll[1] - x.ll[1]) < 0.02 && (e.type === x.type || (e.type === 'naval') === (x.type === 'naval'))));
+  const showReady = () => {
+    if (!library.sites.length) return;
+    $('#sw-ready').hidden = false;
+    $('#sw-ready-when').textContent = library.updated ? `updated ${dayText(library.updated)}` : '';
+    $('#sw-ready-list').innerHTML = library.sites.map((e) => `<button type="button" class="sw-chip" data-lib="${esc(e.id)}">${SITE_TYPES[e.type]?.icon || ''} ${esc(e.name)}</button>`).join('');
+  };
+  const useLibrary = async (e) => {
+    if (busy) return;
+    busy = true;
+    site = { id: `lib-${e.id}`, libId: e.id, type: e.type, name: e.name, ll: e.ll.slice() };
+    $('#sw-picked').innerHTML = `<b>${SITE_TYPES[e.type]?.icon || ''} ${esc(e.name)}</b><small class="muted"></small>`;
+    $('#sw-km').value = String(e.km || 3); $('#sw-source').value = 'esri_s2'; $('#sw-target').value = 'ships'; hint(); updateBox(true); list();
+    run = { frames: [], target: 'ships', word: 'ships', source: 'esri_s2', detector: 'water', km: e.km || 3 };
+    $('#sw-res').innerHTML = ''; $('#sw-done').hidden = true;
+    try { run.frames = await libraryFrames(e, status); renderRes(); status(`${run.frames.length} ready-made passes (${dayText(e.from)} – ${dayText(e.to)}) · ${run.frames.filter((f) => f.include !== false).reduce((a, f) => a + f.count, 0)} ships marked — click a pass to correct it, or press Fetch for other dates`); }
+    catch (err) { status(`⚠ ${err.message}`); }
+    busy = false;
+  };
+  $('#sw-ready-list').addEventListener('click', (ev) => { const b = ev.target.closest('[data-lib]'); const e = b && library.sites.find((x) => x.id === b.dataset.lib); if (e) useLibrary(e); });
+  loadWatchLibrary().then((j) => { library = j || { sites: [] }; showReady(); list(); });
   loadSites().then((j) => { sites = j.sites; map?.getSource('sites')?.setData(sitesGeo()); $('#sw-src').textContent = j.source ? `${sites.length} sites · ${j.source}${j.updated ? ` · ${j.updated}` : ''}` : ''; list(); });
   $('#sw-types').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; type = b.dataset.t; d.querySelectorAll('#sw-types button').forEach((x) => x.classList.toggle('on', x === b)); list(); });
   $('#sw-q').addEventListener('input', list);
