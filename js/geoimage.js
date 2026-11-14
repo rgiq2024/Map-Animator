@@ -41,6 +41,7 @@ export async function preloadImages(scene) {
   const ids = (scene.layers || []).filter((L) => IMG_KINDS.has(L.kind) && !L.hidden).flatMap(mediaOf);
   // dossier HUD photos
   for (const L of scene.layers || []) if (L.kind === 'dossierhud' && !L.hidden) for (const k of ['photo1', 'photo2', 'photo3', 'face', 'strip1', 'strip2', 'strip3', 'strip4']) if (L.style?.[k]) ids.push(L.style[k]);
+  for (const L of scene.layers || []) if (L.kind === 'sitewatch' && !L.hidden) for (const f of L.style?.frames || []) if (f.media && f.include !== false) ids.push(f.media);
   await Promise.all(ids.map((id) => imageFor(id)?.p));
 }
 

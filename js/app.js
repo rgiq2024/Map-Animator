@@ -75,6 +75,12 @@ async function storyToProject(story, note) {
   location.hash = `#/p/${p.id}`;
   setTimeout(() => toast(note, 7000), 1200);
 }
+// Site watch: a port / air base from orbit — monthly passes, counts, video
+async function siteWatch() {
+  const [{ openSiteWatch }, briefing, autostory, scene] = await Promise.all([import('./sitewatch.js'), import('./briefing.js'), import('./autostory.js'), import('./scene.js')]);
+  openSiteWatch({ helpers: { briefing, autostory, scene }, onCreate: (story) => storyToProject(story, 'Site watch video ready — press ▶ to preview. Edit the headline, event marker and counts in the Site watch layers.') });
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-sitewatch]')) siteWatch(); });
 function newsDesk(preset = null, auto = null) {
   openNewsDesk({ aspect: 16 / 9, preset, auto, onCreate: (story) => storyToProject(story, 'News video ready — press ▶ to preview. Check the facts against the sources, then Render video.') });
 }

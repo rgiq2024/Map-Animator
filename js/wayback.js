@@ -9,7 +9,7 @@ export function waybackReleases() {
   releasesP ||= fetch(CONFIG_URL).then((r) => { if (!r.ok) throw new Error('Wayback list unavailable'); return r.json(); }).then((cfg) => Object.entries(cfg).map(([num, v]) => {
     const date = (String(v.itemTitle || '').match(/\d{4}-\d{2}-\d{2}/) || [''])[0];
     const url = String(v.itemURL || '').replace('{level}', '{z}').replace('{row}', '{y}').replace('{col}', '{x}');
-    return { num: +num, date, year: +date.slice(0, 4), url };
+    return { num: +num, date, year: +date.slice(0, 4), url, meta: v.metadataLayerUrl || '' };
   }).filter((r) => r.date && r.url).sort((a, b) => a.date.localeCompare(b.date)));
   releasesP.catch(() => { releasesP = null; });
   return releasesP;
