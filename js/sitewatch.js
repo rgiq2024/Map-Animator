@@ -89,7 +89,10 @@ function quality(cv, radar = false) {
   const s = 96, t = document.createElement('canvas'); t.width = s; t.height = s;
   const g = t.getContext('2d', { willReadFrequently: true }); g.drawImage(cv, 0, 0, s, s);
   const d = g.getImageData(0, 0, s, s).data;
-  let empty = 0, cloud = 0;
+  let empty = 0, cloud = 0, grad = 0, gn = 0;
+  const Yv = new Float32Array(s * s);
+  for (let i = 0; i < d.length; i += 4) Yv[i / 4] = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+  for (let y = 0; y < s - 1; y++) for (let x = 0; x < s - 1; x++) { const i = y * s + x; if (d[i * 4 + 3] < 20) continue; grad += Math.abs(Yv[i + 1] - Yv[i]) + Math.abs(Yv[i + s] - Yv[i]); gn++; }
   for (let i = 0; i < d.length; i += 4) {
     const r = d[i], gg = d[i + 1], b = d[i + 2], a = d[i + 3];
     if (a < 20 || r + gg + b < 12) { empty++; continue; }
@@ -97,7 +100,7 @@ function quality(cv, radar = false) {
     if (!radar && ((mn > 185 && mxv - mn < 30) || (mn > 140 && mxv - mn < 50))) cloud++;
   }
   const n = s * s;
-  return { empty: empty / n, cloud: cloud / n };
+  return { empty: empty / n, cloud: cloud / n, sharp: gn ? grad / gn : 0 };
 }
 
 // ---------------------------------------------------------------- imagery sources → passes
@@ -340,20 +343,25 @@ export async function fetchSitePasses(opts) {
     if (!months.size) throw new Error('No passes found — widen the dates or allow more cloud');
     for (const [m, list] of months) {
       let best = null;
-      for (const c of list.slice(0, source === 'pc_s1' ? 1 : 4)) {
+      for (const c of list.slice(0, source === 'pc_s1' ? 1 : 3)) {
         onStatus?.(`${monthText(`${m}-15`)} · checking ${dayText(c.day)}…`);
         const cv = await renderPass(source, bb, c).catch(() => null);
         if (!cv) continue;
         const q = quality(cv, source === 'pc_s1');
         if (q.empty > 0.2) continue;
-        const score = q.cloud + q.empty;
-        if (!best || score < best.score) best = { cv, c, score, q };
-        if (score < 0.02) break;
+        // clear and crisp beats hazy: edge strength, less what looks like cloud
+        const rank = q.sharp * (1 - Math.min(1, q.cloud * 2)) * (1 - q.empty);
+        if (!best || rank > best.rank) best = { cv, c, rank, q };
+        if (source === 'pc_s1' || (q.cloud < 0.03 && (c.cloud ?? 0) < 2)) break;
       }
-      if (best && best.score < 0.25) await add(best.cv, { day: best.c.day, cloud: Math.round(best.q.cloud * 100), sensor: SW_SOURCES[source].short });
+      if (best) await add(best.cv, { day: best.c.day, cloud: Math.round(best.q.cloud * 100), sharp: +best.q.sharp.toFixed(2), sensor: SW_SOURCES[source].short });
     }
+    // passes much softer than the rest are hazy or cloudy: kept, but not used until ticked
+    const sh = frames.map((f) => f.sharp).filter(Boolean).sort((a, b) => a - b);
+    const med = sh[Math.floor(sh.length / 2)] || 0;
+    if (source !== 'pc_s1' && sh.length >= 4) for (const f of frames) if (f.sharp < med * 0.62) { f.include = false; f.hazy = true; }
   }
-  if (det === 'water') dropStatic(frames);
+  if (det === 'water') { const use = frames.filter((f) => f.include !== false); dropStatic(use.length >= 3 ? use : frames); }
   frames.sort((a, b) => a.day.localeCompare(b.day));
   return { frames, bbox: bb, km, detector: det };
 }
@@ -742,7 +750,7 @@ export function openSiteWatch({ onCreate, helpers }) {
   const status = (t) => { $('#sw-status').textContent = t; };
   const renderRes = () => {
     const fs = run?.frames || [];
-    $('#sw-res').innerHTML = fs.map((f, i) => `<div class="sw-pass${f.include === false ? ' off' : ''}" data-i="${i}"><canvas width="160" height="160"></canvas><b>${esc(f.label)}</b><small>${run.target !== 'none' ? `${f.count} ${esc(run.word)}` : ''}${f.cloud ? ` · cloud ${f.cloud}%` : ''}</small><label><input type="checkbox" ${f.include === false ? '' : 'checked'}> use</label></div>`).join('');
+    $('#sw-res').innerHTML = fs.map((f, i) => `<div class="sw-pass${f.include === false ? ' off' : ''}" data-i="${i}"><canvas width="160" height="160"></canvas><b>${esc(f.label)}</b><small>${run.target !== 'none' ? `${f.count} ${esc(run.word)}` : ''}${f.hazy ? ' · hazy / cloudy' : ''}</small><label><input type="checkbox" ${f.include === false ? '' : 'checked'}> use</label></div>`).join('');
     fs.forEach((f, i) => paintThumb(d.querySelector(`.sw-pass[data-i="${i}"] canvas`), f));
     $('#sw-done').hidden = !fs.length;
   };
