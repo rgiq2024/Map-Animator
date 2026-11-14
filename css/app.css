@@ -1271,3 +1271,5 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 .sw-edit { max-width: 96vw; } .sw-edit canvas { display: block; cursor: crosshair; border-radius: 6px; }
 .sw-custom summary { font-size: 12px; cursor: pointer; opacity: .8; }
 @media (max-width: 760px) { .sw-body { grid-template-columns: 1fr; overflow: auto; } .sw-list { max-height: 30vh; } }
+.sw-map { height: 250px; border-radius: 8px; overflow: hidden; background: #05070a; flex: none; }
+.sw-map .maplibregl-canvas { cursor: crosshair; }

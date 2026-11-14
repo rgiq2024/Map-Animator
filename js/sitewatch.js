@@ -207,26 +207,31 @@ export function brightOnWater(cv, { radar = false, metresPerPx = 5 } = {}) {
     let wB = 0, sB = 0, best = -1;
     for (let k = 0; k < 256; k++) { wB += hist[k]; if (!wB) continue; const wF = tot - wB; if (!wF) break; sB += k * hist[k]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2; if (v > best) { best = v; otsu = k; } }
   }
+  // radar speckle: a light 3×3 smoothing before anything else
+  if (radar) { const Z = Y.slice(); for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { let t = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) t += Z[(y + dy) * W + x + dx]; Y[y * W + x] = t / 9; } }
   for (let i = 0; i < N; i++) {
     if (!valid[i]) continue;
     const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
-    water[i] = radar ? (Y[i] < otsu ? 1 : 0) : ((g + b) / 2 > r * 1.04 && Y[i] < 150 && Math.max(r, g, b) - Math.min(r, g, b) > 6 ? 1 : 0);
+    water[i] = radar ? (Y[i] < otsu ? 1 : 0) : ((g + b) / 2 > r * 1.04 && b < g * 1.35 && Y[i] < 150 && Math.max(r, g, b) - Math.min(r, g, b) > 6 ? 1 : 0);
   }
-  // integral image of water → share of water around each pixel (≈ 70 m radius)
   const R = Math.max(3, Math.round(70 / metresPerPx));
-  const I = new Float64Array((W + 1) * (H + 1));
-  for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += water[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + row; } }
-  const share = (x, y, r) => { const x0 = Math.max(0, x - r), y0 = Math.max(0, y - r), x1 = Math.min(W, x + r + 1), y1 = Math.min(H, y + r + 1); return (I[y1 * (W + 1) + x1] - I[y0 * (W + 1) + x1] - I[y1 * (W + 1) + x0] + I[y0 * (W + 1) + x0]) / Math.max(1, (x1 - x0) * (y1 - y0)); };
+  const W1 = W + 1;
+  const integral = (m) => { const I = new Float64Array(W1 * (H + 1)); for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += m[y * W + x]; I[(y + 1) * W1 + x + 1] = I[y * W1 + x + 1] + row; } } return I; };
+  const shareOf = (I) => (x, y, r) => { const x0 = Math.max(0, x - r), y0 = Math.max(0, y - r), x1 = Math.min(W, x + r + 1), y1 = Math.min(H, y + r + 1); return (I[y1 * W1 + x1] - I[y0 * W1 + x1] - I[y1 * W1 + x0] + I[y0 * W1 + x0]) / Math.max(1, (x1 - x0) * (y1 - y0)); };
+  // real water is part of a large water body (drops blue roofs, ponds, shadows)
+  { const sh = shareOf(integral(water)); const keep = new Uint8Array(N); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; keep[i] = water[i] && sh(x, y, R) > 0.55 ? 1 : 0; } water.set(keep); }
+  const share = shareOf(integral(water));
   let m = 0, m2 = 0, n = 0;
   for (let i = 0; i < N; i++) if (water[i]) { m += Y[i]; m2 += Y[i] * Y[i]; n++; }
   if (n < N * 0.03) return [];
   m /= n; const sd = Math.sqrt(Math.max(1, m2 / n - m * m));
-  const thr = radar ? m + Math.max(5 * sd, 60) : m + Math.max(2.6 * sd, 28);
+  const thr = radar ? m + Math.max(6 * sd, 70) : m + Math.max(2.6 * sd, 28);
+  const minShare = radar ? 0.55 : 0.4, minRing = radar ? 0.6 : 0.45;
   const cand = new Uint8Array(N);
-  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x; if (valid[i] && !water[i] && Y[i] > thr && share(x, y, R) > 0.33) cand[i] = 1; }
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x; if (valid[i] && !water[i] && Y[i] > thr && share(x, y, R) > minShare) cand[i] = 1; }
   // connected components
   const lab = new Int32Array(N); const out = []; let id = 0; const st = [];
-  const a1 = 120 / metresPerPx ** 2, a2 = 30000 / metresPerPx ** 2, maxLen = 420 / metresPerPx;
+  const a1 = (radar ? 300 : 150) / metresPerPx ** 2, a2 = 30000 / metresPerPx ** 2, maxLen = 420 / metresPerPx;
   for (let i = 0; i < N; i++) {
     if (!cand[i] || lab[i]) continue;
     id++; st.push(i); lab[i] = id;
@@ -241,7 +246,7 @@ export function brightOnWater(cv, { radar = false, metresPerPx = 5 } = {}) {
     // the ring just outside the object must be mostly water (a hull in the water or alongside a quay)
     let wr = 0, tr = 0;
     for (let y = Math.max(0, y0 - 2); y <= Math.min(H - 1, y1 + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W - 1, x1 + 2); x++) { if (x >= x0 && x <= x1 && y >= y0 && y <= y1) continue; tr++; wr += water[y * W + x]; }
-    if (!tr || wr / tr < 0.3) continue;
+    if (!tr || wr / tr < minRing) continue;
     const p = 1.5;
     out.push({ cls: 'ship', x0: Math.max(0, x0 - p) / W, y0: Math.max(0, y0 - p) / H, x1: Math.min(W, x1 + 1 + p) / W, y1: Math.min(H, y1 + 1 + p) / H, cx: sx / cnt / W, cy: sy / cnt / H });
   }
@@ -250,8 +255,8 @@ export function brightOnWater(cv, { radar = false, metresPerPx = 5 } = {}) {
 /** Remove objects that are in the same place on (almost) every pass: piers, jetties, buoys, fixed platforms. */
 function dropStatic(frames, tol = 0.012) {
   const n = frames.length;
-  if (n < 5) return;
-  const need = Math.max(4, Math.ceil(n * 0.75));
+  if (n < 3) return;
+  const need = Math.max(3, Math.ceil(n * 0.75));
   for (const f of frames) {
     f.boxes = f.boxes.filter((b) => {
       if (b.manual || b.ai) return true;
@@ -641,7 +646,8 @@ export function openSiteWatch({ onCreate, helpers }) {
       <p class="muted tiny" id="sw-src"></p>
     </div>
     <div class="sw-right">
-      <div class="sw-picked" id="sw-picked"><span class="muted">← pick a site</span></div>
+      <div class="sw-picked" id="sw-picked"><span class="muted">← pick a site (or a dot on the map)</span></div>
+      <div class="sw-map" id="sw-map"></div><p class="muted tiny">The yellow box is the area that is watched — click the map to move it onto the harbour basin, quays or apron.</p>
       <label>Imagery <select id="sw-source">${Object.entries(SW_SOURCES).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('')}</select></label>
       <div class="sw-row"><label>From <input type="date" id="sw-from" value="${from0.toISOString().slice(0, 10)}"></label><label>To <input type="date" id="sw-to" value="${today}"></label><label>Area <select id="sw-km"><option value="1.5">1.5 km</option><option value="2">2 km</option><option value="3" selected>3 km</option><option value="4">4 km</option><option value="6">6 km</option><option value="8">8 km</option></select></label></div>
       <div class="sw-row"><label>Detect <select id="sw-target"><option value="ships">Ships</option><option value="aircraft">Aircraft</option><option value="both">Ships and aircraft</option><option value="none">Nothing — images only</option></select></label><label id="sw-cloudw">Max cloud <select id="sw-cloud"><option>10</option><option selected>30</option><option>60</option></select> %</label></div>
@@ -657,17 +663,48 @@ export function openSiteWatch({ onCreate, helpers }) {
   let sites = [], type = '', site = null, run = null, busy = false;
   const list = () => {
     const q = $('#sw-q').value.trim().toLowerCase();
-    const xs = sites.filter((s) => (!type || s.type === type) && (!q || `${s.name} ${s.local || ''} ${s.icao || ''} ${s.iata || ''}`.toLowerCase().includes(q)));
+    const hay = (s) => `${s.name} ${s.local || ''} ${s.icao || ''} ${s.iata || ''}`.toLowerCase();
+    const hits = q ? sites.filter((s) => hay(s).includes(q)) : [];
+    const near = (s) => hits.some((h) => Math.hypot((h.ll[0] - s.ll[0]) * Math.cos(h.ll[1] * D2R), h.ll[1] - s.ll[1]) < 0.25);
+    const xs = sites.filter((s) => (!type || s.type === type) && (!q || hits.includes(s) || near(s))).sort((a, b) => (hits.includes(b) ? 1 : 0) - (hits.includes(a) ? 1 : 0));
     $('#sw-list').innerHTML = xs.length ? xs.map((s) => `<button type="button" class="sw-site${site?.id === s.id ? ' on' : ''}" data-id="${esc(s.id)}"><i>${SITE_TYPES[s.type]?.icon || '•'}</i><span><b>${esc(s.name)}</b><small>${esc(SITE_TYPES[s.type]?.one || '')}${s.icao ? ` · ${esc(s.icao)}` : ''}${s.local && s.local !== s.name ? ` · <span dir="rtl">${esc(s.local)}</span>` : ''}</small></span></button>`).join('') : '<p class="muted small">No site matches — add it below with its coordinates.</p>';
   };
-  const pick = (s) => {
+  let map = null;
+  const boxGeo = () => { if (!site) return { type: 'FeatureCollection', features: [] }; const b = siteBBox(site.ll, +$('#sw-km').value); return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]], [b[0], b[1]]]] } }; };
+  const sitesGeo = () => ({ type: 'FeatureCollection', features: sites.map((x) => ({ type: 'Feature', properties: { id: x.id, type: x.type, name: x.name }, geometry: { type: 'Point', coordinates: x.ll } })) });
+  const updateBox = (fit = false) => {
+    if (!map?.getSource('box')) return;
+    map.getSource('box').setData(boxGeo());
+    if (fit && site) { const b = siteBBox(site.ll, +$('#sw-km').value * 1.6); map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { duration: 900, padding: 10 }); }
+    if (site) $('#sw-picked small').textContent = `${SITE_TYPES[site.type]?.one || ''} · ${site.ll[1].toFixed(4)}, ${site.ll[0].toFixed(4)}${site.moved ? ' (moved)' : ''}`;
+  };
+  if (window.maplibregl) {
+    try {
+      map = new window.maplibregl.Map({ container: $('#sw-map'), style: { version: 8, sources: { img: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 19, attribution: 'Imagery © Esri' } }, layers: [{ id: 'img', type: 'raster', source: 'img' }] }, center: [54, 31], zoom: 3.8, attributionControl: { compact: true } });
+      map.on('load', () => {
+        map.resize();
+        map.addSource('sites', { type: 'geojson', data: sitesGeo() });
+        map.addLayer({ id: 'sites', type: 'circle', source: 'sites', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3.5, 10, 6], 'circle-color': ['match', ['get', 'type'], 'port', '#38bdf8', 'naval', '#f43f5e', 'airbase', '#f59e0b', '#a3e635'], 'circle-stroke-color': '#000', 'circle-stroke-width': 1 } });
+        map.addSource('box', { type: 'geojson', data: boxGeo() });
+        map.addLayer({ id: 'box', type: 'line', source: 'box', paint: { 'line-color': '#ffc629', 'line-width': 2 } });
+      });
+      map.on('click', (e) => {
+        const f = map.getLayer('sites') && map.queryRenderedFeatures([[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]], { layers: ['sites'] })[0];
+        if (f && (!site || map.getZoom() < 10.5)) { const x = sites.find((q) => q.id === f.properties.id); if (x) { pick(x); return; } }
+        if (site) { site = { ...site, ll: [+e.lngLat.lng.toFixed(5), +e.lngLat.lat.toFixed(5)], moved: true }; updateBox(); }
+      });
+    } catch { map = null; }
+  }
+  if (!map) $('#sw-map').hidden = true;
+  const pick = (s0) => {
+    const s = { ...s0 };
     site = s; list();
     const t = SITE_TYPES[s.type];
     $('#sw-picked').innerHTML = `<b>${t?.icon || ''} ${esc(s.name)}</b><small class="muted">${esc(t?.one || '')} · ${s.ll[1].toFixed(4)}, ${s.ll[0].toFixed(4)}</small>`;
     $('#sw-target').value = t?.target || 'ships';
     $('#sw-km').value = String(t?.km || 3);
     if (t?.target === 'aircraft') $('#sw-source').value = 'wayback';
-    hint();
+    hint(); updateBox(true);
   };
   const hint = () => {
     const src = $('#sw-source').value, tg = $('#sw-target').value;
@@ -677,11 +714,12 @@ export function openSiteWatch({ onCreate, helpers }) {
       : src === 'pc_s1' ? 'Radar: ships show as bright points on dark water, through cloud and at night. Anything that never moves (piers, jetties) is removed.'
       : 'Ships are found as bright objects on or beside the water; anything that is there on almost every pass (piers, jetties) is removed. Check the counts — click a pass to correct it.';
   };
-  loadSites().then((j) => { sites = j.sites; $('#sw-src').textContent = j.source ? `${sites.length} sites · ${j.source}${j.updated ? ` · ${j.updated}` : ''}` : ''; list(); });
+  loadSites().then((j) => { sites = j.sites; map?.getSource('sites')?.setData(sitesGeo()); $('#sw-src').textContent = j.source ? `${sites.length} sites · ${j.source}${j.updated ? ` · ${j.updated}` : ''}` : ''; list(); });
   $('#sw-types').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; type = b.dataset.t; d.querySelectorAll('#sw-types button').forEach((x) => x.classList.toggle('on', x === b)); list(); });
   $('#sw-q').addEventListener('input', list);
   $('#sw-list').addEventListener('click', (e) => { const b = e.target.closest('.sw-site'); if (b) pick(sites.find((s) => s.id === b.dataset.id)); });
   $('#sw-cuse').onclick = () => { const m = $('#sw-cll').value.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/); if (!m) { $('#sw-cll').focus(); return; } pick({ id: `c${Date.now()}`, type: $('#sw-ctype').value, name: $('#sw-cname').value.trim() || 'Site', ll: [+m[2], +m[1]] }); };
+  $('#sw-km').addEventListener('change', () => updateBox(true));
   $('#sw-source').addEventListener('change', hint); $('#sw-target').addEventListener('change', hint); hint();
   const status = (t) => { $('#sw-status').textContent = t; };
   const renderRes = () => {
