@@ -6,7 +6,7 @@ export const BUILTIN_MODELS = {
   // land
   hst: 'High-speed train · articulated (realistic)', train: 'Train (locomotive + coaches)', freight: 'Freight train', tram: 'Tram / metro', car: 'Car', bus: 'Bus', truck: 'Truck', tank: 'Tank',
   // sea
-  warship: 'Warship', containership: 'Container ship', tanker: 'Oil tanker', boat: 'Speed boat',
+  warship: 'Warship', containership: 'Container ship', tanker: 'Oil tanker', riverboat: 'River cruise ship (paddlewheeler)', boat: 'Speed boat',
   // space
   missile: 'Missile', rocket: 'Rocket', satellite: 'Satellite', iss: 'Space station',
   nasa_goes: 'GOES weather satellite · realistic (NASA)', nasa_landsat: 'Landsat 8 · realistic (NASA)', nasa_terra: 'Terra satellite · realistic (NASA)',

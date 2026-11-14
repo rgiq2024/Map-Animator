@@ -256,6 +256,36 @@ function buildModel(kind, accent = '#ff3b30') {
     add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 2.2), glass), 7.52, 2.7, 0);
     add(new THREE.Mesh(boxM(11, 3.2, 2.5, 3.2, 3), mat(0xdfe3e8, { r: 0.6 })), -0.6, 2.4, 0);
     wheelSet(G, [6.4, 1.5, -4, -5.2], 1.2, 0.5, dark, 0.5);
+  } else if (kind === 'riverboat') {
+    // paddlewheel river cruise ship, real size (81 m long, 18 m beam): white hull, four decks of windows,
+    // pilot house and two tall stacks forward, red stern paddlewheel
+    const Lr = 81, Br = 17, Dr = 3.2, hullW = mat(0xf6f6f2, { r: 0.45 }), band = mat(accent || '#a8323a', { r: 0.6 }), red = mat(0xb02a2a, { r: 0.55 }), blk = mat(0x15181c, { r: 0.5 }), gold = mat(0xc9a227, { m: 0.6, r: 0.35 });
+    const hs = new THREE.Shape();
+    [[Lr / 2, 0], [Lr / 2 - 9, Br / 2], [-Lr / 2 + 3, Br / 2], [-Lr / 2, Br / 2 - 3], [-Lr / 2, -Br / 2 + 3], [-Lr / 2 + 3, -Br / 2], [Lr / 2 - 9, -Br / 2]].forEach(([x, z], i) => (i ? hs.lineTo(x, z) : hs.moveTo(x, z)));
+    const hg = new THREE.ExtrudeGeometry(hs, { depth: Dr, bevelEnabled: false }); hg.rotateX(Math.PI / 2); hg.translate(0, Dr, 0);
+    add(new THREE.Mesh(hg, hullW));
+    add(new THREE.Mesh(new THREE.BoxGeometry(Lr * 0.9, 0.7, Br * 1.01), band), -2, 0.4, 0);
+    const decks = [[66, 15.5, -4], [60, 14.5, -5], [52, 13.5, -6], [34, 12, -7]];
+    let y = Dr;
+    decks.forEach(([len, wid, x], i) => {
+      const h = i === 3 ? 1.4 : 3;
+      add(new THREE.Mesh(new THREE.BoxGeometry(len, h, wid), white), x, y + h / 2, 0);
+      if (i < 3) {
+        for (const z of [wid / 2 + 0.02, -wid / 2 - 0.02]) add(new THREE.Mesh(new THREE.BoxGeometry(len * 0.92, h * 0.42, 0.06), glass), x, y + h * 0.55, z);
+        add(new THREE.Mesh(new THREE.BoxGeometry(len + 1.5, 0.25, wid + 1.6), white), x, y + h, 0); // overhanging deck edge
+      }
+      y += h;
+    });
+    add(new THREE.Mesh(new THREE.BoxGeometry(6, 2.6, 7), white), 16, y + 1.3, 0);
+    add(new THREE.Mesh(new THREE.BoxGeometry(6.05, 1.1, 7.05), glass), 16, y + 1.5, 0);
+    for (const z of [3.2, -3.2]) { const st = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.85, 9, 14), blk); add(st, 24, y + 4.5, z); const cr = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 0.8, 1.2, 14), gold); add(cr, 24, y + 9.2, z); }
+    // stern paddlewheel and its housing
+    const wheel = new THREE.Group();
+    const rim = new THREE.CylinderGeometry(4.6, 4.6, 12, 24, 1, true); rim.rotateX(Math.PI / 2);
+    wheel.add(new THREE.Mesh(rim, red));
+    for (let k = 0; k < 10; k++) { const pdl = new THREE.Mesh(new THREE.BoxGeometry(0.35, 4.4, 11.6), red); pdl.position.set(Math.cos((k / 10) * Math.PI * 2) * 2.3, Math.sin((k / 10) * Math.PI * 2) * 2.3, 0); pdl.rotation.z = (k / 10) * Math.PI * 2; wheel.add(pdl); }
+    wheel.position.set(-Lr / 2 - 4, 3.2, 0); G.add(wheel);
+    add(new THREE.Mesh(new THREE.BoxGeometry(3, 2, 13), white), -Lr / 2 - 4, 8.4, 0);
   } else if (kind === 'containership' || kind === 'tanker' || kind === 'boat') {
     const L2 = kind === 'boat' ? 12 : 180, B = kind === 'boat' ? 3.4 : 30, D2 = kind === 'boat' ? 1.6 : 14;
     const hull = new THREE.Shape();
@@ -680,7 +710,9 @@ export class ModelLayer {
         const air = s.motion === 'takeoff' || s.motion === 'landing';
         // take-off: speed up along the runway, lift off after 40 %; landing: the reverse
         const lin = tm.edit ? 0.5 : clamp(tm.tau / D, 0, 1);
-        const u = air ? (s.motion === 'takeoff' ? lin * lin * 0.6 + lin * 0.4 : 1 - (1 - lin) * (1 - lin) * 0.6 - (1 - lin) * 0.4) : tm.edit ? 0.5 : ease(tm.tau / D);
+        let u = air ? (s.motion === 'takeoff' ? lin * lin * 0.6 + lin * 0.4 : 1 - (1 - lin) * (1 - lin) * 0.6 - (1 - lin) * 0.4) : tm.edit ? 0.5 : ease(tm.tau / D);
+        // ram: steady speed into the target, a hard stop, then a short recoil
+        if (s.motion === 'ram') { const hit = Math.min(D, +s.impactAt || D * 0.6), q = clamp(tt / hit, 0, 1), post = Math.max(0, tt - hit); u = tm.edit ? 0.9 : q * (1.15 - 0.15 * q) - 0.015 * Math.sin(Math.min(1, post / 1.6) * Math.PI) * Math.exp(-post * 0.8); }
         if (L.geom.type === 'LineString') {
           const p = pathAt(L.geom.coordinates, s.motion === 'none' ? 0 : u);
           ll = p.ll;
@@ -690,6 +722,14 @@ export class ModelLayer {
         altitude = +s.altitude || 0;
         if (s.motion === 'float') altitude += Math.sin(tt * 2) * (+s.size || 1) * 4;
         pitch = +s.pitch || 0; roll = +s.roll || 0;
+        if (s.motion === 'capsize') {
+          // a jolt at the impact, then the ship heels over onto its side and settles low in the water
+          const at0 = s.capsizeAt == null || s.capsizeAt === '' ? 2 : +s.capsizeAt, dur = +s.capsizeDur || 5;
+          const k = tm.edit ? 0 : clamp((tt - at0) / dur, 0, 1), kk = k * k * (3 - 2 * k);
+          const jolt = tm.edit ? 0 : Math.exp(-Math.max(0, tt - at0) * 3) * Math.sin(Math.max(0, tt - at0) * 18) * (tt >= at0 ? 3 : 0);
+          roll += (+s.capsizeRoll || 80) * kk + jolt;
+          altitude -= (+s.capsizeSink || 4) * kk;
+        }
         if (air && L.geom.type === 'LineString') {
           const climb = s.motion === 'takeoff' ? clamp((u - 0.4) / 0.6, 0, 1) : clamp((0.6 - u) / 0.6, 0, 1);
           const top = Math.max(50, +s.climb || (real ? 250 : 120));
