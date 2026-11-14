@@ -26,7 +26,7 @@ area["ISO3166-1"="IR"][admin_level=2]->.ir;
   nwr["harbour"="yes"]["name"](area.ir);
   nwr["seamark:type"="harbour"]["name"](area.ir);
 );
-out tags center bb;`;
+out tags bb;`;
 
 const AIRBASE = /air ?base|airbase|tactical|\btfb\b|air force|iriaf|irgc|پایگاه|نیروی هوایی|شکاری|military/i;
 const NAVAL = /naval|navy|نیروی دریایی|ندسا|دریابانی|marine base/i;
@@ -44,11 +44,21 @@ function main() {}
   await mkdir(OUT, { recursive: true });
   let j = null;
   for (const ep of OVERPASS) { j = await getJSON(ep, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(Q) }, 2); if (j?.elements?.length) { log('Overpass', ep, j.elements.length); break; } }
+  if (process.env.SITES_RAW) await writeFile(new URL('raw-osm.json', OUT), JSON.stringify(j?.elements || []));
+  const WDQ = `SELECT ?item ?itemLabel ?fa ?coord ?icao ?iata ?cls WHERE {
+    VALUES ?cls { wd:Q1248784 wd:Q695850 wd:Q44782 wd:Q1324633 wd:Q2215841 wd:Q18917976 wd:Q644371 wd:Q7246 }
+    ?item wdt:P31 ?cls; wdt:P17 wd:Q794; wdt:P625 ?coord.
+    OPTIONAL { ?item wdt:P239 ?icao } OPTIONAL { ?item wdt:P238 ?iata }
+    OPTIONAL { ?item rdfs:label ?fa FILTER(lang(?fa) = "fa") }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en,fa". } }`;
+  const wd = await getJSON('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(WDQ), { headers: { Accept: 'application/sparql-results+json' } }, 3);
+  if (process.env.SITES_RAW) await writeFile(new URL('raw-wd.json', OUT), JSON.stringify(wd?.results?.bindings || []));
+  log('wikidata', wd?.results?.bindings?.length);
   const sites = [];
   for (const e of j?.elements || []) {
     const t = e.tags || {}; const type = classify(t);
     if (!type) continue;
-    const c = e.center || (e.lat != null ? { lat: e.lat, lon: e.lon } : null);
+    const c = e.bounds ? { lat: (e.bounds.minlat + e.bounds.maxlat) / 2, lon: (e.bounds.minlon + e.bounds.maxlon) / 2 } : e.lat != null ? { lat: e.lat, lon: e.lon } : null;
     if (!c) continue;
     const b = e.bounds ? [e.bounds.minlon, e.bounds.minlat, e.bounds.maxlon, e.bounds.maxlat].map((v) => +v.toFixed(5)) : null;
     const name = (t['name:en'] || t['int_name'] || t.name || '').trim();

@@ -6,6 +6,10 @@ on:
   schedule:
     - cron: '17 4 9 * *'
   workflow_dispatch:
+    inputs:
+      raw:
+        description: 'Also save the raw OSM / Wikidata answers'
+        default: ''
 
 permissions:
   contents: write
@@ -25,6 +29,8 @@ jobs:
         with:
           node-version: 20
       - name: Build the site list
+        env:
+          SITES_RAW: ${{ github.event.inputs.raw || '' }}
         run: node tools/sites-fetch.mjs
       - name: Commit
         run: |
