@@ -9,6 +9,9 @@ on:
         description: 'JSON list of cases'
         default: ''
 
+permissions:
+  contents: write
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -27,8 +30,8 @@ jobs:
           python3 -m http.server 8811 >/dev/null 2>&1 &
           sleep 2
           node tools/sitewatch-e2e.mjs
-      - uses: actions/upload-artifact@v4
+      - name: Keep the contact sheets on the e2e-results branch
         if: always()
-        with:
-          name: sitewatch-e2e
-          path: e2e/
+        run: |
+          cd e2e && git init -q && git checkout -q -b e2e-results && git add . && git -c user.name=e2e -c user.email=e2e@users.noreply.github.com commit -qm "Site watch check $(date -u +%F)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" e2e-results

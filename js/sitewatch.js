@@ -85,7 +85,7 @@ async function stitch(tpl, bb, z, maxPx = 1600) {
 const zoomFor = (bb, px) => clamp(Math.round(Math.log2(px / 256 / (mx(bb[2]) - mx(bb[0])))), 3, 19);
 
 /** Share of the image that is missing (transparent / black) or white cloud. */
-function quality(cv) {
+function quality(cv, radar = false) {
   const s = 96, t = document.createElement('canvas'); t.width = s; t.height = s;
   const g = t.getContext('2d', { willReadFrequently: true }); g.drawImage(cv, 0, 0, s, s);
   const d = g.getImageData(0, 0, s, s).data;
@@ -94,7 +94,7 @@ function quality(cv) {
     const r = d[i], gg = d[i + 1], b = d[i + 2], a = d[i + 3];
     if (a < 20 || r + gg + b < 12) { empty++; continue; }
     const mn = Math.min(r, gg, b), mxv = Math.max(r, gg, b);
-    if (mn > 185 && mxv - mn < 30) cloud++;
+    if (!radar && mn > 185 && mxv - mn < 30) cloud++;
   }
   const n = s * s;
   return { empty: empty / n, cloud: cloud / n };
@@ -321,7 +321,7 @@ export async function fetchSitePasses(opts) {
         onStatus?.(`${monthText(`${m}-15`)} · checking ${dayText(c.day)}…`);
         const cv = await renderPass(source, bb, c).catch(() => null);
         if (!cv) continue;
-        const q = quality(cv);
+        const q = quality(cv, source === 'pc_s1');
         if (q.empty > 0.2) continue;
         const score = q.cloud + q.empty;
         if (!best || score < best.score) best = { cv, c, score, q };
