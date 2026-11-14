@@ -256,10 +256,10 @@ export function brightOnWater(cv, { radar = false, metresPerPx = 5 } = {}) {
   return out;
 }
 /** Remove objects that are in the same place on (almost) every pass: piers, jetties, buoys, fixed platforms. */
-function dropStatic(frames, tol = 0.012) {
+function dropStatic(frames, tol = 0.02) {
   const n = frames.length;
   if (n < 3) return;
-  const need = Math.max(3, Math.ceil(n * 0.75));
+  const need = Math.max(3, Math.ceil(n * 0.6));
   for (const f of frames) {
     f.boxes = f.boxes.filter((b) => {
       if (b.manual || b.ai) return true;
@@ -437,12 +437,13 @@ function chip(g, text, x, y, size, bg, fg, anchor = 'bl') {
 }
 function imgOf(f) { const e = f?.media ? imageFor(f.media) : null; return e?.ready ? e : null; }
 /** draw one pass into a box (cover), with its markers */
-function drawPass(g, f, x, y, w, h, s, unit, a = 1, mark = 1) {
+function drawPass(g, f, x, y, w, h, s, unit, a = 1, mark = 1, fit = 'cover') {
   const im = imgOf(f);
   g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
   g.fillStyle = '#121820'; g.fillRect(x, y, w, h);
   let ix = x, iy = y, iw = w, ih = h;
-  if (im) { const k = Math.max(w / im.w, h / im.h); iw = im.w * k; ih = im.h * k; ix = x + (w - iw) / 2; iy = y + (h - ih) / 2; g.globalAlpha = a; g.drawImage(im.bmp, ix, iy, iw, ih); g.globalAlpha = 1; }
+  if (im && fit === 'contain') { const kb = Math.max(w / im.w, h / im.h); g.globalAlpha = a * 0.35; g.filter = 'blur(14px) brightness(0.6)'; g.drawImage(im.bmp, x + (w - im.w * kb) / 2, y + (h - im.h * kb) / 2, im.w * kb, im.h * kb); g.filter = 'none'; g.globalAlpha = 1; }
+  if (im) { const k = fit === 'contain' ? Math.min(w / im.w, h / im.h) : Math.max(w / im.w, h / im.h); iw = im.w * k; ih = im.h * k; ix = x + (w - iw) / 2; iy = y + (h - ih) / 2; g.globalAlpha = a; g.drawImage(im.bmp, ix, iy, iw, ih); g.globalAlpha = 1; }
   if (s.showBoxes !== false && mark > 0 && f.boxes?.length) {
     g.strokeStyle = s.boxColor || '#ff4d3d'; g.lineWidth = Math.max(1, 1.4 * unit); g.globalAlpha = mark;
     for (const b of f.boxes) {
@@ -538,9 +539,9 @@ function drawFlip(g, s, frames, fr, unit, T, L, tm) {
   const pos = tm.edit ? n - 1 : clamp((T - 0.3) / per, 0, n - 1 + 0.999);
   const k = Math.floor(pos), u = pos - k;
   const ix = fr.x + fr.w * 0.03, iy = fr.y + fr.h * 0.06, iw = fr.w * 0.94, ih = fr.h * (s.footer ? 0.73 : 0.78);
-  drawPass(g, frames[k], ix, iy, iw, ih, s, unit, 1, 1);
+  drawPass(g, frames[k], ix, iy, iw, ih, s, unit, 1, 1, 'contain');
   const fade = clamp((u * per - (per - xf)) / xf, 0, 1);
-  if (fade > 0 && frames[k + 1]) drawPass(g, frames[k + 1], ix, iy, iw, ih, s, unit, fade, fade);
+  if (fade > 0 && frames[k + 1]) drawPass(g, frames[k + 1], ix, iy, iw, ih, s, unit, fade, fade, 'contain');
   const f = frames[fade > 0.5 && frames[k + 1] ? k + 1 : k];
   // date stamp + site + count
   const c1 = chip(g, f.label.toUpperCase(), ix + 14 * unit, iy + 14 * unit, 20 * unit, 'rgba(8,11,16,0.86)', '#ffffff', 'tl');
