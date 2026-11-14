@@ -1,0 +1,297 @@
+{
+ "out": [
+  {
+   "case": "amirabad_s2",
+   "renders": [
+    "VV, VH False-color composite",
+    "HH, HV False-color composite",
+    "VV polarization",
+    "VH polarization",
+    "HH polarization"
+   ],
+   "ok": true,
+   "ms": 132921,
+   "frames": [
+    {
+     "day": "2025-09-25",
+     "count": 0,
+     "cloud": 8,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2025-10-07",
+     "count": 12,
+     "cloud": 13,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2025-11-19",
+     "count": 17,
+     "cloud": 9,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2025-12-29",
+     "count": 1,
+     "cloud": 8,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-01-18",
+     "count": 3,
+     "cloud": 10,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-02-17",
+     "count": 4,
+     "cloud": 7,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-03-04",
+     "count": 4,
+     "cloud": 7,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-04-23",
+     "count": 8,
+     "cloud": 9,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-05-28",
+     "count": 9,
+     "cloud": 14,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-06-12",
+     "count": 4,
+     "cloud": 9,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-07-02",
+     "count": 3,
+     "cloud": 9,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-08-06",
+     "count": 2,
+     "cloud": 14,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-09-15",
+     "count": 9,
+     "cloud": 9,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-10-12",
+     "count": 6,
+     "cloud": 7,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-11-04",
+     "count": 6,
+     "cloud": 7,
+     "w": 750,
+     "h": 755,
+     "sensor": "Sentinel-2"
+    }
+   ],
+   "detector": "water",
+   "status": [
+    "Oct 2026 · checking 15 Oct 2026…",
+    "Oct 2026 · checking 12 Oct 2026…",
+    "Oct 2026 · checking 30 Oct 2026…",
+    "Looking for ships · 12 Oct 2026",
+    "Nov 2026 · checking 4 Nov 2026…",
+    "Looking for ships · 4 Nov 2026"
+   ]
+  },
+  {
+   "case": "rajaee_s2",
+   "renders": [
+    "VV, VH False-color composite",
+    "HH, HV False-color composite",
+    "VV polarization",
+    "VH polarization",
+    "HH polarization"
+   ],
+   "ok": true,
+   "ms": 218492,
+   "frames": [
+    {
+     "day": "2025-09-29",
+     "count": 10,
+     "cloud": 13,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2025-10-29",
+     "count": 2,
+     "cloud": 12,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2025-11-20",
+     "count": 23,
+     "cloud": 14,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2025-12-23",
+     "count": 10,
+     "cloud": 12,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-01-17",
+     "count": 11,
+     "cloud": 13,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-02-21",
+     "count": 8,
+     "cloud": 12,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-03-28",
+     "count": 4,
+     "cloud": 12,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-04-02",
+     "count": 11,
+     "cloud": 12,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-05-27",
+     "count": 12,
+     "cloud": 21,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-06-16",
+     "count": 25,
+     "cloud": 15,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-07-26",
+     "count": 10,
+     "cloud": 13,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-08-10",
+     "count": 13,
+     "cloud": 14,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-09-24",
+     "count": 16,
+     "cloud": 16,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-10-26",
+     "count": 11,
+     "cloud": 11,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    },
+    {
+     "day": "2026-11-08",
+     "count": 14,
+     "cloud": 10,
+     "w": 993,
+     "h": 1000,
+     "sensor": "Sentinel-2"
+    }
+   ],
+   "detector": "water",
+   "status": [
+    "Oct 2026 · checking 9 Oct 2026…",
+    "Oct 2026 · checking 24 Oct 2026…",
+    "Looking for ships · 26 Oct 2026",
+    "Nov 2026 · checking 8 Nov 2026…",
+    "Nov 2026 · checking 3 Nov 2026…",
+    "Looking for ships · 8 Nov 2026"
+   ]
+  }
+ ],
+ "logs": [
+  "warning: [GroupMarkerNotSet(crbug.com/242999)!:A0601C009C370000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader flag to opt in to lower security guarantees for trusted content.",
+  "warning: [.WebGL-0x103c02462200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+  "warning: [.WebGL-0x103c02462200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+  "warning: [.WebGL-0x103c02462200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+  "warning: [.WebGL-0x103c02462200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+ ]
+}
