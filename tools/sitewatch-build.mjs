@@ -50,7 +50,7 @@ async function worker() {
         for (const f of res.frames) {
           const blob = await (await fetch(f.url)).blob();
           const b64 = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.readAsDataURL(blob); });
-          frames.push({ day: f.day, count: f.count, boxes: f.boxes.map((b) => ({ cls: b.cls, cx: +b.cx.toFixed(4), cy: +b.cy.toFixed(4), x0: +b.x0.toFixed(4), y0: +b.y0.toFixed(4), x1: +b.x1.toFixed(4), y1: +b.y1.toFixed(4) })), w: f.w, h: f.h, include: f.include !== false, hazy: !!f.hazy, b64 });
+          frames.push({ day: f.day, count: f.count, boxes: f.boxes.map((b) => ({ cls: b.cls, cx: +b.cx.toFixed(4), cy: +b.cy.toFixed(4), x0: +b.x0.toFixed(4), y0: +b.y0.toFixed(4), x1: +b.x1.toFixed(4), y1: +b.y1.toFixed(4) })), w: f.w, h: f.h, include: f.include !== false, hazy: !!f.hazy, odd: !!f.odd, b64 });
         }
         return { ok: true, frames, bbox: res.bbox };
       } catch (e) { return { ok: false, error: String(e?.message || e) }; }

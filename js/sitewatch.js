@@ -59,7 +59,7 @@ export async function libraryFrames(entry, onStatus) {
     if (!r.ok) continue;
     const blob = await r.blob();
     const id = mediaId(); await putMedia(id, blob);
-    out.push({ day: f.day, label: dayText(f.day), media: id, w: f.w, h: f.h, url: URL.createObjectURL(blob), boxes: (f.boxes || []).map((b) => ({ ...b })), count: f.count ?? (f.boxes || []).length, include: f.include !== false, hazy: !!f.hazy, source: entry.source || 'esri_s2', sensor: 'Sentinel-2' });
+    out.push({ day: f.day, label: dayText(f.day), media: id, w: f.w, h: f.h, url: URL.createObjectURL(blob), boxes: (f.boxes || []).map((b) => ({ ...b })), count: f.count ?? (f.boxes || []).length, include: f.include !== false, hazy: !!f.hazy, odd: !!f.odd, source: entry.source || 'esri_s2', sensor: 'Sentinel-2' });
   }
   return out;
 }
@@ -267,9 +267,16 @@ export function brightOnWater(cv, { radar = false, metresPerPx = 5 } = {}) {
     const len = Math.hypot(x1 - x0 + 1, y1 - y0 + 1);
     if (cnt < a1 || cnt > a2 || len > maxLen) continue;
     // the ring just outside the object must be mostly water (a hull in the water or alongside a quay)
-    let wr = 0, tr = 0;
-    for (let y = Math.max(0, y0 - 2); y <= Math.min(H - 1, y1 + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W - 1, x1 + 2); x++) { if (x >= x0 && x <= x1 && y >= y0 && y <= y1) continue; tr++; wr += water[y * W + x]; }
+    let wr = 0, tr = 0, sand = 0, landN = 0;
+    for (let y = Math.max(0, y0 - 2); y <= Math.min(H - 1, y1 + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W - 1, x1 + 2); x++) {
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) continue;
+      const j = y * W + x; tr++;
+      if (water[j]) { wr++; continue; }
+      landN++;
+      if (!radar && d[j * 4] - d[j * 4 + 2] > 22 && d[j * 4] > 110) sand++; // beige beach / sand bar next to it = surf, not a hull
+    }
     if (!tr || wr / tr < minRing) continue;
+    if (landN > 3 && sand / landN > 0.5) continue;
     const p = 1.5;
     out.push({ cls: 'ship', x0: Math.max(0, x0 - p) / W, y0: Math.max(0, y0 - p) / H, x1: Math.min(W, x1 + 1 + p) / W, y1: Math.min(H, y1 + 1 + p) / H, cx: sx / cnt / W, cy: sy / cnt / H });
   }
@@ -381,7 +388,12 @@ export async function fetchSitePasses(opts) {
     const med = sh[Math.floor(sh.length / 2)] || 0;
     if (source !== 'pc_s1' && sh.length >= 4) for (const f of frames) if (f.sharp < med * 0.62) { f.include = false; f.hazy = true; }
   }
-  if (det === 'water') { const use = frames.filter((f) => f.include !== false); dropStatic(use.length >= 3 ? use : frames); }
+  if (det === 'water') {
+    const use = frames.filter((f) => f.include !== false); dropStatic(use.length >= 3 ? use : frames);
+    // a pass with far more "ships" than usual is a misread image (haze, glint, a flooded mudflat): set it aside
+    const cs = use.map((f) => f.count).sort((a, b) => a - b), med = cs[Math.floor(cs.length / 2)] || 0;
+    if (cs.length >= 4) for (const f of use) if (f.count > Math.max(med * 3, med + 25)) { f.include = false; f.odd = true; }
+  }
   frames.sort((a, b) => a.day.localeCompare(b.day));
   return { frames, bbox: bb, km, detector: det };
 }
@@ -797,7 +809,7 @@ export function openSiteWatch({ onCreate, helpers }) {
   const status = (t) => { $('#sw-status').textContent = t; };
   const renderRes = () => {
     const fs = run?.frames || [];
-    $('#sw-res').innerHTML = fs.map((f, i) => `<div class="sw-pass${f.include === false ? ' off' : ''}" data-i="${i}"><canvas width="160" height="160"></canvas><b>${esc(f.label)}</b><small>${run.target !== 'none' ? `${f.count} ${esc(run.word)}` : ''}${f.hazy ? ' · hazy / cloudy' : ''}</small><label><input type="checkbox" ${f.include === false ? '' : 'checked'}> use</label></div>`).join('');
+    $('#sw-res').innerHTML = fs.map((f, i) => `<div class="sw-pass${f.include === false ? ' off' : ''}" data-i="${i}"><canvas width="160" height="160"></canvas><b>${esc(f.label)}</b><small>${run.target !== 'none' ? `${f.count} ${esc(run.word)}` : ''}${f.hazy ? ' · hazy / cloudy' : ''}${f.odd ? ' · count looks wrong' : ''}</small><label><input type="checkbox" ${f.include === false ? '' : 'checked'}> use</label></div>`).join('');
     fs.forEach((f, i) => paintThumb(d.querySelector(`.sw-pass[data-i="${i}"] canvas`), f));
     $('#sw-done').hidden = !fs.length;
   };
