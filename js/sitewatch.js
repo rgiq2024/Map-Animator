@@ -94,7 +94,7 @@ function quality(cv, radar = false) {
     const r = d[i], gg = d[i + 1], b = d[i + 2], a = d[i + 3];
     if (a < 20 || r + gg + b < 12) { empty++; continue; }
     const mn = Math.min(r, gg, b), mxv = Math.max(r, gg, b);
-    if (!radar && mn > 185 && mxv - mn < 30) cloud++;
+    if (!radar && ((mn > 185 && mxv - mn < 30) || (mn > 140 && mxv - mn < 50))) cloud++;
   }
   const n = s * s;
   return { empty: empty / n, cloud: cloud / n };
@@ -288,7 +288,7 @@ async function detectAI(cv, target) {
     // a ship has water beside it: look in a ring about one hull-length wide
     const xs = r.pts.map((p) => p[0] / cv.width), ys = r.pts.map((p) => p[1] / cv.height);
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2, len = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-    return r.conf >= 0.45 && wet(cx, cy, Math.max(0.02, len)) > 0.18;
+    return r.conf >= 0.45 && wet(cx, cy, Math.max(0.015, len * 0.6)) > 0.3;
   }).map((r) => {
     const xs = r.pts.map((p) => p[0]), ys = r.pts.map((p) => p[1]);
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
@@ -340,7 +340,7 @@ export async function fetchSitePasses(opts) {
     if (!months.size) throw new Error('No passes found — widen the dates or allow more cloud');
     for (const [m, list] of months) {
       let best = null;
-      for (const c of list.slice(0, source === 'pc_s1' ? 1 : 3)) {
+      for (const c of list.slice(0, source === 'pc_s1' ? 1 : 4)) {
         onStatus?.(`${monthText(`${m}-15`)} · checking ${dayText(c.day)}…`);
         const cv = await renderPass(source, bb, c).catch(() => null);
         if (!cv) continue;
@@ -350,7 +350,7 @@ export async function fetchSitePasses(opts) {
         if (!best || score < best.score) best = { cv, c, score, q };
         if (score < 0.02) break;
       }
-      if (best && best.score < 0.35) await add(best.cv, { day: best.c.day, cloud: Math.round(best.q.cloud * 100), sensor: SW_SOURCES[source].short });
+      if (best && best.score < 0.25) await add(best.cv, { day: best.c.day, cloud: Math.round(best.q.cloud * 100), sensor: SW_SOURCES[source].short });
     }
   }
   if (det === 'water') dropStatic(frames);
