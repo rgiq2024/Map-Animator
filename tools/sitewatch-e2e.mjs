@@ -10,6 +10,18 @@ await pg.goto('http://localhost:8811/index.html'); await pg.waitForTimeout(2500)
 const cases = JSON.parse(process.env.CASES || '[]');
 const out = [];
 for (const c of cases) {
+  if (c.gv) {
+    // check one of the geo-visualisation data fetches (flowFetch / riversFetch) with a stand-in map
+    const r = await pg.evaluate(async (c) => {
+      const GV = await import('./js/geoviz.js'); const [w, s0, e, n] = c.bounds;
+      const map = { getBounds: () => ({ getWest: () => w, getEast: () => e, getSouth: () => s0, getNorth: () => n }) };
+      const L = { style: { ...(c.style || {}) } };
+      try { const msg = await GV.GV_ACTIONS[c.gv](L, { map, toast: () => {} }); return { ok: true, msg, sample: JSON.stringify(L.style).slice(0, 400) }; } catch (err) { return { ok: false, error: String(err?.message || err) }; }
+    }, c);
+    console.log(c.name, JSON.stringify(r));
+    out.push({ case: c.name, ...r });
+    continue;
+  }
   const r = await pg.evaluate(async (c) => {
     const SW = await import('./js/sitewatch.js'); const PC = await import('./js/pcsat.js'); window.__renders = await PC.pcRenders('sentinel-1-rtc').catch((e) => String(e));
     const t0 = Date.now(); const st = [];
