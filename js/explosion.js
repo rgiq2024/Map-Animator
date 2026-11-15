@@ -204,6 +204,13 @@ export function drawExplosion(ctx, x, y, R, tau, seed = 1, o = {}) {
   ctx.restore();
 }
 
+/** One textured puff from a named set: hot | mid | cool | smoke | dust (for clouds built elsewhere). */
+export function drawPuffSet(ctx, x, y, r, rot, alpha, set = 'smoke') {
+  const T = tex();
+  const arr = T[set] || T.smoke;
+  sprite(ctx, arr[Math.abs(Math.round(rot * 10)) % arr.length], x, y, r, rot, alpha);
+  ctx.globalAlpha = 1;
+}
 /** Billowing exhaust smoke for rocket launches (short-lived puffs, not a line). */
 export function drawPuff(ctx, x, y, r, rot, alpha, kind = 'smoke') {
   const T = tex();

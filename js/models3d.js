@@ -93,6 +93,55 @@ function railCar(G, x0, len, body, stripe, glass, dark, loco) {
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), mat(0xfff6c0, { e: 0xfff0a0, ei: 2 })); lamp.position.set(x0 + 2.4, 1.6, 0); G.add(lamp);
   }
 }
+/** A modern 3-blade wind turbine in metres: tapered tower, nacelle, hub and a rotor that spins (userData.spinX). Faces +x. */
+function buildTurbine(hub = 95, rotorD = 120, rpm = 14, seed = 0) {
+  const G = new THREE.Group();
+  const white = mat(0xf3f4f2, { m: 0.15, r: 0.45 }), red = mat(0xd32f2f, { r: 0.5 }), grey = mat(0xc9cdd1, { m: 0.3, r: 0.4 });
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(hub * 0.022, hub * 0.045, hub, 20), white); tower.position.y = hub / 2; G.add(tower);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(hub * 0.07, hub * 0.08, 1.5, 20), grey); base.position.y = 0.75; G.add(base);
+  const nac = new THREE.Mesh(new THREE.BoxGeometry(hub * 0.14, hub * 0.045, hub * 0.045), white); nac.position.set(-hub * 0.035, hub + hub * 0.012, 0); G.add(nac);
+  const rotor = new THREE.Group(); rotor.position.set(hub * 0.045, hub + hub * 0.012, 0);
+  const hubM = new THREE.Mesh(new THREE.SphereGeometry(hub * 0.028, 16, 12), white); hubM.scale.set(1.4, 1, 1); rotor.add(hubM);
+  const R = rotorD / 2;
+  for (let k = 0; k < 3; k++) {
+    const blade = new THREE.Group();
+    const sh = new THREE.Shape(); // a slim aerofoil-ish blade outline in the y–z plane
+    sh.moveTo(-R * 0.03, 0); sh.lineTo(R * 0.045, R * 0.18); sh.lineTo(R * 0.02, R * 0.92); sh.lineTo(0, R); sh.lineTo(-R * 0.012, R * 0.92); sh.lineTo(-R * 0.03, R * 0.2); sh.lineTo(-R * 0.03, 0);
+    const bg = new THREE.ExtrudeGeometry(sh, { depth: R * 0.012, bevelEnabled: false }); bg.rotateY(Math.PI / 2);
+    const bm = new THREE.Mesh(bg, white); blade.add(bm);
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(R * 0.013, R * 0.07, R * 0.03), red); tip.position.set(R * 0.006, R * 0.955, 0); blade.add(tip);
+    blade.rotation.x = (k * Math.PI * 2) / 3; rotor.add(blade);
+  }
+  rotor.rotation.x = seed * 2.1;
+  rotor.userData.spinX = (rpm * Math.PI * 2) / 60;
+  G.add(rotor);
+  return G;
+}
+/** A wind farm inside a polygon: turbines on a staggered grid, facing the wind, rising one by one. */
+function buildFarm(L) {
+  const s = L.style, ring = L.geom.coordinates[0];
+  const xs = ring.map((c) => c[0]), ys = ring.map((c) => c[1]);
+  const c0 = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  const kx = 111320 * Math.cos(c0[1] * D2R), ky = 110540;
+  const P = ring.map(([x, y]) => [(x - c0[0]) * kx, -(y - c0[1]) * ky]);
+  const inside = (x, z) => { let ins = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins; } return ins; };
+  const sp = Math.max(120, +s.spacing || 450), hub = +s.hub || 95, rotor = +s.rotor || 120, rpm = +s.rpm || 14;
+  const minX = Math.min(...P.map((p) => p[0])), maxX = Math.max(...P.map((p) => p[0])), minZ = Math.min(...P.map((p) => p[1])), maxZ = Math.max(...P.map((p) => p[1]));
+  const G = new THREE.Group();
+  const face = (90 - (((+s.windFrom || 225) + 180) % 360)) * D2R; // rotor faces into the wind
+  let a = (+s.seed || 1) * 7919 + 1; const rnd = () => { a = (a * 16807) % 2147483647; return (a - 1) / 2147483646; };
+  let row = 0, n = 0;
+  for (let z = minZ + sp / 2; z < maxZ; z += sp * 0.87, row++) for (let x = minX + sp / 2 + (row % 2 ? sp / 2 : 0); x < maxX; x += sp) {
+    if (n >= (+s.max || 80)) break;
+    const jx = x + (rnd() - 0.5) * sp * 0.25, jz = z + (rnd() - 0.5) * sp * 0.25;
+    if (!inside(jx, jz)) continue;
+    const t = buildTurbine(hub, rotor, rpm * (0.9 + 0.2 * rnd()), rnd());
+    t.position.set(jx, 0, jz); t.rotation.y = face;
+    t.userData.grow = n; t.userData.h = 1;
+    G.add(t); n++;
+  }
+  return { obj: G, centre: c0, count: n };
+}
 function buildModel(kind, accent = '#ff3b30') {
   const G = new THREE.Group();
   const grey = mat(0x9aa3ad), dark = mat(0x3c434a), white = mat(0xf2f4f6, { m: 0.2, r: 0.4 }), acc = mat(accent, { m: 0.2 });
@@ -256,6 +305,8 @@ function buildModel(kind, accent = '#ff3b30') {
     add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 2.2), glass), 7.52, 2.7, 0);
     add(new THREE.Mesh(boxM(11, 3.2, 2.5, 3.2, 3), mat(0xdfe3e8, { r: 0.6 })), -0.6, 2.4, 0);
     wheelSet(G, [6.4, 1.5, -4, -5.2], 1.2, 0.5, dark, 0.5);
+  } else if (kind === 'windturbine') {
+    G.add(buildTurbine(95, 120, 14));
   } else if (kind === 'riverboat') {
     // paddlewheel river cruise ship, real size (81 m long, 18 m beam): white hull, four decks of windows,
     // pilot house and two tall stacks forward, red stern paddlewheel
@@ -511,6 +562,7 @@ function jobsOf(scene) {
       out.push({ id: `${L.id}#b`, L, role: 'colB', source: s.modelB || 'builtin:train', color: s.colorB || '#2471a3' });
     } else if ((L.kind === 'bombing' || L.kind === 'trajectory' || L.kind === 'vehicle') && s.model3d && linesOf(L.geom)) out.push({ id: `${L.id}#v`, L, role: L.kind, source: s.model3d, color: s.color });
     else if (L.kind === 'city3d' && L.geom.type === 'Polygon') out.push({ id: `${L.id}#city`, L, role: 'city', source: 'city', color: '' });
+    else if (L.kind === 'windfarm' && L.geom.type === 'Polygon') out.push({ id: `${L.id}#farm`, L, role: 'farm', source: 'farm', color: '' });
     else if (L.kind === 'flightrecon' && L.geom.type === 'LineString' && s.plane !== false && (s.model3d ?? 'builtin:bizjet') !== 'none') out.push({ id: `${L.id}#ac`, L, role: 'flight', source: s.model3d || 'builtin:bizjet', color: s.livery || '#1257d6' });
   }
   return out;
@@ -640,7 +692,8 @@ export class ModelLayer {
     for (const [id, it] of this.items) if (!ids.has(id)) { it.root.removeFromParent(); this.items.delete(id); }
     for (const job of jobs) {
       const s = job.L.style;
-      const key = job.role === 'city' ? JSON.stringify([job.L.geom, s.block, s.minH, s.maxH, s.look, s.seed, s.groundBlocks])
+      const key = job.role === 'farm' ? JSON.stringify([job.L.geom, s.spacing, s.hub, s.rotor, s.rpm, s.windFrom, s.seed, s.max])
+        : job.role === 'city' ? JSON.stringify([job.L.geom, s.block, s.minH, s.maxH, s.look, s.seed, s.groundBlocks])
         : job.role === 'rig' ? JSON.stringify([job.L.geom, s.scenario, s.cars, s.liveryA, s.liveryB, s.colorA, s.colorB, s.poles, s.doubleTrack, s.size])
         : job.role === 'trainmove' ? JSON.stringify([job.L.geom, s.cars, s.livery, s.size])
         : `${job.source}|${job.color}`;
@@ -651,6 +704,7 @@ export class ModelLayer {
       try {
         const src = String(job.source || 'builtin:jet');
         if (job.role === 'city') { city = buildCity(job.L); obj = city.obj; }
+        else if (job.role === 'farm') { city = buildFarm(job.L); obj = city.obj; city.farm = true; }
         else if (job.role === 'rig' || job.role === 'trainmove') { rig = (job.role === 'rig' ? buildTrainRig : buildMovingTrain)(job.L, shadowTex()); obj = rig.obj; }
         else if (src.startsWith('media:')) {
           const gltf = await loadUserModel(src.slice(6));
@@ -795,6 +849,13 @@ export class ModelLayer {
         if (T && T.kind === 'transit') { const tt2 = layerTiming(T, t); it.rig.update({ ...tm, uOverride: tt2.edit ? null : transitFraction(T, tt2.tau) }, L); }
         else it.rig.update(tm, L);
         ll = it.rig.anchor; // read after update: a moving train re-anchors itself on long lines
+      } else if (role === 'farm') {
+        ll = it.city.centre; real = true; scale = 1; heading = 90;
+        const grow = L.anim === 'grow' && !tm.edit, n = Math.max(1, it.city.count);
+        for (const tb of it.obj.children) {
+          const k = grow ? ease(clamp((tm.tau - (tb.userData.grow / n) * D * 0.7) / Math.max(0.3, D * 0.3), 0, 1)) : 1;
+          tb.scale.set(1, Math.max(0.001, k), 1); tb.visible = k > 0.002;
+        }
       } else if (role === 'city') {
         ll = it.city.centre;
         real = true; scale = 1; heading = 90;

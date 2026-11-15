@@ -1329,6 +1329,7 @@ export function createEditor() {
     if (pendingStyle) { Object.assign(L.style, pendingStyle); pendingStyle = null; }
     if (pendingName) { L.name = pendingName; pendingName = null; }
     if (L.style.anim) { L.anim = L.style.anim; delete L.style.anim; }
+    if (L.style.duration) { L.duration = +L.style.duration; delete L.style.duration; }
     if (L.kind === 'smartmap' && !(L.style.data || []).length) {
       const n = { rings: 40, reach: 24, halo: 24, circles: 60 }[L.style.mode] || 180;
       L.style.data = sampleData(L.geom.coordinates[0], n, Math.floor(Math.random() * 1000));
@@ -2006,6 +2007,7 @@ export function createEditor() {
   document.addEventListener('click', (e) => { if (e.target.closest('[data-sar-library]')) openSarAdd(); });
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-docu')?.addEventListener('click', cartoAdd);
+  $('#add-earth')?.addEventListener('click', cartoAdd);
   $('#add-trailer')?.addEventListener('click', cartoAdd);
   $('#add-globes')?.addEventListener('click', cartoAdd);
   // tracked callouts: link to a video layer and open the "pick the subject" window
@@ -2259,6 +2261,12 @@ export function createEditor() {
         else if (type === 'brhere') {
           const c = L.geom?.coordinates;
           h += `<div class="field"><span>${label}</span><div class="btn-row"><input data-act-input="brAt" value="${c ? `${c[1].toFixed(5)}, ${c[0].toFixed(5)}` : ''}" placeholder="lat, lon — e.g. 39.4134, -3.7151"><button class="btn sm" data-act="brHere" title="Use the middle of the map">◎ Map centre</button></div><small class="muted">${c ? 'Set — the globe and locator point here.' : 'Not set — the globe and locator follow the country, or the middle of the map.'}</small></div>`;
+        }
+        else if (type === 'gvaction') {
+          h += `<div class="btn-row"><button class="btn sm primary" data-act="gvAction" data-fn="${esc(o)}">${label}</button></div>`;
+        }
+        else if (type === 'note') {
+          h += `<p class="hint-line">${esc(label)}</p>`;
         }
         else if (type === 'resetpos') {
           h += `<div class="row"><span>${label}</span><button class="btn sm" data-act="resetPos">Reset</button></div>`;
@@ -3291,6 +3299,12 @@ export function createEditor() {
     }
     if (a === 'sarPick') { const c = map.getCenter(); openSarLibrary({ near: [c.lng, c.lat], onPick: (it) => { pushUndo(); Object.assign(L.style, sarStyleOf(it)); L.name = `SAR · ${it.place || it.provider}`; renderLayerEditor(); commitLayers(); fitSar(L); } }); }
     if (a === 'sarFit') fitSar(L);
+    if (a === 'gvAction') {
+      btn.disabled = true;
+      try { const { GV_ACTIONS } = await import('./geoviz.js'); const fn = GV_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast }); renderLayerEditor(); commitLayers(); if (msg) toast(msg, 4200); } }
+      catch (err) { toast(err.message || 'Request failed', 5000); }
+      btn.disabled = false;
+    }
     if (a === 'firmsHere') { const c = map.getCenter(); pushUndo(); L.style.center = `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`; renderLayerEditor(); commitLayers(); }
     if (a === 'firmsFetch') {
       const ll = parseLatLon(L.style.center) || (() => { const c = map.getCenter(); return [c.lng, c.lat]; })();

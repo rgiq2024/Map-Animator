@@ -438,6 +438,7 @@ export const SW_FORMS = {
     ['style.bgAlpha', 'Background opacity (0 = map shows through)', 'range', [0, 1, 0.02]],
   ],
 };
+export const SW_LAYER_DEFAULTS = { sitewatch: { anim: 'cascade', duration: 12, style: SW_DEFAULTS.sitewatch } };
 export const SW_SET = new Set(Object.keys(SW_KINDS));
 export const swPhases = () => ['captions'];
 /** media ids a sitewatch layer needs (for preloading) */
