@@ -880,6 +880,10 @@ export class ModelLayer {
     // the camera matrix, for drawing things at an altitude on the 2D overlay (flight paths, storm cells)
     ALT3D.main = args?.defaultProjectionData?.mainMatrix || null; ALT3D.map = this.map;
     if (!this.renderer || !this.state.length) return;
+    // the map canvas may have been resized since three.js started (export renders at a higher pixel ratio):
+    // keep three's viewport on the whole drawing buffer, or the models are drawn into a corner / not at all
+    const bw = gl.drawingBufferWidth, bh = gl.drawingBufferHeight;
+    if (bw !== this.vpW || bh !== this.vpH) { this.renderer.setViewport(0, 0, bw, bh); this.renderer.setScissor(0, 0, bw, bh); this.vpW = bw; this.vpH = bh; }
     const tr = this.map.transform;
     const zoom = this.map.getZoom();
     for (const it of this.items.values()) it.root.visible = false;
@@ -911,7 +915,13 @@ export class ModelLayer {
         if (o.userData.spin) o.rotation.y = st.tau * o.userData.spin;
         if (o.userData.spinZ) o.rotation.z = st.tau * o.userData.spinZ;
         if (o.userData.spinX) o.rotation.x = st.tau * o.userData.spinX;
-        if (o.material && !Array.isArray(o.material) && st.alpha < 1 && o !== it.shadow) { o.material.transparent = true; o.material.opacity = st.alpha; }
+        if (o.material && !Array.isArray(o.material) && o !== it.shadow) {
+          // fade with the layer, and come back to full strength afterwards: remember each material's own values
+          const m = o.material;
+          if (m.userData.baseOpacity === undefined) { m.userData.baseOpacity = m.opacity; m.userData.baseTransparent = m.transparent; }
+          if (st.alpha < 1) { m.transparent = true; m.opacity = m.userData.baseOpacity * st.alpha; }
+          else if (m.opacity !== m.userData.baseOpacity || m.transparent !== m.userData.baseTransparent) { m.opacity = m.userData.baseOpacity; m.transparent = m.userData.baseTransparent; }
+        }
       });
       this.camera.projectionMatrix = M;
       this.renderer.resetState();
