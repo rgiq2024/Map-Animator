@@ -12,7 +12,7 @@ const out = [];
 for (const c of cases) {
   if (c.overpass) {
     // raw Overpass answer (used to check rail / road geometry near an incident)
-    const r = await pg.evaluate(async (q) => { try { const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }); return { ok: res.ok, text: (await res.text()).slice(0, 60000) }; } catch (e) { return { ok: false, text: String(e) }; } }, c.overpass);
+    const r = await pg.evaluate(async (q) => { let last = ''; for (let k = 0; k < 6; k++) for (const ep of ['https://overpass.kumi.systems/api/interpreter', 'https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']) { try { const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }); const t = await res.text(); if (res.ok && t.trim().startsWith('{')) return { ok: true, text: t.slice(0, 60000) }; last = t.slice(0, 200); } catch (e) { last = String(e); } await new Promise((ok) => setTimeout(ok, 3000 * (k + 1))); } return { ok: false, text: last }; }, c.overpass);
     console.log(c.name, r.text.replace(/\s+/g, ' ').slice(0, 20000));
     out.push({ case: c.name, ok: r.ok });
     continue;
