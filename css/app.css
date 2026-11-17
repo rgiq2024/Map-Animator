@@ -1278,3 +1278,6 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 .sw-chip { font: inherit; font-size: 11.5px; padding: 3px 8px; border-radius: 99px; border: 1px solid #ffc62966; background: transparent; color: inherit; cursor: pointer; }
 .sw-chip:hover { background: #ffc629; color: #111; }
 .sw-bolt { font-style: normal; color: #ffc629; } .sw-picked .btn { margin-top: 6px; align-self: flex-start; }
+.undo-bar { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 9999; display: flex; gap: 14px; align-items: center; padding: 10px 14px 10px 16px; border-radius: 10px; background: #1b2230; color: #fff; font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.45); transition: opacity .2s, transform .2s; }
+.undo-bar.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.undo-bar button { font: inherit; font-weight: 600; color: #ffc629; background: transparent; border: 1px solid #ffc62966; border-radius: 6px; padding: 4px 10px; cursor: pointer; }

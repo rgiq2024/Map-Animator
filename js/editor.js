@@ -4859,6 +4859,7 @@ export function createEditor() {
     if (!project) return;
     $$('#scene-tabs [data-dur]').forEach((el) => {
       const i = +el.dataset.dur;
+      if (!project.scenes[i]) return; // the tab bar is about to be redrawn (a scene was just removed)
       const t = i === sceneIdx ? model.duration : buildScene(project.scenes[i], frame.w, frame.h).duration;
       el.textContent = `${t.toFixed(1)} s`;
     });
@@ -4895,8 +4896,7 @@ export function createEditor() {
     const ds = e.target.closest('[data-delscene]');
     if (ds) {
       e.stopPropagation();
-      const i = +ds.dataset.delscene, scs = project.scenes;
-      if (scs.length > 1 && confirm(`Delete “${scs[i].name}”?`)) { scs.splice(i, 1); offsetCache = null; eventsCache = null; selectScene(Math.min(i <= sceneIdx ? Math.max(0, sceneIdx - (i < sceneIdx ? 1 : 0)) : sceneIdx, scs.length - 1), true); save(); }
+      deleteSceneAt(+ds.dataset.delscene);
       return;
     }
     const mb = e.target.closest('[data-menu]');
@@ -4904,6 +4904,42 @@ export function createEditor() {
     const tab = e.target.closest('.scene-tab');
     if (tab && +tab.dataset.i !== sceneIdx) selectScene(+tab.dataset.i);
   });
+  /**
+   * Delete a scene straight away (no browser confirm box — those can be blocked, and then nothing happened)
+   * and offer Undo for a few seconds.
+   */
+  function deleteSceneAt(i) {
+    const scs = project.scenes;
+    if (scs.length <= 1 || !scs[i]) { toast('A project needs at least one scene'); return; }
+    const [gone] = scs.splice(i, 1);
+    offsetCache = null; eventsCache = null;
+    const next = i < sceneIdx ? sceneIdx - 1 : i === sceneIdx ? Math.min(i, scs.length - 1) : sceneIdx;
+    sceneIdx = Math.min(sceneIdx, scs.length - 1);
+    renderScenes();
+    selectScene(next, true);
+    renderScenes();
+    save();
+    undoBar(`Deleted “${gone.name}”`, () => {
+      scs.splice(Math.min(i, scs.length), 0, gone);
+      offsetCache = null; eventsCache = null;
+      renderScenes();
+      selectScene(Math.min(i, scs.length - 1), true);
+      renderScenes();
+      save();
+      toast(`“${gone.name}” is back`);
+    });
+  }
+  let undoBarTimer = null;
+  function undoBar(msg, onUndo, ms = 7000) {
+    let el = document.getElementById('undo-bar');
+    if (!el) { el = document.createElement('div'); el.id = 'undo-bar'; el.className = 'undo-bar'; document.body.appendChild(el); }
+    el.innerHTML = `<span></span><button type="button">Undo</button>`;
+    el.querySelector('span').textContent = msg;
+    el.querySelector('button').onclick = () => { el.classList.remove('show'); clearTimeout(undoBarTimer); onUndo(); };
+    el.classList.add('show');
+    clearTimeout(undoBarTimer);
+    undoBarTimer = setTimeout(() => el.classList.remove('show'), ms);
+  }
   function openSceneMenu(i, anchor) {
     $$('.menu').forEach((m) => m.remove());
     const r = anchor.getBoundingClientRect();
@@ -4920,7 +4956,7 @@ export function createEditor() {
       if (a === 'rename') { const n = prompt('Scene name', scs[i].name); if (n) { scs[i].name = n.slice(0, 40); renderScenes(); save(); } }
       if (a === 'dup') { const c = JSON.parse(JSON.stringify(scs[i])); c.id = `sc_${Math.random().toString(36).slice(2, 10)}`; c.name = `${scs[i].name} copy`; scs.splice(i + 1, 0, c); selectScene(i + 1); }
       if (a === 'left' || a === 'right') { const j = a === 'left' ? i - 1 : i + 1; [scs[i], scs[j]] = [scs[j], scs[i]]; offsetCache = null; eventsCache = null; selectScene(j, true); }
-      if (a === 'del' && confirm(`Delete “${scs[i].name}”?`)) { scs.splice(i, 1); selectScene(Math.min(sceneIdx, scs.length - 1), true); }
+      if (a === 'del') { deleteSceneAt(i); return; }
       save();
     });
     document.body.append(m);
