@@ -258,16 +258,79 @@ export function buildTrainRig(L, shadowTex) {
       const kind = i === 0 || i === n - 1 ? 'head' : 'mid';
       const car = buildCar(liv, kind, CL);
       if (i === n - 1) car.rotation.y = Math.PI; // tail car faces backwards
+      car.userData.baseRotY = car.rotation.y;
       const holder = new THREE.Group(); holder.rotation.order = 'YZX';
       holder.add(car); holder.scale.setScalar(k);
       const sh = shadowPlane(shadowTex, CL * k);
       root.add(holder, sh);
-      cars.push({ holder, sh });
+      cars.push({ holder, sh, car, i });
     }
     return cars;
   };
+  /** cars in order from the end that takes the impact */
+  const impactOrder = (which) => {
+    const idx = [...Array(n).keys()];
+    if (which === 'B' && (s.scenario || 'headon') === 'rearend') return idx.reverse();
+    if (which === 'A' && (s.scenario || 'headon') === 'sideswipe') return idx.sort((a, b) => Math.abs(a - 2) - Math.abs(b - 2) || a - b);
+    return idx;
+  };
+  /** give the first `count` cars from the impact end their own materials (scorch, broken windows, crumple) */
+  const prepDamage = (cars, which, count) => {
+    const order = impactOrder(which).slice(0, clamp(Math.round(+count || 0), 0, n));
+    order.forEach((ci, rank) => {
+      const c = cars[ci]; c.dmgRank = rank;
+      c.car.traverse((o) => {
+        if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+        const m = o.material.clone(); o.material = m;
+        m.userData = { ...m.userData, base: m.color ? m.color.clone() : null, win: !!m.map };
+        delete m.userData.baseOpacity; delete m.userData.baseTransparent;
+      });
+      c.dmgSeed = Math.abs(Math.sin((ci + 1) * 12.9898 + (which === 'A' ? 0 : 7.1)) * 43758.5453) % 1;
+    });
+    return order;
+  };
+  const SOOT = new THREE.Color(0x15120f), WIN_BROKEN = new THREE.Color(0x222221);
+  function applyDamage(cars, level, k) {
+    for (const c of cars) {
+      if (c.dmgRank === undefined) continue;
+      const d = clamp(level, 0, 1) * k * (c.dmgRank === 0 ? 1 : Math.max(0.6, 1 - c.dmgRank * 0.12));
+      // crumple: the impact car is shortened and bent, the others dented and twisted a little
+      const crumple = (c.dmgRank === 0 ? 0.3 : 0.1) * d;
+      c.car.scale.set(1 - crumple, 1 - 0.06 * d, 1 + 0.05 * d);
+      c.car.rotation.set((c.dmgSeed - 0.5) * 0.12 * d, c.car.userData.baseRotY + (c.dmgSeed - 0.5) * 0.1 * d, (c.dmgRank === 0 ? 0.08 : 0.03) * d);
+      c.car.traverse((o) => {
+        const m = o.material; if (!o.isMesh || !m?.userData?.base) return;
+        m.color.copy(m.userData.base).lerp(m.userData.win ? WIN_BROKEN : SOOT, Math.min(1, d * 1.3));
+        if (m.userData.env0 === undefined) m.userData.env0 = m.envMapIntensity ?? 1;
+        m.envMapIntensity = m.userData.env0 * (1 - 0.85 * d);
+        if (m.userData.r0 === undefined) { m.userData.r0 = m.roughness ?? 0.5; m.userData.m0 = m.metalness ?? 0; m.userData.e0 = m.emissiveIntensity ?? 0; }
+        if (m.roughness !== undefined) m.roughness = m.userData.r0 + (1 - m.userData.r0) * d;
+        if (m.metalness !== undefined) m.metalness = m.userData.m0 * (1 - 0.8 * d);
+        if (m.emissiveIntensity !== undefined) m.emissiveIntensity = m.userData.e0 * (1 - d);
+      });
+    }
+  }
   const A = mkTrain(s.liveryA || 'ave', s.colorA);
   const B = mkTrain(s.liveryB || 'red', s.colorB);
+  prepDamage(A, 'A', s.damageA); prepDamage(B, 'B', s.damageB);
+  /** derailment: the first `count` cars from the impact end slide off the track, jack-knife and tip over */
+  const derailOf = (which, count, side0) => {
+    const order = impactOrder(which).slice(0, clamp(Math.round(+count || 0), 0, n));
+    const rank = new Map(order.map((ci, r) => [ci, r]));
+    return (dk, st) => {
+      if (!order.length || dk <= 0) return null;
+      const dist = Math.max(0, +st.derailDist || 9), tip = st.derailTip == null ? 35 : +st.derailTip;
+      const sideOf = (ci) => { const sd = st.derailSide || 'alt'; return sd === 'alt' ? (rank.get(ci) % 2 ? -1 : 1) * side0 : (sd === 'right' ? -1 : 1) * side0; };
+      const carOff = (ci) => (rank.has(ci) ? sideOf(ci) * dist * dk * (1 - rank.get(ci) * 0.12) : 0);
+      return {
+        // each joint takes the mean of its two cars, with an accordion zig-zag between derailed cars
+        lat: (j) => { const a = carOff(j - 1), b = carOff(j); const both = rank.has(j - 1) && rank.has(j); return (a + b) / (both ? 2 : 2.6) * (both ? (j % 2 ? 1.15 : 0.7) : 1); },
+        roll: (ci) => (rank.has(ci) ? sideOf(ci) * tip * dk * (1 - rank.get(ci) * 0.15) : 0),
+        drop: (ci) => (rank.has(ci) ? -0.9 * dk : 0),
+      };
+    };
+  };
+  const derA = derailOf('A', s.derailA, 1), derB = derailOf('B', s.derailB, -1);
   const scen = s.scenario || 'headon';
   const spacing = 4.7;
   const noCrash = s.crash === false;
@@ -304,7 +367,7 @@ export function buildTrainRig(L, shadowTex) {
       const comp = crash.comp ? Math.min(i, 4) * crash.comp : 0;
       const sAlong = nose - dir * (i * pitch * k - comp);
       const zig = i === 0 ? crash.noseLat || 0 : (crash.amp || 0) * (i % 2 ? 1 : -1) * crash.sign * (i <= 3 ? i / 3 : Math.max(0.15, 1 - (i - 3) * 0.28));
-      const lat = lane + zig + (crash.slide?.(i) || 0);
+      const lat = lane + zig + (crash.slide?.(i) || 0) + (crash.der?.lat(i) || 0);
       const p = at(P, sAlong);
       const nx = p.tz, nz = -p.tx; // left normal
       J.push({ x: p.x + nx * lat, z: p.z + nz * lat, y: i === 0 ? crash.lift || 0 : i === 1 ? (crash.lift || 0) * 0.25 : 0 });
@@ -317,8 +380,9 @@ export function buildTrainRig(L, shadowTex) {
       const pitchA = Math.atan2(F.y - Bk.y, Math.hypot(dx, dz) || 1);
       const roll = (crash.roll || 0) * crash.sign * (i % 2 ? 1 : -1) * (i <= 2 ? 1 : Math.max(0.2, 1 - (i - 2) * 0.3)) * (i === 0 ? 0.4 : 1);
       const c = cars[i];
-      c.holder.position.set(cx, (F.y + Bk.y) / 2, cz);
-      c.holder.rotation.set(roll * D2R, yaw, pitchA);
+      const dr = crash.der ? crash.der.roll(i) : 0, dy = crash.der ? crash.der.drop(i) : 0;
+      c.holder.position.set(cx, (F.y + Bk.y) / 2 + dy + Math.abs(Math.sin(dr * D2R)) * 1.6, cz);
+      c.holder.rotation.set((roll + dr) * D2R, yaw, pitchA);
       c.sh.position.set(cx, 0.04, cz);
       c.sh.rotation.set(0, yaw, 0);
     }
@@ -335,13 +399,17 @@ export function buildTrainRig(L, shadowTex) {
     const appr = Math.max(50, +st.approach || 450);
     const R = trainRun(st, D, tm.edit ? D * 0.82 : tm.tau, appr);
     const sv = clamp(+st.severity || 1, 0, 2.5) * R.force;
+    const dk = tau < 0 || !crash ? 0 : ease3(clamp(tau / Math.max(0.3, +st.derailTime || 2.5), 0, 1));
+    const dA = derA(dk, st), dB = derB(dk, st);
     const none = { sign: 1 };
+    const withDer = (c, d) => (d ? { ...c, der: d } : c);
     const remA = R.a, remB = R.b;
+    applyDamage(A, st.damageLevel ?? 0.7, kk); applyDamage(B, st.damageLevel ?? 0.7, kk);
     if (scen === 'rearend') {
       const hA = meet - remA + 2.2 * sv * kk;
       const hB = meet + trainLen - remB + 3 * sv * kk;
-      place(A, hA, 1, laneA, kk ? { sign: 1, amp: 2.8 * sv * kk, comp: 1.5 * sv * kk, roll: 22 * sv * kk, lift: 2.6 * sv * kk, noseLat: 0.9 * sv * kk } : none);
-      place(B, hB, 1, laneB, kk ? { sign: -1, amp: 2.2 * sv * kk, comp: 0.8 * sv * kk, roll: 16 * sv * kk } : none);
+      place(A, hA, 1, laneA, withDer(kk ? { sign: 1, amp: 2.8 * sv * kk, comp: 1.5 * sv * kk, roll: 22 * sv * kk, lift: 2.6 * sv * kk, noseLat: 0.9 * sv * kk } : none, dA));
+      place(B, hB, 1, laneB, withDer(kk ? { sign: -1, amp: 2.2 * sv * kk, comp: 0.8 * sv * kk, roll: 16 * sv * kk } : none, dB));
     } else if (scen === 'sideswipe') {
       // B derails towards A's track just before they meet, its nose strikes A's second car
       const der = clamp((p - 0.78) / 0.22, 0, 1);
@@ -349,13 +417,13 @@ export function buildTrainRig(L, shadowTex) {
       const hB = meet + remB - 1.5 * sv * kk;
       const slideB = (i) => (i === 0 ? 1 : i === 1 ? 0.55 : i === 2 ? 0.2 : 0) * (spacing * 0.75 * ease3(der) + 1.2 * sv * kk);
       const slideA = (i) => (i >= 1 && i <= 3 ? (i === 2 ? 1 : 0.6) * 1.6 * sv * kk : 0);
-      place(A, hA, 1, laneA, { sign: 1, amp: 1.8 * sv * kk, comp: 0.9 * sv * kk, roll: 20 * sv * kk, slide: slideA });
-      place(B, hB, -1, laneB, { sign: -1, amp: 2.6 * sv * kk, comp: 1.6 * sv * kk, roll: 26 * sv * kk, slide: slideB, noseLat: 0 });
+      place(A, hA, 1, laneA, withDer({ sign: 1, amp: 1.8 * sv * kk, comp: 0.9 * sv * kk, roll: 20 * sv * kk, slide: slideA }, dA));
+      place(B, hB, -1, laneB, withDer({ sign: -1, amp: 2.6 * sv * kk, comp: 1.6 * sv * kk, roll: 26 * sv * kk, slide: slideB, noseLat: 0 }, dB));
     } else {
       const hA = meet - remA + 4.5 * sv * kk;
       const hB = meet + remB + 1.5 * sv * kk;
-      place(A, hA, 1, laneA, kk ? { sign: 1, amp: 3.2 * sv * kk, comp: 1.7 * sv * kk, roll: 24 * sv * kk, lift: 2.8 * sv * kk, noseLat: 1.4 * sv * kk } : none);
-      place(B, hB, -1, laneB, kk ? { sign: -1, amp: 2.8 * sv * kk, comp: 1.8 * sv * kk, roll: 22 * sv * kk, noseLat: -1.6 * sv * kk } : none);
+      place(A, hA, 1, laneA, withDer(kk ? { sign: 1, amp: 3.2 * sv * kk, comp: 1.7 * sv * kk, roll: 24 * sv * kk, lift: 2.8 * sv * kk, noseLat: 1.4 * sv * kk } : none, dA));
+      place(B, hB, -1, laneB, withDer(kk ? { sign: -1, amp: 2.8 * sv * kk, comp: 1.8 * sv * kk, roll: 22 * sv * kk, noseLat: -1.6 * sv * kk } : none, dB));
     }
   }
   const ease3 = (u) => u * u * (3 - 2 * u);

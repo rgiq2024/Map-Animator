@@ -694,7 +694,7 @@ export class ModelLayer {
       const s = job.L.style;
       const key = job.role === 'farm' ? JSON.stringify([job.L.geom, s.spacing, s.hub, s.rotor, s.rpm, s.windFrom, s.seed, s.max])
         : job.role === 'city' ? JSON.stringify([job.L.geom, s.block, s.minH, s.maxH, s.look, s.seed, s.groundBlocks])
-        : job.role === 'rig' ? JSON.stringify([job.L.geom, s.scenario, s.cars, s.liveryA, s.liveryB, s.colorA, s.colorB, s.poles, s.doubleTrack, s.size])
+        : job.role === 'rig' ? JSON.stringify([job.L.geom, s.scenario, s.cars, s.liveryA, s.liveryB, s.colorA, s.colorB, s.poles, s.doubleTrack, s.size, s.damageA, s.damageB])
         : job.role === 'trainmove' ? JSON.stringify([job.L.geom, s.cars, s.livery, s.size])
         : `${job.source}|${job.color}`;
       const it0 = this.items.get(job.id);
