@@ -10,6 +10,13 @@ await pg.goto('http://localhost:8811/index.html'); await pg.waitForTimeout(2500)
 const cases = JSON.parse(process.env.CASES || '[]');
 const out = [];
 for (const c of cases) {
+  if (c.overpass) {
+    // raw Overpass answer (used to check rail / road geometry near an incident)
+    const r = await pg.evaluate(async (q) => { try { const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }); return { ok: res.ok, text: (await res.text()).slice(0, 60000) }; } catch (e) { return { ok: false, text: String(e) }; } }, c.overpass);
+    console.log(c.name, r.text.replace(/\s+/g, ' ').slice(0, 20000));
+    out.push({ case: c.name, ok: r.ok });
+    continue;
+  }
   if (c.gv) {
     // check one of the geo-visualisation data fetches (flowFetch / riversFetch) with a stand-in map
     const r = await pg.evaluate(async (c) => {
