@@ -383,3 +383,5 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Zoom to location: the flight now runs over a steady **2D map** by default (the 3D globe juddered as it dived in) and is sampled 15 times a second for a smooth move; “Map while zooming” in the frame's settings switches back to the 3D globe. Older zoom scenes switch to 2D when opened. Zoom scenes also get their **mini globe** and **title block** as their own parts (move, resize or hide them; the title block starts hidden).
 - Fix: saved project files now carry **every picture** used by briefing frames (photo slides, before/after images), so a shared file opens with its images.
 - Flight reconstruction: new **“Move top captions down”** setting so its timer and tag clear a GEO·BRIEF header.
+- Fix: in an exported video the **3D flight path** (and other things drawn at a height — storm cells, blast clouds) was drawn at the wrong scale, so the route looked broken and off the aircraft; it now matches the preview at every export size.
+- Flight reconstruction: **“Flight path line”** on/off switch (hide the path and keep the aircraft, callouts and panel).

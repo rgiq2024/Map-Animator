@@ -40,11 +40,16 @@ export function makeProjAlt(o) {
     return (ll, alt) => { const p = proj(ll); if (!alt) return p; const mpp = (40075016.686 * Math.cos(ll[1] * D2R)) / (512 * 2 ** zoom); return [p[0], p[1] - (alt / mpp) * Math.sin(pitch) * px]; };
   }
   const c = m.getCanvas();
-  const W = c.clientWidth || c.width, H = c.clientHeight || c.height;
+  const W = tr.width || c.clientWidth || c.width, H = tr.height || c.clientHeight || c.height;
   // proj maps css px → canvas px as  x * k + ox; recover k and the offset from two known points
   const ctr = m.getCenter();
   const a = m.project(ctr), pa = proj([ctr.lng, ctr.lat]);
-  const k = px;
+  // the overlay's scale (canvas px per map CSS px) — measured from proj itself, so it is right in the preview and in an export
+  // (an export renders at several times the screen size and does not always pass o.px down)
+  let k = px;
+  const b = m.unproject([a.x + 200, a.y]), pb = proj([b.lng, b.lat]);
+  const kk = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]) / 200;
+  if (isFinite(kk) && kk > 0.05) k = kk;
   const ox = pa[0] - a.x * k, oy = pa[1] - a.y * k;
   return (ll, alt = 0) => {
     const mm = tr.getMatrixForModel(ll, alt);
@@ -164,7 +169,7 @@ export const RC_FORMS = {
     ['style.tz', 'Time zone label', 'text'], ['style.ampm', '12-hour clock (a.m. / p.m.)', 'switch'],
     ['style.diveAt', '“Since the dive began” from (time, empty = off)', 'text'],
     ['style.heightScale', 'Height exaggeration', 'range', [1, 6, 0.05]],
-    ['style.color', 'Path colour', 'color'], ['style.glow', 'Glow', 'switch'], ['style.future', 'Path ahead', 'select', { faint: 'Faint', hidden: 'Hidden', full: 'Full' }],
+    ['style.path', 'Flight path line', 'switch'], ['style.color', 'Path colour', 'color', null, (L) => L.style.path !== false], ['style.glow', 'Glow', 'switch', null, (L) => L.style.path !== false], ['style.future', 'Path ahead', 'select', { faint: 'Faint', hidden: 'Hidden', full: 'Full' }],
     ['style.drop', 'Line down to the ground', 'switch'], ['style.groundTrack', 'Track on the ground', 'switch'],
     ['style.plane', 'Aircraft', 'switch'], ['style.model3d', 'Aircraft look', 'select', { 'builtin:bizjet': '3D business jet (Learjet style)', 'builtin:airliner': '3D airliner', 'builtin:jet': '3D fighter jet', 'builtin:cargoplane': '3D cargo plane', none: 'Flat white symbol' }, (L) => L.style.plane !== false],
     ['style.livery', 'Aircraft stripe colour', 'color', null, (L) => L.style.plane !== false && (L.style.model3d ?? 'builtin:bizjet') !== 'none'],
@@ -251,9 +256,11 @@ function drawFlight(ctx, L, tm, o, phase) {
       ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.6 * unit; ctx.stroke();
       ctx.restore();
     }
-    if (s.future !== 'hidden' && !ended) strokeRange(now, rows.t1, 1.4 * unit, s.future === 'full' ? hexA(col, 0.9) : hexA(col, 0.22), 0);
-    if (s.glow !== false) strokeRange(rows.t0, now, 7 * unit, hexA(col, 0.25), 14 * unit);
-    strokeRange(rows.t0, now, 2.6 * unit, '#eafcff', s.glow !== false ? 6 * unit : 0);
+    if (s.path !== false) {
+      if (s.future !== 'hidden' && !ended) strokeRange(now, rows.t1, 1.4 * unit, s.future === 'full' ? hexA(col, 0.9) : hexA(col, 0.22), 0);
+      if (s.glow !== false) strokeRange(rows.t0, now, 7 * unit, hexA(col, 0.25), 14 * unit);
+      strokeRange(rows.t0, now, 2.6 * unit, '#eafcff', s.glow !== false ? 6 * unit : 0);
+    }
     // event dots on the path
     if (s.callouts !== false) for (const e of eventsOf(s)) {
       if (e.t > now) continue;
