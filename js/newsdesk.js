@@ -331,8 +331,8 @@ export async function buildDisasterBrief(inc, text, media = [], opts = {}, onSta
   }
   // 2 · Zoom to location — from space down to the place
   {
-    const z = { ...ZOOM_DEFAULTS, ll: focus, place: info.place, sec: 8, end: Math.min(15, zClose + 0.6), tilt: FIRE(inc.cat) ? 35 : 25, spin: 0.5 };
-    const sc = scene('Zoom to location', { ...sat0, globe: true }, [], 0.5);
+    const z = { ...ZOOM_DEFAULTS, ll: focus, place: info.place, sec: 8, end: Math.min(15, zClose + 0.6), tilt: FIRE(inc.cat) ? 35 : 25, spin: 0 };
+    const sc = scene('Zoom to location', { ...sat0, globe: false }, [], 0.5);
     Object.assign(sc.camera, zoomCamera(focus, z.sec, z.end, z));
     sc.briefZoom = z;
     sc.layers = frameOf('zoom');

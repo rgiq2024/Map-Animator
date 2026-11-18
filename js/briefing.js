@@ -96,7 +96,7 @@ export const BR_PARTS = {
   intro: [['introGlobe', 'Globe'], ['introTitle', 'Title block']],
   A: [['globe', 'Globe'], ['title', 'Title'], ['info', 'Info rows'], ['before', 'Before picture'], ['after', 'After picture'], ['tag', 'Place label on the map']],
   B: [['heading', 'Title'], ['locator', 'Locator map'], ['side', 'Before / after panel'], ['strip', 'Field strip'], ['tag', 'Place label'], ['scale', 'Scale bar'], ['north', 'North arrow']],
-  zoom: [['tag', 'Place label']],
+  zoom: [['tag', 'Place label'], ['globe', 'Mini globe'], ['titleBlock', 'Title block']],
   full: [['titleBlock', 'Title block'], ['globe', 'Mini globe'], ['side', 'Before / after'], ['tag', 'Place label']],
   photos: [['slide', 'Photo'], ['strip', 'Thumbnails'], ['caption', 'Caption panel'], ['tag', 'Place label']],
   end: [['endTitle', 'Title'], ['endFields', 'Fields'], ['endSources', 'Sources']],
@@ -1177,6 +1177,7 @@ export function splitBriefing(F) {
     c.name = `Briefing · ${n}`;
     c.style.only = k;
     for (const key of Object.keys(c.style)) if (key.startsWith('off_')) delete c.style[key];
+    if (lay === 'zoom' && k === 'titleBlock') c.hidden = true; // there if you want it: show it from the layer list
     return c;
   });
 }
@@ -1190,11 +1191,14 @@ export function zoomCamera(ll, seconds = 8, endZoom = 13, o = {}) {
   // one continuous flight sampled into many linear keys, so the speed never stops and restarts between keys
   const tilt = clamp(+o.tilt || 0, 0, 75), rot = clamp(+o.rotate || 0, -180, 180), spin = clamp(+o.spin || 0, 0, 3);
   const k = (t, c, z, bearing = 0, pitch = 0, ease = 'linear') => ({ t: +t.toFixed(3), view: { center: [r6(c[0]), r6(c[1])], zoomRef: +z.toFixed(3), bearing: +bearing.toFixed(2), pitch: +pitch.toFixed(2) }, ease });
-  const lat0 = clamp(ll[1] * 0.5, -45, 45), z0 = clamp(+o.startZoom || 0.7, 0, 4);
-  const lon0 = ll[0] - 30 - 360 * spin, z1 = endZoom + 0.25;
+  // a flat (2D) map starts a little lower so the world fills the frame instead of floating in space
+  const flat = o.globe === false;
+  const lat0 = clamp(ll[1] * 0.5, -45, 45), z0 = clamp(+o.startZoom || (flat ? 1.8 : 0.7), 0, 6);
+  const lon0 = ll[0] - (flat ? 12 : 30) - (flat ? 0 : 360 * spin), z1 = endZoom + 0.25;
   const ss = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
   const sm = (x) => { x = clamp(x, 0, 1); return x * x * x * (x * (x * 6 - 15) + 10); };
-  const n = Math.max(10, Math.round(seconds * 5));
+  // sampled finely (15 keys a second) so the piecewise-linear camera between keys never shows as a judder
+  const n = Math.max(30, Math.round(seconds * 15));
   const keys = [];
   for (let i = 0; i <= n; i++) {
     const u = i / n, e = sm(u);
@@ -1205,7 +1209,7 @@ export function zoomCamera(ll, seconds = 8, endZoom = 13, o = {}) {
   }
   return { mode: 'keyframes', keys };
 }
-export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '' };
+export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '', globe: false };
 /** middle of a country by name (null while the outlines load) */
 export function countryPoint(name) { const c = (countriesByName(name) || [])[0]; return c ? labelPoint(c.polys) : null; }
 export { CUSTOM_POS };

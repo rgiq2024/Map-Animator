@@ -129,7 +129,7 @@ export function createHome({ open }) {
           sc.lineSeconds = sec; sc.stillStart = 0; sc.stillEnd = Math.max(1, sec - 1.2);
           sc.layers = briefingLayers(lay, common);
           sc.transition = 'scanwipe'; sc.transitionSeconds = 0.9;
-          if (lay === 'zoom') { Object.assign(sc.camera, zoomCamera([20, 25], sec)); sc.briefZoom = true; sc.stillEnd = 0.5; Object.assign(sc.look, { globe: true, theme: 'satellite', placeNames: false }); }
+          if (lay === 'zoom') { Object.assign(sc.camera, zoomCamera([20, 25], sec, 13, { globe: false })); sc.briefZoom = true; sc.stillEnd = 0.5; Object.assign(sc.look, { globe: false, theme: 'satellite', placeNames: false }); }
           return sc;
         });
       } else { p.scenes[0].layers.push(...briefingLayers(layout, common)); p.scenes[0].stillStart = 0; p.scenes[0].stillEnd = 7; }

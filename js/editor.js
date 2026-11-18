@@ -2231,7 +2231,8 @@ export function createEditor() {
             h += `<h5>${label}</h5>
               <div class="field"><span>Place or coordinates</span><div class="btn-row"><input data-act-input="bzPlace" value="${esc(z.place || (z.ll ? `${z.ll[1].toFixed(5)}, ${z.ll[0].toFixed(5)}` : ''))}" placeholder="e.g. Boca Raton, Florida — or 26.6328, -80.1131"><button class="btn sm primary" data-act="bzGo">Fly there</button></div>
               <div class="btn-row"><button class="btn sm" data-act="bzHere">◎ Use the map centre</button><button class="btn sm" data-act="bzIncident">⌖ Use the incident location</button></div></div>
-              ${rng('end', 'Zoom at the end', 3, 18, 0.25)}${rng('sec', 'Length', 3, 20, 0.5, ' s')}${rng('tilt', 'Tilt at the end', 0, 75, 1, '°')}${rng('rotate', 'Rotate (compass) at the end', -180, 180, 5, '°')}${rng('spin', 'Globe spins first', 0, 3, 0.25, ' turns')}${rng('startZoom', 'Start height (globe zoom)', 0, 4, 0.1)}
+              <label class="row"><span>Map while zooming</span><select data-act-input="bzGlobe"><option value="flat"${z.globe ? '' : ' selected'}>2D map — steady (recommended)</option><option value="globe"${z.globe ? ' selected' : ''}>3D globe</option></select></label>
+              ${rng('end', 'Zoom at the end', 3, 18, 0.25)}${rng('sec', 'Length', 3, 20, 0.5, ' s')}${rng('tilt', 'Tilt at the end', 0, 75, 1, '°')}${rng('rotate', 'Rotate (compass) at the end', -180, 180, 5, '°')}${z.globe ? rng('spin', 'Globe spins first', 0, 3, 0.25, ' turns') : ''}${rng('startZoom', 'Start height (zoom)', 0, 6, 0.1)}
               <div class="btn-row"><button class="btn sm" data-act="bzPreview">▶ Preview the zoom</button></div>`;
           }
         }
@@ -2761,6 +2762,7 @@ export function createEditor() {
     sc.briefZoom = z;
     const ll = z.ll || sc.camera?.keys?.at(-1)?.view?.center || [0, 20];
     sc.camera = { ...sc.camera, ...zoomCamera(ll, +z.sec || 8, +z.end || 13, z) };
+    sc.look = { ...sc.look, globe: !!z.globe };
     sc.stillStart = 0; sc.stillEnd = 0.5;
   }
   /** Search a place name (or read “lat, lon”) and point the scene's zoom there. */
@@ -2865,6 +2867,7 @@ export function createEditor() {
       applyZoom(sc, { [key]: v, own: true }); rebuild(); repaint(); save();
       return;
     }
+    if (k === 'bzGlobe') { pushUndo(); applyZoom(scene(), { globe: e.target.value === 'globe', startZoom: undefined, own: true }); applyLook(scene()); rebuild(); renderLayerEditor(); repaint(); save(); return; }
     if (k === 'bzPlace') { if (e.type === 'change') flyZoomTo(e.target.value); return; }
     if (k === 'firmsKey') { setFirmsKey(e.target.value); toast(e.target.value.trim() ? 'FIRMS key saved in this browser' : 'FIRMS key removed'); return; }
     if (k === 'brPart') {
@@ -5026,7 +5029,7 @@ export function createEditor() {
       if (!ll && fr?.style.country) ll = countryLabelPoint(fr.style.country);
       if (!ll) { const c = map.getCenter(); ll = [c.lng, c.lat]; }
       sc.briefZoom = { ...ZOOM_DEFAULTS, ll }; Object.assign(sc.camera, zoomCamera(ll, 8, 13, sc.briefZoom));
-      Object.assign(sc.look, { globe: true, theme: sc.look.theme === 'classic' ? 'satellite' : sc.look.theme, placeNames: false });
+      Object.assign(sc.look, { globe: false, theme: sc.look.theme === 'classic' ? 'satellite' : sc.look.theme, placeNames: false });
       sc.stillStart = 0; sc.stillEnd = 0.5;
       sc.legs = [{ ...sc.legs[0], points: [] }];
       // right after the intro (or after the scene you are on)
@@ -5285,6 +5288,9 @@ export function createEditor() {
       project.scenes.forEach(migrateScene);
       // zoom-to-location scenes made before the smooth flight: rebuild the camera as one continuous move
       for (const sc of project.scenes) if (sc.briefZoom && sc.camera?.mode === 'keyframes' && (sc.camera.keys || []).length <= 5 && sc.layers?.some((l) => l.kind === 'briefing' && l.style?.layout === 'zoom')) { const ks = sc.camera.keys; applyZoom(sc, typeof sc.briefZoom === 'object' ? {} : { sec: +ks.at(-1).t || 8, end: +(ks.at(-2) || ks.at(-1)).view.zoomRef || 13, tilt: +ks.at(-1).view.pitch || 0, rotate: +ks.at(-1).view.bearing || 0 }); }
+      // zoom scenes from before the steady 2D zoom: switch them to the flat map (the globe judders when it dives in) —
+      // their place, length, end zoom, tilt and rotation stay; “Map while zooming” in the frame's settings brings the globe back
+      for (const sc of project.scenes) if (sc.briefZoom && typeof sc.briefZoom === 'object' && sc.briefZoom.globe === undefined && sc.camera?.mode === 'keyframes' && sc.layers?.some((l) => l.kind === 'briefing' && l.style?.layout === 'zoom')) applyZoom(sc, { globe: false, spin: 0 });
       project.audio ||= [];
       project.models ||= [];
       if (!project.sound?.v2) project.sound = { ...(project.sound || {}), auto: false, v2: true }; // sound is off until the user turns it on

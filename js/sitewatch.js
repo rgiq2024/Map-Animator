@@ -775,7 +775,7 @@ export function buildSiteStory(info, H) {
   const frameOf = (layout, extra = {}) => B.splitBriefing(B.briefFrame(brief, layout, { dateLabel: 'Period', eventLabel: 'Watch', assessLabel: 'Count', ...extra }));
   const zoomEnd = clamp(Math.log2(40075 * Math.cos(ll[1] * D2R) / ((info.km || 3) * 1.6)) , 12, 17);
   const scenes = [];
-  { const z = { ...B.ZOOM_DEFAULTS, ll, place: siteName, sec: 8, end: zoomEnd, tilt: 0, rotate: 0, spin: 0 }; const sc = scene('Zoom to the site', [], 0.8); Object.assign(sc.camera, B.zoomCamera(ll, z.sec, z.end, z)); sc.briefZoom = z; sc.layers = frameOf('zoom'); scenes.push(sc); }
+  { const z = { ...B.ZOOM_DEFAULTS, ll, place: siteName, sec: 8, end: zoomEnd, tilt: 0, rotate: 0, spin: 0 }; const sc = scene('Zoom to the site', [], 0.8, { ...sat, globe: false }); Object.assign(sc.camera, B.zoomCamera(ll, z.sec, z.end, z)); sc.briefZoom = z; sc.layers = frameOf('zoom'); scenes.push(sc); }
   const still = [K(0, V(ll, zoomEnd - 0.4), 'linear'), K(10, V(ll, zoomEnd - 0.2), 'linear')];
   const gridDur = gridZoomTimes(inc.length, 3).t3 + 2;
   { const sc = scene('Pass grid', still, 0.5); sc.layers = [L('sitewatch', null, 0, { duration: gridDur, anim: 'cascade', name: 'Site watch · grid', style: { ...SW_DEFAULTS.sitewatch, ...common, layout: 'grid', head1, head2, body } })]; scenes.push(sc); }
