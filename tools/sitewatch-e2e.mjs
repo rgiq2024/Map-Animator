@@ -10,6 +10,18 @@ await pg.goto('http://localhost:8811/index.html'); await pg.waitForTimeout(2500)
 const cases = JSON.parse(process.env.CASES || '[]');
 const out = [];
 for (const c of cases) {
+  if (c.js) {
+    // run a small async function in the page (it can use the app's modules) and keep what it returns;
+    // values named *_b64 are written out as files (e2e/<name>-<key>.<ext>)
+    const r = await pg.evaluate(async (src) => { try { const fn = new Function(`return (${src})`)(); return { ok: true, v: await fn() }; } catch (e) { return { ok: false, error: String(e?.stack || e) }; } }, c.js);
+    const files = {};
+    const walk = (o, path) => { if (!o || typeof o !== 'object') return; for (const [k, v] of Object.entries(o)) { if (typeof v === 'string' && k.endsWith('_b64')) { const ext = (o[k.replace(/_b64$/, '_ext')] || 'jpg'); const fn = `e2e/${c.name}-${path}${k.replace(/_b64$/, '')}.${ext}`.replace(/[^\w./-]/g, '_'); writeFileSync(fn, Buffer.from(v, 'base64')); files[fn] = v.length; o[k] = fn; } else walk(v, `${path}${k}-`); } };
+    walk(r, '');
+    writeFileSync(`e2e/${c.name}.json`, JSON.stringify(r, null, 1));
+    console.log(c.name, JSON.stringify(r).slice(0, 3000));
+    out.push({ case: c.name, ok: r.ok });
+    continue;
+  }
   if (c.overpass) {
     // raw Overpass answer (used to check rail / road geometry near an incident)
     const r = await pg.evaluate(async (q) => { let last = ''; for (let k = 0; k < 6; k++) for (const ep of ['https://overpass.kumi.systems/api/interpreter', 'https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']) { try { const res = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }); const t = await res.text(); if (res.ok && t.trim().startsWith('{')) return { ok: true, text: t.slice(0, 60000) }; last = t.slice(0, 200); } catch (e) { last = String(e); } await new Promise((ok) => setTimeout(ok, 3000 * (k + 1))); } return { ok: false, text: last }; }, c.overpass);
