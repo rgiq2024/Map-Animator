@@ -385,3 +385,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Flight reconstruction: new **“Move top captions down”** setting so its timer and tag clear a GEO·BRIEF header.
 - Fix: in an exported video the **3D flight path** (and other things drawn at a height — storm cells, blast clouds) was drawn at the wrong scale, so the route looked broken and off the aircraft; it now matches the preview at every export size.
 - Flight reconstruction: **“Flight path line”** on/off switch (hide the path and keep the aircraft, callouts and panel).
+- Lens / zoom inset: new **Magnifier** source — the round lens (or rectangle, card, glass bubble) now can enlarge **whatever is on the screen** under the spot: photos, before / after pictures, the map and its labels (Magnification 1.2–12×). The spot can be a place on the map or **a spot pinned on the screen** — drag its small ring onto a picture. Works the same in the preview and the exported video.

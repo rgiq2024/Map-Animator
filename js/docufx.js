@@ -66,9 +66,12 @@ const SIDES = { right: 'Right', left: 'Left', up: 'Up', down: 'Down' };
 export const DF_FORMS = {
   docinset: [
     ['style.shape', 'Shape', 'select', { circle: 'Round lens (magnifier)', rect: 'Rectangle with rounded corners', card: 'Card with title / flag', bubble: 'Glass bubble on the place' }],
-    ['style.media', 'Your picture instead of satellite imagery (optional)', 'image'],
-    ['style.zoom', 'Imagery zoom', 'range', [3, 19, 0.25]],
-    ['style.src', 'Imagery', 'select', { satellite: 'Satellite (Esri World Imagery)', topo: 'Topographic', streets: 'Streets', dark: 'Dark grey' }],
+    ['style.src', 'What the lens shows', 'select', { screen: 'Magnifier — what is on the screen under the place (photos, before / after, map, labels)', satellite: 'Satellite (Esri World Imagery)', topo: 'Topographic', streets: 'Streets', dark: 'Dark grey' }],
+    ['style.spot', 'The spot it looks at', 'select', { map: 'A place on the map (moves with the map)', screen: 'A spot on the screen — drag its small ring onto a photo / before-after picture' }],
+    ['style.mag', 'Magnification (×)', 'range', [1.2, 12, 0.1], (L) => L.style.src === 'screen' && !L.style.media],
+    ['', 'Put the small ring on the photo or before / after picture you want to look into (choose “A spot on the screen” above and drag the ring there). The lens shows that spot enlarged.', 'note', null, (L) => L.style.src === 'screen' && !L.style.media],
+    ['style.media', 'Your picture instead (optional)', 'image'],
+    ['style.zoom', 'Imagery zoom', 'range', [3, 19, 0.25], (L) => L.style.src !== 'screen' && !L.style.media],
     ['style.size', 'Size', 'range', [0.4, 3, 0.05]],
     ['style.title', 'Title', 'text'],
     ['style.titlePos', 'Title', 'select', { below: 'Below', above: 'Above', tag: 'White tag under the card', none: 'Hidden' }],
@@ -137,8 +140,35 @@ function smallRing(ctx, x, y, r, col, unit) {
 }
 
 // ---------------------------------------------------------------- lens / zoom inset
+/** Magnifier: copy what is already drawn on the screen around the place (map + photos + panels), enlarged. */
+function screenGrab(ctx, L, o, ll, p, W, Hh) {
+  const s = L.style, mag = clamp(+s.mag || 3, 1.05, 20);
+  const T = ctx.getTransform(), S = Math.abs(T.a) || 1;
+  const [C, g] = off(`${L.id}:docinset`, W * S, Hh * S);
+  g.clearRect(0, 0, C.width, C.height); g.fillStyle = '#05080d'; g.fillRect(0, 0, C.width, C.height);
+  const hw = W / 2 / mag, hh = Hh / 2 / mag; // the area looked at, in overlay units
+  // 1 · the map underneath (in the preview it is its own canvas; in an export it is already in ctx)
+  const m = o.map, mc = m?.getCanvas?.();
+  if (mc && mc.width && mc !== ctx.canvas) {
+    try {
+      const a = m.project(ll), q = m.unproject([a.x + 100, a.y]), pq = o.proj([q.lng, q.lat]);
+      const k = Math.hypot(pq[0] - p[0], pq[1] - p[1]) / 100 || 1; // overlay units per map css px
+      const pr = mc.width / (mc.clientWidth || m.transform?.width || mc.width);
+      const sw = (2 * hw / k) * pr, sh = (2 * hh / k) * pr;
+      g.drawImage(mc, a.x * pr - sw / 2, a.y * pr - sh / 2, sw, sh, 0, 0, C.width, C.height);
+    } catch { /* tainted / not ready */ }
+  }
+  // 2 · everything drawn on the overlay so far (photos, before / after panels, labels)
+  try {
+    const sx = T.a * (p[0] - hw) + T.e, sy = T.d * (p[1] - hh) + T.f;
+    g.drawImage(ctx.canvas, sx, sy, 2 * hw * T.a, 2 * hh * T.d, 0, 0, C.width, C.height);
+  } catch { /* ignore */ }
+  if (+s.dim > 0) { g.fillStyle = `rgba(0,0,0,${+s.dim})`; g.fillRect(0, 0, C.width, C.height); }
+  return C;
+}
 function insetImage(L, o, ll, w, h, S, unit) {
   const s = L.style;
+  if (s.src === 'screen' && !s.media && L._grab) return L._grab;
   const [C, g] = off(`${L.id}:docinset`, w * S, h * S);
   const pic = s.media ? imageFor(s.media) : null;
   if (pic?.ready) {
@@ -156,13 +186,21 @@ function insetImage(L, o, ll, w, h, S, unit) {
 function drawDocInset(ctx, L, tm, o) {
   const s = L.style, unit = o.unit, fr = o.frame;
   if (!fr || L.geom?.type !== 'Point') return;
-  const ll = L.geom.coordinates, p = o.proj(ll);
+  const ll = L.geom.coordinates;
+  let p = o.proj(ll);
+  if (s.spot === 'screen') {
+    // the spot looked at is pinned on the screen (on a photo / before-after panel) — drag its ring
+    const r = 10 * unit; ctx.save();
+    const [sx, sy] = placeAt(ctx, L, fr, p[0] - r, p[1] - r, 2 * r, 2 * r, { key: 'spot' });
+    ctx.restore(); p = [p[0] + sx, p[1] + sy];
+  }
   const u = prog(L, tm), still = tm.edit || L.anim === 'none';
   const shape = s.shape || 'circle', col = s.frame || '#ffffff';
   const sz = +s.size || 1;
   const W = (shape === 'circle' || shape === 'bubble' ? 260 : shape === 'card' ? 280 : 300) * unit * sz;
   const Hh = shape === 'circle' || shape === 'bubble' ? W : W * (shape === 'card' ? 0.72 : 0.62);
   const S = Math.max(1, Math.abs(ctx.getTransform().a) || 1);
+  L._grab = s.src === 'screen' && !s.media ? screenGrab(ctx, L, o, ll, p, W, Hh) : null;
   ctx.save(); ctx.globalAlpha *= tm.alpha;
   // box centre: fixed on the screen (the line and the small ring follow the place) or pinned to the map
   let bx, by;
