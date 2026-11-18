@@ -171,7 +171,7 @@ export const RC_FORMS = {
     ['style.calloutLook', 'Callout style', 'select', { modern: 'Modern (glass card, time chip, corner ticks)', classic: 'Classic (bar + text)' }, (L) => L.style.callouts !== false], ['style.planeSize', 'Aircraft size', 'range', [0.4, 4, 0.05], (L) => L.style.plane !== false], ['style.streak', 'Bright streak (for a ground viewpoint)', 'switch'],
     ['style.callouts', 'Callouts on the path', 'switch'], ['style.quote', 'Quote at the top while it is said', 'switch'], ['style.quoteLabel', 'Label above the quote', 'text', null, (L) => L.style.quote !== false],
     ['style.panel', 'Clock · altitude · descent rate panel', 'switch'], ['style.dataLabel', 'Data source after the numbers (e.g. GPS, ADS-B, est.)', 'text', null, (L) => L.style.panel !== false], ['style.panelPos', 'Panel position', 'select', POS, (L) => L.style.panel !== false], ['style.units', 'Altitude units', 'select', { ft: 'feet', m: 'metres' }],
-    ['style.timer', '“+0:51 since the dive began” timer', 'switch'], ['style.badge', 'REAL TIME / SLOW MOTION badge', 'switch'],
+    ['style.timer', '“+0:51 since the dive began” timer', 'switch'], ['style.hudDown', 'Move top captions down (px) — clears a briefing header', 'range', [0, 200, 1]], ['style.badge', 'REAL TIME / SLOW MOTION badge', 'switch'],
     ['style.tag', 'Tag (top left)', 'text'], ['style.title', 'Title (top centre)', 'text'], ['style.credits', 'Sources line (bottom)', 'text'],
     ['style.impact', 'Impact flash at the end', 'switch'], ['style.impactSize', 'Flash size', 'range', [0.3, 3, 0.05], (L) => L.style.impact !== false],
     ['style.impactLabel', 'Impact label (e.g. Impacted Location — empty = none)', 'text'], ['style.impactSub', 'Second line (empty = the coordinates)', 'text', null, (L) => !!L.style.impactLabel],
@@ -343,7 +343,7 @@ function drawFlight(ctx, L, tm, o, phase) {
     }
   }
   if (!fr) { ctx.restore(); return; }
-  const top = fr.y, left = fr.x, W = fr.w, H = fr.h;
+  const top = fr.y + (+s.hudDown || 0) * unit, left = fr.x, W = fr.w, H = fr.h;
   // tag top-left, title top-centre
   if (s.tag) {
     ctx.font = `700 ${14 * unit}px ${UI}`;
@@ -403,7 +403,7 @@ function drawFlight(ctx, L, tm, o, phase) {
   if (s.panel !== false) telemetry(ctx, L, o, rows, now, unit, fr);
   if (s.credits) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = `500 ${11.5 * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    ctx.fillText(s.credits, left + 38 * unit, top + H - 26 * unit, W * 0.7);
+    ctx.fillText(s.credits, left + 38 * unit, fr.y + H - 26 * unit, W * 0.7);
   }
   ctx.restore();
 }

@@ -146,9 +146,15 @@ export async function projectFileJSON(p) {
     if (L.kind === 'model3d' && String(L.style?.source || '').startsWith('media:')) ids.add(L.style.source.slice(6));
   }
   if (p.brand?.logo) ids.add(p.brand.logo);
+  // any other picture a layer points at (briefing photos and before / after images, logos, overlay stacks, dossier
+  // photos…): every short id-like string in a layer's style that is in the media store goes into the file too
+  const cand = new Set();
+  const walk = (v, d = 0) => { if (d > 6 || v == null) return; if (typeof v === 'string') { if (/^[\w-]{6,48}$/.test(v) && !ids.has(v)) cand.add(v); } else if (Array.isArray(v)) { for (const x of v) walk(x, d + 1); } else if (typeof v === 'object') { for (const x of Object.values(v)) walk(x, d + 1); } };
+  for (const sc of p.scenes || []) for (const L of sc.layers || []) walk(L.style);
+  for (const id of cand) if ((await getMedia(id).catch(() => null)) instanceof Blob) ids.add(id);
   for (const id of ids) {
     const b = await getMedia(id);
-    if (b) media[id] = await blobToDataURL(b);
+    if (b instanceof Blob) media[id] = await blobToDataURL(b);
   }
   return JSON.stringify({ ...p, format: 'map-animator', version: 3, media });
 }
