@@ -110,7 +110,7 @@ export function lineModel(L) {
   const total = seg.at(-1) || 0;
   const raw = parseStations(L.style.stations);
   let st = raw.map((s, i) => ({ ...s, along: s.ll && cs.length > 1 ? nearestOnLine(cs, seg, s.ll) : (raw.length > 1 ? (i / (raw.length - 1)) * total : 0) }));
-  st.forEach((s) => { const p = at(cs, seg, s.along); s.pos = p.ll; s.heading = p.heading; });
+  st.forEach((s) => { if (cs.length < 2) { s.pos = s.ll || null; s.heading = 0; return; } const p = at(cs, seg, s.along); s.pos = p.ll; s.heading = p.heading; });
   st = st.sort((a, b) => a.along - b.along);
   const m = { key, lines, cs, seg, total, st };
   cache.set(L, m);

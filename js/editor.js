@@ -5400,6 +5400,8 @@ export function createEditor() {
     /** The video frame on screen (CSS px), e.g. for screenshots. */
     get viewFrame() { if (!stage || !overlay || !frame) return null; const kk = overlay.width / stage.clientWidth; const r = stage.getBoundingClientRect(); return { x: r.left + frame.x / kk, y: r.top + frame.y / kk, w: frame.w / kk, h: frame.h / kk }; },
     get map() { return map; },
+    // used by the tutorial-picture generator (tools/tutorials-build.py)
+    tut: { seek(t) { time = clamp(t, 0, model.total); setViewMode('play'); setPlaying(false); applyCamera(time); tl.playhead(); repaint(); }, step: (s) => setStep(s), del: (id) => deleteLayer(id), sel: (id) => selectLayer(id), cancel: () => { stopPlacing(); cancelDrawing(); }, get model() { return model; }, get scene() { return scene(); } },
     startExport,
     importRoute,
   };
