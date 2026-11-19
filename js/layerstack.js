@@ -28,7 +28,7 @@ export const LS_ANIMS = {
 export const LS_DEFAULTS = {
   layerstack: {
     layers: [], overview: '', overviewLabel: '',
-    rot: 38, tilt: 60, size: 1, gap: 1, spin: 0, cx: 0.5, cy: 0.56,
+    shape: 'square', shapeRot: 0, edgeAll: false, rot: 38, tilt: 60, size: 1, gap: 1, spin: 0, cx: 0.5, cy: 0.56,
     focusZoom: 1.18, follow: true, dim: 0.1, outline: '#f2d39b', outlineOn: true,
     labels: true, sources: true, labelsEnd: true, labelColor: '#ffffff', textSize: 1, number: false,
     bg: '#000000', bgAlpha: 1, clearWhite: false, shadow: true,
@@ -43,6 +43,9 @@ export const LS_FORMS = {
     ['', 'Tip: transparent PNGs of the same area and size work best. Name files like “0_Imagery.png”, “1_Streets.png” — the number sets the order and the rest becomes the label.', 'note'],
     ['style.overview', 'Overview picture to start from (optional — a wider view the stack zooms out of)', 'image', null, show('full')],
     ['style.overviewLabel', 'Overview caption', 'text', null, (L) => L.anim === 'full' && !!L.style.overview],
+    ['style.shape', 'Shape of each layer', 'select', { square: 'Square / rectangle (the whole picture)', rounded: 'Rounded square', circle: 'Circle', oval: 'Oval', hexagon: 'Hexagon', octagon: 'Octagon', diamond: 'Diamond' }],
+    ['style.shapeRot', 'Turn the shape (°) — e.g. 30 for a flat-top hexagon', 'range', [-90, 90, 1], (L) => ['hexagon', 'octagon', 'oval', 'diamond'].includes(L.style.shape)],
+    ['style.edgeAll', 'Thin edge on every layer', 'switch'],
     ['style.rot', 'Rotate (°)', 'range', [-180, 180, 1]],
     ['style.tilt', 'Tilt (° — 0 = from straight above)', 'range', [0, 80, 1]],
     ['style.size', 'Zoom (size)', 'range', [0.3, 2.5, 0.01]],
@@ -122,6 +125,25 @@ function picture(id, tint, clearWhite) {
   proc.set(key, e);
   return e;
 }
+
+// ---------------------------------------------------------------- shapes (in picture pixels)
+function shapePts(st, w, h) {
+  const sh = st.shape || 'square', cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2, a0 = ((+st.shapeRot || 0) * Math.PI) / 180;
+  const ring = (n, rx, ry, start) => Array.from({ length: n }, (_, k) => { const a = start + a0 + (k / n) * Math.PI * 2; return [cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]; });
+  if (sh === 'circle') return ring(96, r, r, 0);
+  if (sh === 'oval') return ring(96, w / 2, h / 2 * 0.68, 0);
+  if (sh === 'hexagon') return ring(6, r, r, -Math.PI / 2);
+  if (sh === 'octagon') return ring(8, r, r, Math.PI / 8);
+  if (sh === 'diamond') return ring(4, r, r, -Math.PI / 2);
+  if (sh === 'rounded') {
+    const q = Math.min(w, h) * 0.12, out = [];
+    const arc = (x, y, a) => { for (let k = 0; k <= 8; k++) { const t = a + (k / 8) * Math.PI / 2; out.push([x + Math.cos(t) * q, y + Math.sin(t) * q]); } };
+    arc(w - q, q, -Math.PI / 2); arc(w - q, h - q, 0); arc(q, h - q, Math.PI / 2); arc(q, q, Math.PI);
+    return out;
+  }
+  return [[0, 0], [w, 0], [w, h], [0, h]];
+}
+const tracePts = (g, P) => { g.beginPath(); P.forEach((c, j) => (j ? g.lineTo(c[0], c[1]) : g.moveTo(c[0], c[1]))); g.closePath(); };
 
 // ---------------------------------------------------------------- drawing
 function labelW(g, txt, srcTxt, u, num) {
@@ -241,7 +263,7 @@ export function drawLayerStack(ctx, L, tm, o) {
     const z = zOf(i) * zoom + drop;
     const ox = cx - (ex[0] * pic.w + ey[0] * pic.h) * sc / 2, oy = cy - z - (ex[1] * pic.w + ey[1] * pic.h) * sc / 2;
     const at = (a, b) => [ox + (ex[0] * a + ey[0] * b) * sc, oy + (ex[1] * a + ey[1] * b) * sc];
-    return { sc, ox, oy, at, corners: [at(0, 0), at(pic.w, 0), at(pic.w, pic.h), at(0, pic.h)] };
+    return { sc, ox, oy, at, corners: shapePts(s, pic.w, pic.h).map(([a, b]) => at(a, b)) };
   };
   // ---- overview picture (zooms in to the stack)
   if (kOv > 0 && s.overview) {
@@ -277,12 +299,14 @@ export function drawLayerStack(ctx, L, tm, o) {
       const G = geom(pic, i, drop);
       g.save(); g.globalAlpha *= a * stackA * clamp(+all[i].opacity || 1, 0, 1);
       g.transform(ex[0] * G.sc, ex[1] * G.sc, ey[0] * G.sc, ey[1] * G.sc, G.ox, G.oy);
+      if ((s.shape || 'square') !== 'square') { tracePts(g, shapePts(s, pic.w, pic.h)); g.clip(); }
       g.drawImage(pic.src, 0, 0, pic.w, pic.h);
       g.restore();
+      if (s.edgeAll) { g.save(); g.globalAlpha *= a * stackA * 0.75; g.strokeStyle = s.outline; g.lineWidth = 1 * u; tracePts(g, G.corners); g.stroke(); g.restore(); }
       const isF = i === focus && focusK > 0.01;
       if (s.outlineOn !== false && isF) {
         g.save(); g.globalAlpha *= stackA * (isF ? focusK : 1);
-        g.strokeStyle = s.outline; g.lineWidth = 1.1 * u; g.beginPath(); G.corners.forEach((c, j) => (j ? g.lineTo(c[0], c[1]) : g.moveTo(c[0], c[1]))); g.closePath(); g.stroke();
+        g.strokeStyle = s.outline; g.lineWidth = 1.1 * u; tracePts(g, G.corners); g.stroke();
         g.restore();
       }
       labelAt.push({ i, G });
