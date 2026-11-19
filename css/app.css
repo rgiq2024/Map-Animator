@@ -1281,3 +1281,14 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 .undo-bar { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 9999; display: flex; gap: 14px; align-items: center; padding: 10px 14px 10px 16px; border-radius: 10px; background: #1b2230; color: #fff; font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,.45); transition: opacity .2s, transform .2s; }
 .undo-bar.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .undo-bar button { font: inherit; font-weight: 600; color: #ffc629; background: transparent; border: 1px solid #ffc62966; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+/* map layer stack: list of layer pictures */
+.ls-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
+.ls-row { border: 1px solid var(--line, #2a313b); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 4px; background: rgba(255,255,255,0.02); }
+.ls-row.off { opacity: 0.55; }
+.ls-head { display: flex; align-items: center; gap: 4px; }
+.ls-head b { width: 18px; text-align: center; opacity: 0.7; font-size: 12px; }
+.ls-head input { flex: 1; min-width: 0; }
+.ls-row > input { width: 100%; font-size: 12px; }
+.ls-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; }
+.ls-opts label { display: flex; align-items: center; gap: 4px; }
+.ls-opts input[type=range] { width: 70px; }

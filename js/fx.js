@@ -43,6 +43,7 @@ import { SAR_KINDS, SAR_ANIMS, SAR_DEFAULTS, SAR_FORMS, SAR_SET, sarPhases, draw
 import { DF_KINDS, DF_ANIMS, DF_DEFAULTS, DF_FORMS, DF_SET, dfPhases, drawDocu } from './docufx.js';
 import { SW_KINDS, SW_ANIMS, SW_LAYER_DEFAULTS, SW_FORMS, SW_SET, swPhases, drawSiteWatch } from './sitewatch.js';
 import { GV_KINDS, GV_ANIMS, GV_LAYER_DEFAULTS, GV_FORMS, GV_SET, gvPhases, drawGeoViz } from './geoviz.js';
+import { LS_KINDS, LS_ANIMS, LS_LAYER_DEFAULTS, LS_FORMS, LS_SET, lsPhases, drawLayerStack } from './layerstack.js';
 import { FIRMS_KINDS, FIRMS_ANIMS, FIRMS_DEFAULTS, FIRMS_FORMS, FIRMS_SET, firmsPhases, drawFirms } from './firms.js';
 import { HO_KINDS, HO_ANIMS, HO_DEFAULTS, HO_FORMS, HO_SET, hoPhases, drawHolo } from './holo.js';
 import { MF_KINDS, MF_ANIMS, MF_DEFAULTS, MF_FORMS, MF_SET, mfPhases, drawModelFlow } from './modelflow.js';
@@ -81,6 +82,7 @@ export const FX_KINDS = {
   ...DF_KINDS,
   ...SW_KINDS,
   ...GV_KINDS,
+  ...LS_KINDS,
   ...SAR_KINDS,
   ...TT_KINDS,
   ...TW_KINDS,
@@ -144,6 +146,7 @@ export const FX_ANIMS = {
   ...DF_ANIMS,
   ...SW_ANIMS,
   ...GV_ANIMS,
+  ...LS_ANIMS,
   ...SAR_ANIMS,
   ...TT_ANIMS,
   ...TW_ANIMS,
@@ -203,6 +206,7 @@ export const FX_DEFAULTS = {
   ...DF_DEFAULTS,
   ...SW_LAYER_DEFAULTS,
   ...GV_LAYER_DEFAULTS,
+  ...LS_LAYER_DEFAULTS,
   ...SAR_DEFAULTS,
   ...TT_DEFAULTS,
   ...TW_DEFAULTS,
@@ -269,6 +273,7 @@ export const FX_FORMS = {
   ...DF_FORMS,
   ...SW_FORMS,
   ...GV_FORMS,
+  ...LS_FORMS,
   ...SAR_FORMS,
   ...TT_FORMS,
   ...TW_FORMS,
@@ -1450,6 +1455,7 @@ export function drawFX(ctx, L, tm, o, phase) {
   if (DF_SET.has(L.kind)) { drawDocu(ctx, L, tm, o, phase); return; }
   if (SW_SET.has(L.kind)) { drawSiteWatch(ctx, L, tm, o, phase); return; }
   if (GV_SET.has(L.kind)) { drawGeoViz(ctx, L, tm, o, phase); return; }
+  if (LS_SET.has(L.kind)) { if (phase === 'captions') drawLayerStack(ctx, L, tm, o); return; }
   if (FIRMS_SET.has(L.kind)) { drawFirms(ctx, L, tm, o, phase, { placeAt, track: CFH.track }); return; }
   if (TW_SET.has(L.kind)) { drawTvWeather(ctx, L, tm, o, phase); return; }
   if (TH_SET.has(L.kind)) { drawThematic(ctx, L, tm, o, phase); return; }
@@ -1542,6 +1548,7 @@ export function fxPhases(kind) {
   if (DF_SET.has(kind)) return dfPhases(kind);
   if (SW_SET.has(kind)) return swPhases(kind);
   if (GV_SET.has(kind)) return gvPhases(kind);
+  if (LS_SET.has(kind)) return lsPhases(kind);
   if (SAR_SET.has(kind)) return sarPhases(kind);
   if (TT_SET.has(kind)) return ttPhases(kind);
   if (TR_SET.has(kind)) return trPhases(kind);

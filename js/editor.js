@@ -2059,6 +2059,19 @@ export function createEditor() {
     const before = (scene().layers || []).length;
     cartoAdd(e);
     const L = (scene().layers || [])[before];
+    if (L?.kind === 'layerstack') {
+      L.start = 0; selLayer = L.id;
+      if (b.dataset.sample) {
+        import('./layerstack.js').then(async ({ lsLoadSample, lsNominal }) => {
+          toast('Loading the Seattle sample…');
+          try { await lsLoadSample(L, b.dataset.sample); } catch (err) { console.warn(err); toast('Could not load the sample'); return; }
+          L.duration = lsNominal(L);
+          for (const id of [...L.style.layers.map((x) => x.media), L.style.overview]) if (id) imageFor(id).p.then(repaint);
+          renderScenes?.(); renderLayerEditor(); commitLayers(); repaint();
+          toast('Seattle layer stack added — press play. Change the pictures, names, rotation, tilt and zoom in its settings.', 5200);
+        });
+      } else { geoPick = { mode: 'stack', id: L.id }; $('#file-geoimg').click(); toast('Choose your layer pictures (you can pick several at once)', 4200); }
+    }
     if (L && (L.kind === 'thematic')) {
       let n = 0;
       const fit = () => { const bb = thematicBounds(L); if (bb.loading && n++ < 30) { setTimeout(fit, 250); return; } if (bb.bbox) { const [w, s2, e2, n2] = bb.bbox; flyToBounds([[Math.max(-180, w), Math.max(-60, s2)], [Math.min(180, e2), Math.min(78, n2)]], 0.08); } repaint(); };
@@ -2265,6 +2278,19 @@ export function createEditor() {
         }
         else if (type === 'gvaction') {
           h += `<div class="btn-row"><button class="btn sm primary" data-act="gvAction" data-fn="${esc(o)}">${label}</button></div>`;
+        }
+        else if (type === 'stacklayers') {
+          const arr = L.style.layers || [];
+          const tints = { '': 'Own colours', '#ffffff': 'White', '#000000': 'Black', '#f2d39b': 'Sand', '#3fa9ff': 'Blue', '#7bd389': 'Green', '#ffd23f': 'Yellow', '#ff5a4e': 'Red' };
+          h += `<div class="ls-list">`;
+          arr.forEach((x, i) => {
+            const im = imageFor(x.media);
+            h += `<div class="ls-row${x.hidden ? ' off' : ''}"><div class="ls-head"><b>${i + 1}</b><input data-b="style.layers.${i}.label" value="${esc(x.label || '')}" placeholder="Name">`
+              + `<button class="btn sm ghost" data-act="lsMove" data-i="${i}" data-d="-1" title="Lower in the stack" ${i ? '' : 'disabled'}>↓</button><button class="btn sm ghost" data-act="lsMove" data-i="${i}" data-d="1" title="Higher in the stack" ${i < arr.length - 1 ? '' : 'disabled'}>↑</button><button class="btn sm ghost" data-act="lsDel" data-i="${i}" title="Remove">✕</button></div>`
+              + `<input data-b="style.layers.${i}.source" value="${esc(x.source || '')}" placeholder="Source / credit (optional)">`
+              + `<div class="ls-opts"><label>Colour ${fSel(`style.layers.${i}.tint`, x.tint || '', tints)}</label><label>Opacity <input type="range" data-b="style.layers.${i}.opacity" min="0.1" max="1" step="0.05" value="${x.opacity ?? 1}"></label><label>Hide ${fSw(`style.layers.${i}.hidden`, x.hidden)}</label><button class="btn sm" data-act="pickImg" data-field="style.layers.${i}.media">Replace…</button>${im?.ready ? `<i class="muted small">${im.w}×${im.h}</i>` : ''}</div></div>`;
+          });
+          h += `</div><div class="btn-row"><button class="btn sm primary" data-act="lsAdd">＋ Add pictures… (choose several)</button><button class="btn sm" data-act="lsSample">Use the Seattle sample</button>${arr.length ? `<button class="btn sm ghost" data-act="lsFit">Fit the time to the layers</button>` : ''}</div>`;
         }
         else if (type === 'note') {
           h += `<p class="hint-line">${esc(label)}</p>`;
@@ -3214,8 +3240,15 @@ export function createEditor() {
         setPath(L, pick.field, items[0].id);
         if (L.kind === 'briefing') { syncBriefing(L, pick.field); syncBriefing(L, pick.field.replace('Media', 'Date')); }
         if (L.kind === 'briefing' && /Media$/.test(pick.field) && /(19|20)\d\d/.test(items[0].name || '')) { const dk = pick.field.replace('Media', 'Date'); if (!getPath(L, dk)) setPath(L, dk, labelFromName(items[0].name)); }
-        if (items[0].quad && L.kind !== 'briefing' && (L.kind === 'image' || !quadOf(L))) { L.geom = quadGeom(items[0].quad); L.style.crs = items[0].crs; zoomTo = L; }
+        if (items[0].quad && L.kind !== 'briefing' && L.kind !== 'layerstack' && (L.kind === 'image' || !quadOf(L))) { L.geom = quadGeom(items[0].quad); L.style.crs = items[0].crs; zoomTo = L; }
         if (L.kind === 'compare' && pick.field === 'style.media2' && items[0].name.match(/(19|20)\d\d/)) L.style.labelB = labelFromName(items[0].name);
+      } else if (pick.mode === 'stack') {
+        const { lsNameOf, lsNominal } = await import('./layerstack.js');
+        const add = items.map((r, k) => { const [num, label] = lsNameOf(r.name); return { r, num: num ?? 1000 + k, label }; }).sort((a, b) => a.num - b.num);
+        const wasEmpty = !(L.style.layers || []).length;
+        (L.style.layers ||= []).push(...add.map((x) => ({ media: x.r.id, label: x.label, source: '' })));
+        if (wasEmpty || L.duration < lsNominal(L) - 4) L.duration = lsNominal(L);
+        toast(`${add.length} picture${add.length > 1 ? 's' : ''} added — bottom to top: ${add.map((x) => x.label).join(', ')}`, 4600);
       } else if (pick.mode === 'frames') {
         (L.style.frames ||= []).push(...items.map((r) => ({ media: r.id, name: r.name, label: labelFromName(r.name) })));
         if (!L.geom) L.geom = quadGeom(geoOf(items[0]).q);
@@ -3332,6 +3365,23 @@ export function createEditor() {
     }
     if (a === 'brHere') { const c = map.getCenter(); setBriefPoint(L, [c.lng, c.lat]); toast('Location set to the middle of the map'); }
     if (a === 'resetPos') { pushUndo(); for (const k of Object.keys(L.style)) if (k.startsWith('pos_') || k.startsWith('size_')) delete L.style[k]; renderLayerEditor(); repaint(); save(); toast('Panels back in their places'); }
+    if (a === 'lsAdd') { geoPick = { mode: 'stack', id: L.id }; $('#file-geoimg').click(); }
+    if (a === 'lsMove' || a === 'lsDel') {
+      const arr = L.style.layers || [], i = +btn.dataset.i;
+      pushUndo();
+      if (a === 'lsDel') arr.splice(i, 1);
+      else { const j = i + +btn.dataset.d; if (j >= 0 && j < arr.length) [arr[i], arr[j]] = [arr[j], arr[i]]; }
+      renderLayerEditor(); commitLayers(); repaint();
+    }
+    if (a === 'lsFit') { const { lsNominal } = await import('./layerstack.js'); pushUndo(); L.duration = lsNominal(L); renderLayerEditor(); commitLayers(); repaint(); toast(`Animation set to ${L.duration} s`); }
+    if (a === 'lsSample') {
+      const { lsLoadSample, lsNominal } = await import('./layerstack.js');
+      pushUndo(); toast('Loading the Seattle sample…');
+      try { await lsLoadSample(L, 'seattle'); } catch (err) { console.warn(err); toast('Could not load the sample'); return; }
+      L.duration = lsNominal(L);
+      (L.style.layers || []).forEach((x) => imageFor(x.media).p.then(repaint)); if (L.style.overview) imageFor(L.style.overview).p.then(repaint);
+      renderLayerEditor(); commitLayers(); repaint(); toast('Seattle sample loaded — 6 layers and an overview picture', 3600);
+    }
     if (a === 'pickImg') { geoPick = { mode: 'field', id: L.id, field: btn.dataset.field }; $('#file-geoimg').click(); }
     if (a === 'addFrames') { geoPick = { mode: 'frames', id: L.id }; $('#file-geoimg').click(); }
     if (a === 'geoFit') geo(fitQuad(img?.ready ? img.h / img.w : 0.66));

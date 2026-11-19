@@ -113,7 +113,7 @@ export function newLayer(kind, geom, opts = {}) {
     caption: { anim: 'slide', duration: 0.8, style: { text: 'Your title', sub: '', layout: 'lowerThird', position: 'bottom-left', accent: '#ff6b35', size: 1 } },
     ...FX_DEFAULTS,
   }[kind];
-  const L = { ...base, anim: S.anim, style: { ...S.style } };
+  const L = { ...base, anim: S.anim, style: Object.fromEntries(Object.entries(S.style || {}).map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' ? { ...x } : x)) : v])) };
   if (S.duration) L.duration = S.duration;
   if (S.hold) L.hold = S.hold;
   if (opts.preset && SYMBOL_PRESETS[opts.preset]) {
