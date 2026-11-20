@@ -25,7 +25,9 @@ const parseLL = (s) => { const m = String(s || '').match(/(-?\d+(?:\.\d+)?)\s*[,
 const polysOf = (g) => (g?.type === 'Polygon' ? [g.coordinates] : g?.type === 'MultiPolygon' ? g.coordinates : []);
 const linesOf = (g) => (g?.type === 'LineString' ? [g.coordinates] : g?.type === 'MultiLineString' ? g.coordinates : []);
 function inRing(x, y, ring) { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, yi] = ring[i], [xj, yj] = ring[j]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi || 1e-12) + xi) c = !c; } return c; }
-function inPolys(ll, polys) { for (const p of polys) { if (!inRing(ll[0], ll[1], p[0])) continue; let hole = false; for (let k = 1; k < p.length; k++) if (inRing(ll[0], ll[1], p[k])) { hole = true; break; } if (!hole) return true; } return false; }
+// rings that cross the 180° line are tested unwrapped (else a band of latitudes across the world counts as inside)
+const inRingW = (x, y, r) => { const u = unwrapRing(r); if (!u.shift) return inRing(x, y, u.ring); return inRing(x, y, u.ring) || inRing(x - u.shift, y, u.ring); };
+function inPolys(ll, polys) { for (const p of polys) { if (!inRingW(ll[0], ll[1], p[0])) continue; let hole = false; for (let k = 1; k < p.length; k++) if (inRingW(ll[0], ll[1], p[k])) { hole = true; break; } if (!hole) return true; } return false; }
 function bboxOf(polys) { let w = 180, s = 90, e = -180, n = -90; for (const p of polys) for (const [x, y] of p[0]) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); } return [w, s, e, n]; }
 /** Area-weighted centroid of the biggest polygon (label spot). */
 function labelPoint(polys) {

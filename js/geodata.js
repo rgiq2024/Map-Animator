@@ -447,7 +447,7 @@ export const SCHEMES = {
   BrBG: ['#8c510a', '#bf812d', '#dfc27d', '#f6e8c3', '#f5f5f5', '#c7eae5', '#80cdc1', '#35978f', '#01665e'],
   PiYG: ['#c51b7d', '#de77ae', '#f1b6da', '#fde0ef', '#f7f7f7', '#e6f5d0', '#b8e186', '#7fbc41', '#4d9221'],
 };
-export const QUAL = {
+export const QUAL = { Bricks: ['#7cb342', '#c5e1a5', '#43699a', '#c9a77a', '#1b7a48', '#9ccc65', '#5c7aa8', '#e2c58f'],
   Tableau: ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac'],
   Set1: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999'],
   Set2: ['#66c2a5', '#fc8d62', '#8da0cb', '#e78ac3', '#a6d854', '#ffd92f', '#e5c494', '#b3b3b3'],
@@ -459,7 +459,7 @@ export const SCHEME_NAMES = {
   YlOrRd: 'Yellow → red', Blues: 'Blues', Greens: 'Greens', Reds: 'Reds', Oranges: 'Oranges', Purples: 'Purples', YlGnBu: 'Yellow → green → blue', OrRd: 'Orange → red', PuBuGn: 'Purple → blue → green', Greys: 'Greys', Viridis: 'Viridis', Magma: 'Magma', Heat: 'Heat (black → white)',
   RdBu: 'Diverging red ↔ blue', RdYlGn: 'Diverging red ↔ green', Spectral: 'Spectral', BrBG: 'Diverging brown ↔ teal', PiYG: 'Diverging pink ↔ green',
 };
-export const QUAL_NAMES = { Tableau: 'Tableau 10', Set1: 'Bright (Set 1)', Set2: 'Soft (Set 2)', Paired: 'Paired', Pastel: 'Pastel', Bold: 'Bold' };
+export const QUAL_NAMES = { Bricks: 'Toy bricks (greens, blues, sand)', Tableau: 'Tableau 10', Set1: 'Bright (Set 1)', Set2: 'Soft (Set 2)', Paired: 'Paired', Pastel: 'Pastel', Bold: 'Bold' };
 export const BIVAR = {
   pinkblue: ['#e8e8e8', '#ace4e4', '#5ac8c8', '#dfb0d6', '#a5add3', '#5698b9', '#be64ac', '#8c62aa', '#3b4994'],
   tealred: ['#e8e8e8', '#e4acac', '#c85a5a', '#b0d5df', '#ad9ea5', '#985356', '#64acbe', '#627f8c', '#574249'],
@@ -660,7 +660,70 @@ Kandahar,31.63,65.71,40
 Ashgabat,37.96,58.33,38
 Baku,40.41,49.87,32
 Yerevan,40.18,44.51,34`;
-export const SAMPLES = { temps: SAMPLE_TEMPS, world: SAMPLE_WORLD, cities: SAMPLE_CITIES, events: SAMPLE_EVENTS, profile: SAMPLE_PROFILE };
-export const SAMPLE_NAMES = { temps: 'July afternoon temperatures, Middle East (typical, approximate)', world: 'Countries of the world (approximate figures)', cities: 'Big cities with coordinates', events: 'A year of events with date and time', profile: 'Distance / elevation profile' };
+export const SAMPLE_USGAS = `state,name,price_usd
+AK,Alaska,3.71
+AL,Alabama,3.08
+AR,Arkansas,3.07
+AZ,Arizona,3.55
+CA,California,4.88
+CO,Colorado,3.02
+CT,Connecticut,3.29
+DC,District of Columbia,3.51
+DE,Delaware,3.24
+FL,Florida,3.40
+GA,Georgia,3.19
+HI,Hawaii,4.71
+IA,Iowa,3.14
+ID,Idaho,3.31
+IL,Illinois,3.71
+IN,Indiana,3.31
+KS,Kansas,3.16
+KY,Kentucky,3.10
+LA,Louisiana,3.03
+MA,Massachusetts,3.20
+MD,Maryland,3.33
+ME,Maine,3.23
+MI,Michigan,3.54
+MN,Minnesota,3.16
+MO,Missouri,3.19
+MS,Mississippi,2.94
+MT,Montana,3.40
+NC,North Carolina,3.20
+ND,North Dakota,3.26
+NE,Nebraska,3.19
+NH,New Hampshire,3.14
+NJ,New Jersey,3.17
+NM,New Mexico,3.07
+NV,Nevada,4.12
+NY,New York,3.34
+OH,Ohio,3.31
+OK,Oklahoma,3.08
+OR,Oregon,3.95
+PA,Pennsylvania,3.52
+RI,Rhode Island,3.16
+SC,South Carolina,3.11
+SD,South Dakota,3.19
+TN,Tennessee,3.07
+TX,Texas,2.98
+UT,Utah,3.31
+VA,Virginia,3.24
+VT,Vermont,3.26
+WA,Washington,4.21
+WI,Wisconsin,3.22
+WV,West Virginia,3.27
+WY,Wyoming,3.09`;
+export const SAMPLE_VIEWS = `name,lat,lon,angle
+Burj Khalifa deck,25.1972,55.2744,300
+Dubai Frame,25.2356,55.3003,170
+Ain Dubai,25.0795,55.1239,95
+Burj Al Arab beach,25.1385,55.1855,10
+Al Seef creek,25.2580,55.3010,40
+Dubai Marina walk,25.0800,55.1400,230
+Palm Jumeirah tip,25.1124,55.1389,120
+Desert road,25.0500,55.4200,270
+Hatta dam,24.7980,56.1130,200
+Jebel Jais,25.9500,56.1300,250`;
+export const SAMPLES = { usgas: SAMPLE_USGAS, views: SAMPLE_VIEWS, temps: SAMPLE_TEMPS, world: SAMPLE_WORLD, cities: SAMPLE_CITIES, events: SAMPLE_EVENTS, profile: SAMPLE_PROFILE };
+export const SAMPLE_NAMES = { usgas: 'US gasoline price per state, 11 March 2024 (AAA)', views: 'Photo viewpoints with direction (Dubai, example)', temps: 'July afternoon temperatures, Middle East (typical, approximate)', world: 'Countries of the world (approximate figures)', cities: 'Big cities with coordinates', events: 'A year of events with date and time', profile: 'Distance / elevation profile' };
 /** The data text of a layer: its own data, or the chosen sample. */
 export const dataOf = (s) => (String(s.data || '').trim() ? s.data : SAMPLES[s.sample] || '');
