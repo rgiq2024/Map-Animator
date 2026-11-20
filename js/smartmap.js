@@ -1,3 +1,4 @@
+import { traceRing } from './antimeridian.js';
 // Smart maps: data-driven layers for location-analysis stories — a cell mosaic coloured by value (population),
 // glowing hot spots (income), candidate-site rings, drive-time areas growing around sites, glowing revenue halos
 // with a hatch pattern, a heat map and sized circles — each revealed with a soft blurred wipe, a fade, a grow or a
@@ -163,7 +164,7 @@ function revealOf(L, tm) {
 }
 function regionPath(ctx, proj, g) {
   ctx.beginPath();
-  for (const poly of ringsOf(g)) for (const ring of poly) { ring.forEach((q, i) => { const p = proj(q); if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); }); ctx.closePath(); }
+  for (const poly of ringsOf(g)) for (const ring of poly) traceRing(ctx, ring, proj);
 }
 
 function paint(g, L, tm, o, u) {

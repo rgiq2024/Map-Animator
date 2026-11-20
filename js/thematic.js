@@ -16,8 +16,12 @@ export const TH_TYPES = {
   bivariate: 'Bivariate (two values, 3 × 3 colours)',
   unique: 'Unique values (categories)',
   heat: 'Heat map (density of points)',
+  spike: '3D spike map (value as height)',
+  hexbin: 'Hexagon bins (points counted in hexagons)',
+  dorling: 'Circle cartogram (Dorling — places as sized circles)',
+  isolines: 'Isolines / contours (surface from point values)',
 };
-export const TH_KINDS = { thematic: { name: 'Thematic map', icon: '🗺', geom: null, desc: 'Choropleth, graduated colours or symbols, proportional symbols, dot density, bivariate, categories or heat map from your CSV, GeoJSON, KML or shapefile' } };
+export const TH_KINDS = { thematic: { name: 'Thematic map', icon: '🗺', geom: null, desc: 'Choropleth, graduated colours or symbols, proportional symbols, dot density, bivariate, categories, heat map, 3D spikes, hexagon bins, circle cartogram or isolines from your CSV, GeoJSON, KML or shapefile' } };
 export const TH_ANIMS = { thematic: { classes: 'Classes appear low → high', grow: 'Grow one by one', sweep: 'Sweep in from the west', fade: 'Fade in', none: 'Shown' } };
 export const TH_DEFAULTS = {
   thematic: { anim: 'classes', duration: 2.5, style: {
@@ -28,10 +32,12 @@ export const TH_DEFAULTS = {
     perDot: 0, dotSize: 2, dotColor: '#d7301f', radius: 28, heatScheme: 'Heat',
     labels: 'none', labelField: '', labelSize: 1, labelColor: '#ffffff', decimals: '',
     legend: true, legendTitle: '', legendTheme: 'light', position: 'bottom-left', legendSize: 1,
+    spikeHeight: 140, spikeWidth: 8, hexSize: 22, hexAgg: 'count', isoBands: true, isoLines: true, isoLabels: true, isoReach: 150, isoPoints: true, baseMap: true,
   } },
 };
 const T = (L) => L.style.type || 'choropleth';
-const usesClasses = (L) => ['choropleth', 'gradcolor', 'gradsym'].includes(T(L));
+const CLS_TYPES = ['choropleth', 'gradcolor', 'gradsym', 'spike', 'dorling', 'isolines'];
+const usesClasses = (L) => CLS_TYPES.includes(T(L));
 export const TH_FORMS = {
   thematic: [
     ['style.type', 'Map type', 'select', TH_TYPES],
@@ -48,15 +54,25 @@ export const TH_FORMS = {
     ['style.method', 'Classification', 'select', CLASSIFY, usesClasses],
     ['style.classes', 'Number of classes', 'range', [2, 9, 1], (L) => usesClasses(L) && L.style.method !== 'manual'],
     ['style.manual', 'Breaks (e.g. 10, 50, 100, 500)', 'text', null, (L) => usesClasses(L) && L.style.method === 'manual'],
-    ['style.scheme', 'Colour scheme', 'select', SCHEME_NAMES, (L) => ['choropleth', 'gradcolor'].includes(T(L))],
+    ['style.scheme', 'Colour scheme', 'select', SCHEME_NAMES, (L) => ['choropleth', 'gradcolor', 'spike', 'dorling', 'isolines', 'hexbin'].includes(T(L))],
     ['style.heatScheme', 'Colour scheme', 'select', SCHEME_NAMES, (L) => T(L) === 'heat'],
-    ['style.reverse', 'Reverse colours', 'switch', null, (L) => ['choropleth', 'gradcolor'].includes(T(L))],
+    ['style.reverse', 'Reverse colours', 'switch', null, (L) => ['choropleth', 'gradcolor', 'spike', 'dorling', 'isolines', 'hexbin'].includes(T(L))],
+    ['style.spikeHeight', 'Tallest spike (px)', 'range', [20, 500, 5], (L) => T(L) === 'spike'],
+    ['style.spikeWidth', 'Spike width (px)', 'range', [2, 40, 0.5], (L) => T(L) === 'spike'],
+    ['style.hexSize', 'Hexagon size (px)', 'range', [6, 120, 1], (L) => T(L) === 'hexbin'],
+    ['style.hexAgg', 'Each hexagon shows', 'select', { count: 'How many points', sum: 'Sum of the value field', mean: 'Average of the value field' }, (L) => T(L) === 'hexbin'],
+    ['style.isoBands', 'Filled bands between the lines', 'switch', null, (L) => T(L) === 'isolines'],
+    ['style.isoLines', 'Contour lines', 'switch', null, (L) => T(L) === 'isolines'],
+    ['style.isoLabels', 'Values on the lines', 'switch', null, (L) => T(L) === 'isolines' && L.style.isoLines !== false],
+    ['style.isoReach', 'How far from the points to draw (px)', 'range', [40, 800, 10], (L) => T(L) === 'isolines'],
+    ['style.isoPoints', 'Show the measuring points', 'switch', null, (L) => T(L) === 'isolines'],
     ['style.qual', 'Colours', 'select', QUAL_NAMES, (L) => T(L) === 'unique' || (T(L) === 'dotdensity' && L.style.fields)],
     ['style.bivar', 'Colours', 'select', BIVAR_NAMES, (L) => T(L) === 'bivariate'],
     ['style.symColor', 'Symbol colour', 'color', null, (L) => ['gradsym', 'propsym'].includes(T(L))],
     ['style.symShape', 'Symbol', 'select', { circle: 'Circle', square: 'Square', triangle: 'Triangle', diamond: 'Diamond' }, (L) => ['gradsym', 'propsym', 'gradcolor'].includes(T(L))],
     ['style.minSize', 'Smallest symbol (px)', 'range', [1, 40, 0.5], (L) => ['gradsym', 'gradcolor'].includes(T(L))],
-    ['style.maxSize', 'Biggest symbol (px)', 'range', [4, 120, 1], (L) => ['gradsym', 'propsym'].includes(T(L))],
+    ['style.maxSize', 'Biggest symbol (px)', 'range', [4, 120, 1], (L) => ['gradsym', 'propsym', 'dorling'].includes(T(L))],
+    ['style.baseMap', 'Faint country shapes underneath', 'switch', null, (L) => ['spike', 'dorling', 'hexbin'].includes(T(L))],
     ['style.perDot', 'One dot = (0 = automatic)', 'number', null, (L) => T(L) === 'dotdensity'],
     ['style.dotSize', 'Dot size', 'range', [0.5, 6, 0.1], (L) => T(L) === 'dotdensity'],
     ['style.dotColor', 'Dot colour', 'color', null, (L) => T(L) === 'dotdensity' && !L.style.fields],
@@ -128,7 +144,7 @@ function model(L) {
   const M = { P, type, field, vals: P.feats.map((f) => valOf(L, f, field)) };
   const fin = M.vals.filter(isFinite);
   M.min = Math.min(...fin); M.max = Math.max(...fin);
-  if (['choropleth', 'gradcolor', 'gradsym'].includes(type)) {
+  if (CLS_TYPES.includes(type)) {
     M.br = breaksOf(M.vals, s.method, +s.classes || 5, s.manual);
     M.nc = Math.max(1, M.br.length - 1);
     M.colors = rampN(s.scheme, M.nc, !!s.reverse);
@@ -206,7 +222,7 @@ function fillPolys(ctx, f, proj, color, a, s, unit) {
 }
 function strokeLines(ctx, f, proj, color, a, s, unit, w) {
   ctx.globalAlpha = a; ctx.strokeStyle = color; ctx.lineWidth = w * unit; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.beginPath(); for (const l of f.lines) l.forEach((ll, k) => { const q = proj(ll); k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.stroke();
+  ctx.beginPath(); for (const l of f.lines) H.pathLine(ctx, l, proj); ctx.stroke();
 }
 const dotCache = new Map();
 function dotsOf(f, count, seedKey) {
@@ -258,6 +274,7 @@ export function drawThematic(ctx, L, tm, o, phase) {
     if (M.cls) return M.cls[i] < 0 ? s.noData : M.colors[M.cls[i]];
     return s.symColor;
   };
+  if (['spike', 'dorling', 'hexbin', 'isolines'].includes(type)) { drawMore(ctx, L, M, o, u, base, phase, colorOf); ctx.restore(); return; }
   if (type === 'dotdensity') {
     if (below) {
       for (const f of feats) if (f.polys.length) { ctx.beginPath(); pathPolys(ctx, f.polys, proj); ctx.globalAlpha = base * 0.9; ctx.strokeStyle = s.stroke || '#fff'; ctx.lineWidth = Math.max(0.4, +s.strokeWidth || 0.6) * unit; ctx.stroke(); }
@@ -371,6 +388,182 @@ function drawHeat(ctx, L, M, o, alpha) {
   ctx.drawImage(c, fr.x, fr.y, fr.w, fr.h);
 }
 
+// ================================================================= spike map · hexagon bins · circle cartogram · isolines
+const hexState = new Map();
+/** '#rrggbb' or 'rgb(r,g,b)' → [r, g, b] */
+const rgbOf = (c) => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ''); if (m) { const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; } const r = String(c).match(/[\d.]+/g); return r && r.length >= 3 ? r.slice(0, 3).map(Number) : [200, 200, 200]; };
+const rgba = (c, a) => { const [r, g, b] = rgbOf(c); return `rgba(${r},${g},${b},${a})`; };
+const projKey = (o) => { const a = o.proj([0, 0]), b = o.proj([10, 10]); return `${a[0].toFixed(1)},${a[1].toFixed(1)},${b[0].toFixed(1)},${b[1].toFixed(1)}`; };
+function faintBase(ctx, L, M, o, base) {
+  const s = L.style, { proj, unit } = o;
+  for (const f of M.P.feats) if (f.polys.length) { ctx.beginPath(); pathPolys(ctx, f.polys, proj); ctx.globalAlpha = base * 0.28; ctx.fillStyle = '#c9ccd2'; ctx.fill('evenodd'); ctx.globalAlpha = base * 0.5; ctx.strokeStyle = s.stroke || '#fff'; ctx.lineWidth = Math.max(0.3, +s.strokeWidth || 0.6) * 0.7 * unit; ctx.stroke(); }
+}
+function drawMore(ctx, L, M, o, u, base, phase, colorOf) {
+  const s = L.style, type = M.type, feats = M.P.feats, { proj, unit } = o, below = phase === 'below';
+  if (phase === 'captions') return;
+  if (below && s.baseMap !== false && type !== 'isolines') faintBase(ctx, L, M, o, base);
+  if (type === 'spike' && !below) {
+    const mx = Math.max(Math.abs(M.max), Math.abs(M.min)) || 1, Hm = (+s.spikeHeight || 140) * unit, w = (+s.spikeWidth || 8) * unit;
+    const items = [];
+    feats.forEach((f, i) => { const v = M.vals[i]; if (!isFinite(v) || !f.c) return; const q = proj(f.c); if (!isFinite(q[0])) return; items.push({ i, q, h: Hm * Math.abs(v) / mx }); });
+    items.sort((a, b) => a.q[1] - b.q[1]);
+    for (const it of items) {
+      const a = appear(L, M, it.i, u, feats[it.i], o) * base; if (a <= 0) continue;
+      const h = it.h * (L.anim === 'none' ? 1 : easeOut(Math.min(1, a * 1.2))), [x, y] = it.q, col = colorOf(it.i);
+      const g = ctx.createLinearGradient(x, y, x, y - h); g.addColorStop(0, rgba(col, 0.95)); g.addColorStop(1, rgba(col, 0.4));
+      ctx.globalAlpha = a * (+s.opacity || 0.9);
+      ctx.beginPath(); ctx.moveTo(x - w / 2, y); ctx.lineTo(x, y - h); ctx.lineTo(x + w / 2, y); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
+      if (+s.strokeWidth > 0) { ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = Math.max(0.5, +s.strokeWidth) * 0.8 * unit; ctx.stroke(); }
+      ctx.globalAlpha = a * 0.5; ctx.beginPath(); ctx.ellipse(x, y, w * 0.7, w * 0.22, 0, 0, Math.PI * 2); ctx.fillStyle = '#000'; ctx.fill();
+    }
+    spikeLabels(ctx, L, M, o, u, base, items);
+  }
+  if (type === 'dorling' && !below) {
+    const mx = Math.max(Math.abs(M.max), Math.abs(M.min)) || 1, Rm = (+s.maxSize || 34) * unit * 1.25;
+    const key = `${projKey(o)}|${Rm.toFixed(1)}|${M.vals.length}|${M.field}`;
+    let lay = M._dorling?.key === key ? M._dorling.lay : null;
+    if (!lay) {
+      lay = []; feats.forEach((f, i) => { const v = M.vals[i]; if (!isFinite(v) || !f.c) return; const q = proj(f.c); if (!isFinite(q[0])) return; lay.push({ i, x: q[0], y: q[1], x0: q[0], y0: q[1], r: Math.max(1.5 * unit, Rm * Math.sqrt(Math.abs(v) / mx)) }); });
+      const pad = 1.2 * unit;
+      for (let it = 0; it < 90; it++) {
+        for (let a = 0; a < lay.length; a++) for (let b = a + 1; b < lay.length; b++) {
+          const A = lay[a], B = lay[b], dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 0.01, need = A.r + B.r + pad;
+          if (d < need) { const m = (need - d) / d * 0.5, wa = B.r / (A.r + B.r), wb = A.r / (A.r + B.r); A.x -= dx * m * wa; A.y -= dy * m * wa; B.x += dx * m * wb; B.y += dy * m * wb; }
+        }
+        for (const c of lay) { c.x += (c.x0 - c.x) * 0.04; c.y += (c.y0 - c.y) * 0.04; }
+      }
+      M._dorling = { key, lay };
+    }
+    const order = lay.slice().sort((a, b) => b.r - a.r);
+    const nf = s.labelField || M.P.nameField;
+    for (const c of order) {
+      const f = feats[c.i], a = appear(L, M, c.i, u, f, o) * base; if (a <= 0) continue;
+      const k = L.anim === 'none' ? 1 : easeOut(Math.min(1, a * 1.2)), r = c.r * k;
+      ctx.globalAlpha = a * (+s.opacity || 0.9); ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.fillStyle = colorOf(c.i); ctx.fill();
+      if (+s.strokeWidth > 0) { ctx.globalAlpha = a; ctx.strokeStyle = s.stroke || '#fff'; ctx.lineWidth = Math.max(0.5, +s.strokeWidth) * unit; ctx.stroke(); }
+      if (s.labels && s.labels !== 'none' && r > 11 * unit) {
+        const name = String(f.p[nf] ?? ''), val = fmtNum(M.vals[c.i], s.decimals);
+        const txt = s.labels === 'value' ? [val] : s.labels === 'name' ? [name] : [name, val];
+        const fs = clamp(r * 0.36, 7 * unit, 16 * unit) * (+s.labelSize || 1);
+        ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = s.labelColor || '#fff';
+        txt.forEach((t, j) => { ctx.font = `${j ? 500 : 700} ${fs * (j ? 0.85 : 1)}px ${UI}`; let tt = t; while (tt.length > 3 && ctx.measureText(tt).width > r * 1.8) tt = tt.slice(0, -2); if (tt !== t) tt = tt.replace(/.$/, '…'); ctx.fillText(tt, c.x, c.y + (j - (txt.length - 1) / 2) * fs * 1.05); });
+      }
+    }
+  }
+  if (type === 'hexbin' && below) {
+    const R = (+s.hexSize || 22) * unit, hw = Math.sqrt(3) * R, bins = new Map();
+    feats.forEach((f, i) => {
+      const v = M.vals[i];
+      for (const p of (f.pts.length ? f.pts : f.c ? [f.c] : [])) {
+        const q = proj(p); if (!isFinite(q[0])) continue;
+        // pixel → axial (pointy-top), then round
+        const qx = (Math.sqrt(3) / 3 * q[0] - q[1] / 3) / R, ry = (2 / 3 * q[1]) / R;
+        let cx = qx, cz = ry, cy = -cx - cz; let rx = Math.round(cx), rz = Math.round(cz), ryy = Math.round(cy);
+        const dx = Math.abs(rx - cx), dz = Math.abs(rz - cz), dy = Math.abs(ryy - cy);
+        if (dx > dy && dx > dz) rx = -ryy - rz; else if (dy <= dz) rz = -rx - ryy;
+        const k = `${rx},${rz}`; let b = bins.get(k); if (!b) { b = { rx, rz, n: 0, sum: 0, first: i }; bins.set(k, b); }
+        b.n++; if (isFinite(v)) b.sum += v;
+      }
+    });
+    const arr = [...bins.values()].map((b) => ({ ...b, v: s.hexAgg === 'sum' ? b.sum : s.hexAgg === 'mean' ? b.sum / b.n : b.n }));
+    const vs = arr.map((b) => b.v).filter(isFinite), mn = Math.min(...vs), mx = Math.max(...vs);
+    hexState.set(L.id, { min: isFinite(mn) ? mn : 0, max: isFinite(mx) ? mx : 1 });
+    arr.sort((a, b) => a.v - b.v);
+    arr.forEach((b, j) => {
+      const t = mx > mn ? (b.v - mn) / (mx - mn) : 1;
+      const a = (L.anim === 'grow' || L.anim === 'classes' ? clamp((u - (j / Math.max(1, arr.length)) * 0.7) / 0.3, 0, 1) : L.anim === 'none' ? 1 : u) * base; if (a <= 0) return;
+      const x = R * Math.sqrt(3) * (b.rx + b.rz / 2), y = R * 1.5 * b.rz, rr0 = R * 0.94 * (L.anim === 'none' ? 1 : easeOut(a));
+      ctx.beginPath(); for (let k = 0; k < 6; k++) { const an = Math.PI / 180 * (60 * k - 30); const px = x + rr0 * Math.cos(an), py = y + rr0 * Math.sin(an); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath();
+      const c = rampAt(s.scheme || 'YlOrRd', 0.15 + 0.85 * (s.reverse ? 1 - t : t));
+      ctx.globalAlpha = a * (+s.opacity || 0.85); ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`; ctx.fill();
+      if (+s.strokeWidth > 0) { ctx.globalAlpha = a * 0.7; ctx.strokeStyle = s.stroke || '#fff'; ctx.lineWidth = +s.strokeWidth * unit; ctx.stroke(); }
+      if (s.labels && s.labels !== 'none' && R > 14 * unit) { ctx.globalAlpha = a; ctx.font = `700 ${R * 0.5 * (+s.labelSize || 1)}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = t > 0.55 ? '#fff' : '#1b1f27'; ctx.fillText(fmtNum(b.v, s.decimals), x, y); }
+      void hw;
+    });
+  }
+  if (type === 'isolines' && below) drawIsolines(ctx, L, M, o, u, base);
+}
+function spikeLabels(ctx, L, M, o, u, base, items) {
+  const s = L.style; if (!s.labels || s.labels === 'none') return;
+  const nf = s.labelField || M.P.nameField, unit = o.unit * (+s.labelSize || 1);
+  const top = items.slice().sort((a, b) => b.h - a.h).slice(0, 12);
+  for (const it of top) {
+    const f = M.P.feats[it.i], a = appear(L, M, it.i, u, f, o) * base; if (a < 0.3) continue;
+    const name = String(f.p[nf] ?? ''), val = fmtNum(M.vals[it.i], s.decimals);
+    const t = s.labels === 'name' ? name : s.labels === 'value' ? val : `${name} ${val}`;
+    ctx.globalAlpha = a; ctx.font = `700 ${11 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.lineWidth = 3 * unit; ctx.strokeStyle = 'rgba(0,0,0,0.65)'; ctx.strokeText(t, it.q[0], it.q[1] - it.h - 4 * unit); ctx.fillStyle = s.labelColor || '#fff'; ctx.fillText(t, it.q[0], it.q[1] - it.h - 4 * unit);
+  }
+}
+function drawIsolines(ctx, L, M, o, u, base) {
+  const s = L.style, fr = o.frame; if (!fr) return;
+  const unit = o.unit, cell = Math.max(4, Math.round(9 * unit));
+  const pts = [];
+  M.P.feats.forEach((f, i) => { const v = M.vals[i]; if (!isFinite(v)) return; for (const p of (f.pts.length ? f.pts : f.c ? [f.c] : [])) { const q = o.proj(p); if (isFinite(q[0])) pts.push([q[0], q[1], v]); } });
+  if (pts.length < 3) return;
+  const nx = Math.ceil(fr.w / cell) + 1, ny = Math.ceil(fr.h / cell) + 1, reach = (+s.isoReach || 150) * unit;
+  const key = `${projKey(o)}|${nx}x${ny}|${reach}|${pts.length}|${M.field}`;
+  let G = M._iso?.key === key ? M._iso.G : null;
+  if (!G) {
+    G = new Float32Array(nx * ny);
+    for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const x = fr.x + i * cell, y = fr.y + j * cell; let num0 = 0, den = 0, near = Infinity, exact = NaN;
+      for (const p of pts) { const d2 = (p[0] - x) ** 2 + (p[1] - y) ** 2; if (d2 < 1) { exact = p[2]; break; } const w = 1 / (d2 * d2 ** 0.25); num0 += w * p[2]; den += w; if (d2 < near) near = d2; }
+      G[j * nx + i] = isFinite(exact) ? exact : Math.sqrt(near) > reach ? NaN : num0 / den;
+    }
+    M._iso = { key, G };
+  }
+  const br = M.br, nc = M.nc, a = (L.anim === 'none' ? 1 : u) * base;
+  const clsOf = (v) => classOf(v, br);
+  // filled bands (cell by cell, smoothed by drawing a small image scaled up)
+  if (s.isoBands !== false) {
+    const [c, g] = off(`iso:${L.id}`, nx, ny), im = g.createImageData(nx, ny), d = im.data;
+    const cols = M.colors.map(rgbOf);
+    for (let k = 0; k < G.length; k++) { const v = G[k]; if (!isFinite(v)) continue; const ci = clsOf(v); if (ci < 0) continue; const col = cols[Math.min(ci, cols.length - 1)]; d[k * 4] = col[0]; d[k * 4 + 1] = col[1]; d[k * 4 + 2] = col[2]; d[k * 4 + 3] = 255; }
+    g.putImageData(im, 0, 0);
+    ctx.save(); ctx.globalAlpha = a * (+s.opacity || 0.85) * 0.85; ctx.imageSmoothingEnabled = true; ctx.filter = `blur(${Math.round(cell * 0.45)}px)`;
+    ctx.drawImage(c, 0, 0, nx, ny, fr.x - cell / 2, fr.y - cell / 2, nx * cell, ny * cell); ctx.restore();
+  }
+  // contour lines (marching squares) at each class break
+  if (s.isoLines !== false) {
+    const lv = br.slice(1, -1);
+    ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = s.stroke || '#fff'; ctx.lineWidth = Math.max(0.6, +s.strokeWidth || 0.6) * 1.4 * unit; ctx.lineJoin = 'round';
+    const labelsAt = [];
+    for (const L0 of lv) {
+      ctx.beginPath(); const segs = [];
+      for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+        const v0 = G[j * nx + i], v1 = G[j * nx + i + 1], v2 = G[(j + 1) * nx + i + 1], v3 = G[(j + 1) * nx + i];
+        if (!isFinite(v0) || !isFinite(v1) || !isFinite(v2) || !isFinite(v3)) continue;
+        const x = fr.x + i * cell, y = fr.y + j * cell, e = [];
+        const cut = (va, vb, xa, ya, xb, yb) => { if ((va < L0) !== (vb < L0)) { const t = (L0 - va) / (vb - va); e.push([xa + (xb - xa) * t, ya + (yb - ya) * t]); } };
+        cut(v0, v1, x, y, x + cell, y); cut(v1, v2, x + cell, y, x + cell, y + cell); cut(v3, v2, x, y + cell, x + cell, y + cell); cut(v0, v3, x, y, x, y + cell);
+        for (let k = 0; k + 1 < e.length; k += 2) { ctx.moveTo(e[k][0], e[k][1]); ctx.lineTo(e[k + 1][0], e[k + 1][1]); segs.push(e[k]); }
+      }
+      ctx.stroke();
+      if (s.isoLabels !== false && segs.length > 6) {
+        let placed = 0;
+        for (let k = Math.floor(segs.length / 3); k < segs.length && placed < 2; k += Math.max(1, Math.floor(segs.length / 2.5))) {
+          const p = segs[k]; if (labelsAt.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 120 * unit)) continue;
+          labelsAt.push(p); placed++;
+          const t = fmtNum(L0, s.decimals); ctx.font = `700 ${10.5 * unit * (+s.labelSize || 1)}px ${UI}`; const w = ctx.measureText(t).width + 8 * unit;
+          ctx.fillStyle = 'rgba(14,18,26,0.85)'; rr(ctx, p[0] - w / 2, p[1] - 8 * unit, w, 16 * unit, 8 * unit); ctx.fill();
+          ctx.fillStyle = s.labelColor || '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, p[0], p[1] + 0.5 * unit);
+        }
+      }
+    }
+    ctx.restore();
+  }
+  if (s.isoPoints !== false) {
+    ctx.save(); ctx.globalAlpha = a;
+    for (const p of pts) { ctx.beginPath(); ctx.arc(p[0], p[1], 2.4 * unit, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1 * unit; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.stroke(); }
+    if (s.labels && s.labels !== 'none') {
+      const nf = s.labelField || M.P.nameField; ctx.font = `600 ${10 * unit * (+s.labelSize || 1)}px ${UI}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      M.P.feats.forEach((f, i) => { const v = M.vals[i]; if (!isFinite(v) || !f.c) return; const q = o.proj(f.c); const t = s.labels === 'value' ? fmtNum(v, s.decimals) : s.labels === 'name' ? String(f.p[nf] ?? '') : `${f.p[nf] ?? ''} ${fmtNum(v, s.decimals)}`; ctx.lineWidth = 3 * unit; ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.strokeText(t, q[0] + 5 * unit, q[1]); ctx.fillStyle = '#fff'; ctx.fillText(t, q[0] + 5 * unit, q[1]); });
+    }
+    ctx.restore();
+  }
+}
+
 // ================================================================= legend (shared with the map-layout legend)
 /** What a thematic layer shows in a legend. */
 export function legendSpec(L) {
@@ -400,6 +593,12 @@ export function legendSpec(L) {
     sp.bivar = { colors: M.colors, a: M.field.replace(/_/g, ' '), b: M.field2.replace(/_/g, ' ') };
   } else if (M.type === 'heat') {
     sp.grad = { scheme: s.heatScheme || 'Heat', lo: 'Low', hi: 'High' };
+  } else if (M.type === 'spike' || M.type === 'dorling' || M.type === 'isolines') {
+    for (let i = 0; i < M.nc; i++) sp.rows.push({ sw: M.type === 'dorling' ? 'circle' : 'fill', color: M.colors[i], text: `${fmtNum(M.br[i], d)} – ${fmtNum(M.br[i + 1], d)}` });
+  } else if (M.type === 'hexbin') {
+    const hx = hexState.get(L.id);
+    sp.grad = { scheme: s.scheme || 'YlOrRd', lo: hx ? fmtNum(hx.min, d) : 'Few', hi: hx ? fmtNum(hx.max, d) : 'Many', reverse: !!s.reverse };
+    if (s.legendTitle === '' || !s.legendTitle) sp.title = s.hexAgg === 'sum' ? `Sum of ${M.field}`.replace(/_/g, ' ') : s.hexAgg === 'mean' ? `Average ${M.field}`.replace(/_/g, ' ') : 'Points per hexagon';
   }
   return sp;
 }

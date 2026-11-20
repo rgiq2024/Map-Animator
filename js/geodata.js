@@ -613,7 +613,54 @@ export const SAMPLE_PROFILE = (() => {
   for (let i = 0; i <= 120; i++) { const d = i * 0.25; lines.push(`${d.toFixed(2)},${Math.round(420 + 380 * Math.sin(d / 5) + 220 * Math.sin(d / 1.7 + 1) + 90 * Math.sin(d * 1.3) + d * 18)}`); }
   return lines.join('\n');
 })();
-export const SAMPLES = { world: SAMPLE_WORLD, cities: SAMPLE_CITIES, events: SAMPLE_EVENTS, profile: SAMPLE_PROFILE };
-export const SAMPLE_NAMES = { world: 'Countries of the world (approximate figures)', cities: 'Big cities with coordinates', events: 'A year of events with date and time', profile: 'Distance / elevation profile' };
+export const SAMPLE_TEMPS = `name,lat,lon,temp_c
+Kuwait City,29.37,47.98,46
+Riyadh,24.71,46.68,43
+Dubai,25.20,55.27,41
+Abu Dhabi,24.45,54.38,42
+Doha,25.29,51.53,41
+Manama,26.23,50.59,39
+Muscat,23.59,58.41,38
+Nizwa,22.93,57.53,42
+Salalah,17.02,54.09,30
+Baghdad,33.31,44.36,44
+Basra,30.51,47.81,47
+Mosul,36.34,43.13,43
+Erbil,36.19,44.01,43
+Tehran,35.69,51.39,37
+Isfahan,32.65,51.67,37
+Shiraz,29.59,52.58,38
+Mashhad,36.30,59.61,34
+Tabriz,38.08,46.29,33
+Ahvaz,31.32,48.67,47
+Bandar Abbas,27.18,56.27,38
+Zahedan,29.50,60.86,38
+Kerman,30.28,57.08,37
+Jeddah,21.49,39.19,39
+Mecca,21.39,39.86,44
+Medina,24.47,39.61,43
+Dammam,26.43,50.10,45
+Hail,27.52,41.69,41
+Tabuk,28.38,36.57,37
+Sakaka,29.97,40.21,41
+Abha,18.22,42.51,30
+Sanaa,15.37,44.19,30
+Aden,12.79,45.02,36
+Amman,31.95,35.93,33
+Damascus,33.51,36.29,36
+Beirut,33.89,35.50,31
+Jerusalem,31.77,35.21,30
+Cairo,30.04,31.24,35
+Luxor,25.69,32.64,41
+Aswan,24.09,32.90,42
+Ankara,39.93,32.86,30
+Karachi,24.86,67.01,35
+Kabul,34.56,69.21,33
+Kandahar,31.63,65.71,40
+Ashgabat,37.96,58.33,38
+Baku,40.41,49.87,32
+Yerevan,40.18,44.51,34`;
+export const SAMPLES = { temps: SAMPLE_TEMPS, world: SAMPLE_WORLD, cities: SAMPLE_CITIES, events: SAMPLE_EVENTS, profile: SAMPLE_PROFILE };
+export const SAMPLE_NAMES = { temps: 'July afternoon temperatures, Middle East (typical, approximate)', world: 'Countries of the world (approximate figures)', cities: 'Big cities with coordinates', events: 'A year of events with date and time', profile: 'Distance / elevation profile' };
 /** The data text of a layer: its own data, or the chosen sample. */
 export const dataOf = (s) => (String(s.data || '').trim() ? s.data : SAMPLES[s.sample] || '');

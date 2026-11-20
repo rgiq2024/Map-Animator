@@ -1,3 +1,4 @@
+import { traceRing } from './antimeridian.js';
 // Map layers that animate: boundaries, areas, floods, lines, points / animated symbols, text labels and
 // on-screen captions. Everything is drawn on the 2D overlay from GeoJSON-style geometry in lng/lat.
 // (Terrain-based rising floods are rendered by flood.js inside the map itself.)
@@ -236,7 +237,7 @@ const dashOf = (d, w) => (d === 'dashed' ? [w * 3, w * 2] : d === 'dotted' ? [0.
 
 function ringPath(ctx, proj, rings) {
   for (const ring of rings) {
-    ring.forEach((c, i) => { const p = proj(c); if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+    traceRing(ctx, ring, proj);
     ctx.closePath();
   }
 }
@@ -879,7 +880,7 @@ export function hitLayer(ctx, layers, proj, p, unit, frame) {
     const path = new Path2D();
     if (g.type === 'Polygon' || g.type === 'MultiPolygon') {
       for (const poly of polygonsOf(g)) for (const ring of poly) {
-        ring.forEach((c, i) => { const q = proj(c); if (i) path.lineTo(q[0], q[1]); else path.moveTo(q[0], q[1]); });
+        traceRing(path, ring, proj);
         path.closePath();
       }
       const filled = L.kind === 'flood' || L.kind === 'wxfield' || L.kind === 'city3d' || L.kind === 'geofence' || L.kind === 'servicearea' || L.kind === 'wildfire' || L.kind === 'deforest' || L.kind === 'affected' || L.kind === 'crowd' || L.kind === 'smartmap' || L.kind === 'block' || L.kind === 'mesh' || L.kind === 'image' || L.kind === 'geovideo' || L.kind === 'compare' || L.kind === 'timeseries' || L.kind === 'oilspill' || (L.style.fillOpacity > 0.02);

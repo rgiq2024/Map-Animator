@@ -1,3 +1,4 @@
+import { unwrapRing, traceRing, traceLine } from './antimeridian.js';
 // Documentary map looks: category markers + legend, zoom insets with real imagery, country spotlight (vivid /
 // grey inside / flag fill), locator mini-map, elevation profile + trail stats, range rings with aircraft,
 // front line / territory control, top-down units, blast decals, incident dots and portrait badges.
@@ -30,15 +31,16 @@ function bboxOf(polys) { let w = 180, s = 90, e = -180, n = -90; for (const p of
 function labelPoint(polys) {
   let best = null, ba = 0;
   for (const p of polys) {
-    const r = p[0]; let a = 0, cx = 0, cy = 0;
+    const r = unwrapRing(p[0]).ring; let a = 0, cx = 0, cy = 0;
     for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const f = r[j][0] * r[i][1] - r[i][0] * r[j][1]; a += f; cx += (r[j][0] + r[i][0]) * f; cy += (r[j][1] + r[i][1]) * f; }
     if (Math.abs(a) > ba) { ba = Math.abs(a); best = [cx / (3 * a), cy / (3 * a)]; }
   }
+  if (best) best[0] = ((best[0] + 540) % 360) - 180;
   return best;
 }
-const pathPolys = (ctx, polys, proj) => {
-  for (const p of polys) for (const ring of p) { ring.forEach((ll, i) => { const q = proj(ll); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath(); }
-};
+const pathPolys = (ctx, polys, proj) => { for (const p of polys) for (const r of p) traceRing(ctx, r, proj); };
+const pathLine = (ctx, line, proj) => traceLine(ctx, line, proj);
+const unwrap = unwrapRing;
 const offs = new Map();
 function off(key, w, h) {
   w = Math.max(2, Math.ceil(w)); h = Math.max(2, Math.ceil(h));
@@ -1314,4 +1316,4 @@ export function drawCarto(ctx, L, tm, o, phase) {
 }
 
 // shared helpers for cartofx2.js
-export const H = { clamp, easeOut, ease, D2R, UI, hexA, hashStr, rng, rr, haversine, prog, parseLL, polysOf, linesOf, inPolys, bboxOf, labelPoint, pathPolys, off, track, shade, symbolPath, drawSymbol, silhouette, merc, dest, drawTiles, TILE_SRC, lineTarget, profileOf, countryAt, setMap: (m) => { lastMap = m || lastMap; }, splat };
+export const H = { clamp, easeOut, ease, D2R, UI, hexA, hashStr, rng, rr, haversine, prog, parseLL, polysOf, linesOf, inPolys, bboxOf, labelPoint, pathPolys, pathLine, unwrap, off, track, shade, symbolPath, drawSymbol, silhouette, merc, dest, drawTiles, TILE_SRC, lineTarget, profileOf, countryAt, setMap: (m) => { lastMap = m || lastMap; }, splat };

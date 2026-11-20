@@ -1,3 +1,4 @@
+import { traceRing } from './antimeridian.js';
 // Special layers: satellites & ISS, launch sites, missile/drone trajectories, strikes and bombing runs,
 // captured areas, infographic charts/counters and HUD overlays. Pure canvas drawing; deterministic in time.
 import { drawSprite, drawRocketSide, SPRITES } from './sprites.js';
@@ -419,7 +420,7 @@ function ringPath(ctx, proj, geom) {
   ctx.beginPath();
   const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
   for (const poly of polys) for (const ring of poly) {
-    ring.forEach((c, i) => { const p = proj(c); if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+    traceRing(ctx, ring, proj);
     ctx.closePath();
   }
 }
