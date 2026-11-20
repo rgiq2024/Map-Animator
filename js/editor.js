@@ -2189,6 +2189,7 @@ export function createEditor() {
           const opts = want === 'line' ? { route: 'The route' } : { '': '— choose a layer —' };
           for (const X of scene().layers || []) {
             if (/^kind:/.test(want)) { if (X !== L && X.kind === want.slice(5)) opts[X.id] = X.name || X.kind; continue; }
+            if (want === 'data') { if (X !== L && X.style && ('data' in X.style || 'sample' in X.style)) opts[X.id] = X.name || X.kind; continue; }
             if (X === L || !X.geom) continue;
             const gt = X.geom.type;
             if (want === 'line' && !/LineString/.test(gt)) continue;
@@ -3337,7 +3338,7 @@ export function createEditor() {
     if (a === 'sarFit') fitSar(L);
     if (a === 'gvAction') {
       btn.disabled = true;
-      try { const { GV_ACTIONS } = await import('./geoviz.js'); const fn = GV_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast }); renderLayerEditor(); commitLayers(); if (msg) toast(msg, 4200); } }
+      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (msg) toast(msg, 4200); } }
       catch (err) { toast(err.message || 'Request failed', 5000); }
       btn.disabled = false;
     }

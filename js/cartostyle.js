@@ -25,7 +25,7 @@ const TITLE = [['style.title', 'Title', 'text'], ['style.subtitle', 'Subtitle / 
 
 export const CS_KINDS = {
   tilemap: { name: 'Tile surface map', icon: '⬢', geom: null, desc: 'The map as a grid of hexagons, dots, squares, LEGO bricks or cross-stitches — coloured by country values, categories or a surface from your points; numbers in the tiles, an embroidery hoop frame' },
-  hexcartogram: { name: 'Hex tile cartogram (US states)', icon: '⬡', geom: null, desc: 'Every US state as an equal hexagon with a 3D cube, glass sphere, circle or bar sized by its value — like the AAA gasoline-price map' },
+  hexcartogram: { name: 'Hex tile cartogram', icon: '⬡', geom: null, desc: 'Any places — countries, states, cities or another layer’s data — as equal hexagons laid out like the map, each with a 3D cube, glass sphere, circle or bar sized by its value (US states have a fixed classic layout)' },
   glowpoints: { name: 'Glow points', icon: '✺', geom: null, desc: 'Points of light, glass spheres, neon rings or pulsing beacons from your CSV — sized and coloured by value' },
   neonnet: { name: 'Neon network', icon: '🕸', geom: null, desc: 'Glowing routes between places (flights, shipping, links) with neon coastlines, graticule, city rings and a vignette' },
   viewcones: { name: 'Viewpoint cones', icon: '◭', geom: null, desc: 'Photo or camera viewpoints: a dot with a glowing cone pointing the way the photo looks (angle field, 0° = north)' },
@@ -42,7 +42,7 @@ export const CS_ANIMS = {
   viewcones: { grow: 'Cones open one by one', fade: 'Fade in', none: 'Shown' },
   cutout: { reveal: 'Outside dims, then the edge and name appear', fade: 'Fade in', none: 'Shown' },
   highlight: { reveal: 'Outside dims, then the edge and name appear', fade: 'Fade in', none: 'Shown' },
-  mapgallery: { cascade: 'Tiles rise in one by one', fade: 'Fade in', none: 'Shown' },
+  mapgallery: { cascade: 'Tiles rise in one by one', zoomin: 'Tiles zoom in from far away', zoomout: 'Tiles zoom out to show the region', tour: 'Each tile in turn zooms in to full screen and back', fade: 'Fade in', none: 'Shown' },
   smallmult: { cascade: 'Panels appear one by one', fade: 'Fade in', none: 'Shown' },
 };
 export const CS_DEFAULTS = {
@@ -50,7 +50,7 @@ export const CS_DEFAULTS = {
     method: 'quantile', classes: 6, scheme: 'YlOrRd', reverse: false, qual: 'Tableau', single: '#3b8f5a', noData: '', ocean: false, oceanColor: '#41618a',
     stroke: '#5b4636', strokeWidth: 0.5, opacity: 1, values: false, valueColor: 'auto', reach: 600, bevel: true, frame: 'none', frameBg: '#c8a27a',
     legend: true, legendTitle: '', legendPos: 'bottom-left', legendTheme: 'light', title: '', subtitle: '', titleColor: '#ffffff' },
-  hexcartogram: { data: '', sample: 'usgas', stateField: '', field: '', symbol: 'cube', symColor: '#ffb400', tileStyle: 'glass', tileColor: '#eef0f3', scheme: 'YlOrRd',
+  hexcartogram: { data: '', sample: 'usgas', layout: 'auto', from: 'data', layerId: '', filterField: '', filterValue: '', nameField: '', codeField: '', cells: 1.6, stateField: '', field: '', symbol: 'cube', symColor: '#ffb400', tileStyle: 'glass', tileColor: '#eef0f3', scheme: 'YlOrRd',
     scaleMode: 'range', minSym: 0.12, maxSym: 0.62, labels: 'both', prefix: '$', suffix: '', decimals: 2, tileSize: 1, gap: 0.06, labelColor: '#d99a00', abbrColor: '#b9bec6',
     cx: 0.5, cy: 0.54, shadow: true, title: 'AVERAGE GASOLINE PRICE PER STATE', subtitle: 'per gallon of regular, March 11, 2024  |  Source: AAA', titleColor: '#f2b400', bg: '#ffffff', bgAlpha: 0 },
   glowpoints: { data: '', sample: 'cities', field: '', style: 'glow', color: '#d4ff6a', color2: '#2fd1ff', sizeMode: 'value', size: 8, maxSize: 26, glow: 2.2, additive: true, labels: 'none', labelField: '', labelColor: '#ffffff', textSize: 1, pulseSpeed: 1 },
@@ -61,14 +61,15 @@ export const CS_DEFAULTS = {
     edge: '#f3e2b6', edgeWidth: 1.2, frost: 0, frostColor: '#ffffff', name: '', nameSpacing: 1.1, nameSize: 1, nameColor: '#ffffff', namePos: 'center' },
   highlight: { mode: 'circle', country: 'Iceland', center: '', radiusKm: 25, outside: 0, outsideColor: '#000000', desat: 0, inner: 0, innerSize: 22, raise: 0.6, raiseSize: 22,
     edge: '#ffffff', edgeWidth: 0, frost: 0.28, frostColor: '#fff4e0', name: '', nameSpacing: 1.1, nameSize: 1, nameColor: '#ffffff', namePos: 'center' },
-  mapgallery: { cols: 2, panels: [], src: 'satellite', corner: 0.12, shadow: true, tilt: 0, text: true, scale: true, bg: '#d9e3ee', bgAlpha: 1, paper: true,
+  mapgallery: { cols: 2, panels: [], zoomFrom: 4, tourZoom: 2.5, tourHold: 1.2, liveZoom: 0, src: 'satellite', corner: 0.12, shadow: true, tilt: 0, text: true, scale: true, bg: '#d9e3ee', bgAlpha: 1, paper: true,
     title: 'Rugged Coastal Frontiers', subtitle: 'Fjords, Islands, and Mountain Shores', titleColor: '#1f3b63', inkColor: '#2c3e57', tileSize: 1 },
   smallmult: { data: '', sample: 'world', fields: '', mode: 'fields', catField: '', field: '', threshold: '', cols: 3, fill: 'solid', color: '#e0262f', color2: '#1f5fbf', base: '#e4e6ea', scheme: 'YlOrRd',
     bbox: '', bg: '#ffffff', bgAlpha: 1, ink: '#2b2f36', title: '', subtitle: '', count: true },
 };
-export const CS_LAYER_DEFAULTS = Object.fromEntries(Object.keys(CS_KINDS).map((k) => [k, { anim: Object.keys(CS_ANIMS[k])[0], duration: k === 'neonnet' ? 5 : k === 'mapgallery' || k === 'smallmult' ? 3 : 2.5, style: CS_DEFAULTS[k] }]));
+export const CS_LAYER_DEFAULTS = Object.fromEntries(Object.keys(CS_KINDS).map((k) => [k, { anim: Object.keys(CS_ANIMS[k])[0], duration: k === 'neonnet' ? 5 : k === 'mapgallery' ? 6 : k === 'smallmult' ? 3 : 2.5, style: CS_DEFAULTS[k] }]));
 const T = (L, k) => L.style[k];
 const sh = (k, ...v) => (L) => v.includes(L.style[k]);
+const sh0 = (...v) => (L) => v.includes(L.anim);
 export const CS_FORMS = {
   tilemap: [
     ['style.shape', 'Tile shape', 'select', { hex: 'Hexagons', dot: 'Dots (circles)', square: 'Squares', brick: 'LEGO bricks', stitch: 'Cross-stitch', diamond: 'Diamonds' }],
@@ -100,9 +101,17 @@ export const CS_FORMS = {
     ...TITLE, ...LEG,
   ],
   hexcartogram: [
-    ...DATA(['usgas']),
-    ['', 'Your CSV needs a column with the state code (CA, TX, NY …) or the state name, and a value column.', 'note'],
-    ['style.stateField', 'State field', 'field', 'any?'],
+    ['style.from', 'Places from', 'select', { data: 'My data / a sample', layer: 'Another layer’s data (a thematic map, tile map …)' }],
+    ['style.layerId', 'Layer', 'layerref', 'data', sh('from', 'layer')],
+    ...DATA(['usgas', 'world', 'cities', 'temps']).map((r) => [r[0], r[1], r[2], r[3], (L) => L.style.from !== 'layer' && (!r[4] || r[4](L))]),
+    ['', 'Your CSV: a name (country, state, city …) or lat / lon, and a value. Countries are found by name; US states by code or name.', 'note'],
+    ['style.layout', 'Layout', 'select', { auto: 'Automatic — hexagons placed like the map', usa: 'US states — classic fixed layout' }],
+    ['style.cells', 'Spacing (more = looser, closer to the real map)', 'range', [1, 4, 0.05], sh('layout', 'auto')],
+    ['style.filterField', 'Only rows where field … (optional, e.g. continent)', 'field', 'any?'],
+    ['style.filterValue', '… equals (e.g. Europe, Asia)', 'text', null, (L) => !!L.style.filterField],
+    ['style.nameField', 'Name field', 'field', 'any?', sh('layout', 'auto')],
+    ['style.codeField', 'Short label field (code) — empty = first letters of the name', 'field', 'any?', sh('layout', 'auto')],
+    ['style.stateField', 'State field', 'field', 'any?', sh('layout', 'usa')],
     ['style.field', 'Value field', 'field', 'num'],
     ['style.symbol', 'Symbol', 'select', { cube: '3D cube', sphere: 'Glass sphere', circle: 'Circle', bar: 'Bar', hexfill: 'Colour the whole tile', none: 'None (labels only)' }],
     ['style.symColor', 'Symbol colour', 'color', null, (L) => L.style.symbol !== 'hexfill' && L.style.symbol !== 'none'],
@@ -171,7 +180,13 @@ export const CS_FORMS = {
   ],
   mapgallery: [
     ['style.panels', 'Map tiles', 'textarea'],
-    ['', 'One tile per line: Title | Subtitle | lat, lon | zoom | text. Example: Norwegian Fjords | Ice-sculpted valleys | 61.1, 6.6 | 7 | Western Norway is famous for its deep fjords…', 'note'],
+    ['', 'One tile per line: Title | Subtitle | place | zoom | text. The place is lat, lon or a name to look up (e.g. Dubai, Mount Everest). Example: Norwegian Fjords | Ice-sculpted valleys | 61.1, 6.6 | 7 | Western Norway is famous…', 'note'],
+    ['', '＋ Add a tile of the current map view', 'gvaction', 'csAddView'],
+    ['', '🔎 Find the places typed by name', 'gvaction', 'csGeocode'],
+    ['style.zoomFrom', 'Zoom in / out: levels of zoom (start → end)', 'range', [0.5, 10, 0.25], (L) => ['zoomin', 'zoomout'].includes(L.anim)],
+    ['style.tourZoom', 'Tour: extra zoom when a tile fills the screen', 'range', [0, 6, 0.25], sh0('tour')],
+    ['style.tourHold', 'Tour: seconds each tile stays full screen', 'range', [0.2, 6, 0.1], sh0('tour')],
+    ['style.liveZoom', 'Slow zoom while shown (levels; minus = out)', 'range', [-3, 3, 0.05]],
     ['style.cols', 'Columns', 'range', [1, 3, 1]], ['style.src', 'Imagery', 'select', { satellite: 'Satellite', topo: 'Topographic', streets: 'Streets', light: 'Light grey', dark: 'Dark grey' }],
     ['style.tileSize', 'Tile size', 'range', [0.5, 1.5, 0.01]], ['style.corner', 'Rounded corners', 'range', [0, 0.5, 0.01]], ['style.tilt', 'Tilt the tiles (°)', 'range', [0, 40, 1]],
     ['style.shadow', 'Soft shadow', 'switch'], ['style.text', 'Text beside the tiles', 'switch'], ['style.scale', 'Scale under each tile', 'switch'],
@@ -396,26 +411,102 @@ const US = { AK: [130, 100], ME: [1126, 100], VT: [1002, 130], NH: [1085, 130], 
   CA: [339, 460], UT: [422, 460], NM: [505, 460], KS: [588, 460], AR: [670, 460], TN: [753, 460], SC: [836, 460], NC: [919, 460], VA: [1002, 460],
   AZ: [463, 530], OK: [546, 530], LA: [629, 530], MS: [712, 530], AL: [795, 530], GA: [878, 530], TX: [588, 600], FL: [836, 600], HI: [172, 600] };
 const USN = { alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA', colorado: 'CO', connecticut: 'CT', delaware: 'DE', 'district of columbia': 'DC', florida: 'FL', georgia: 'GA', hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD', massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS', missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK', oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC', 'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT', virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY' };
+// places for the automatic layout: [{ name, code, ll, v }]
+const hexPlacesCache = new Map();
+function hexPlaces(L, o) {
+  const s = L.style;
+  let src = s;
+  if (s.from === 'layer') { const X = (o.scene?.layers || []).find((x) => x.id === s.layerId); if (X?.style) src = X.style; }
+  const Tb = table(src), txt = dataOf(src);
+  const key = `${txt.length}|${hashStr(txt.slice(0, 2000))}|${s.field}|${s.nameField}|${s.codeField}|${s.filterField}|${s.filterValue}|${s.stateField}|${s.layout}|${!!allCountries()}`;
+  const c = hexPlacesCache.get(L.id); if (c && c.key === key) return c.out;
+  const vf = s.field || guessField(Tb, 'num'), nf = s.nameField || guessField(Tb, 'name') || Tb.fields[0];
+  const out = { field: vf, places: [], loading: false };
+  for (const r of Tb.rows) {
+    if (s.filterField && String(r.p[s.filterField] ?? '').trim().toLowerCase() !== String(s.filterValue || '').trim().toLowerCase()) continue;
+    const name = String(r.p[nf] ?? '').trim(), v = num(r.p[vf]);
+    let ll = ptOf(r);
+    if (!ll && r.g) { const P = polysOf(r.g); if (P.length) ll = labelPoint(P); }
+    if (!ll && name) {
+      const up = name.toUpperCase(), code = US[up] ? up : USN[normN(name)];
+      if (code) ll = US_LL[code];
+      else { const cc = countriesByName(name.replace(/[,;]/g, ' ')); if (cc === null) out.loading = true; else if (cc[0]) ll = labelPoint(cc[0].polys); }
+    }
+    if (!ll) continue;
+    const code = s.codeField ? String(r.p[s.codeField] ?? '') : (US[name.toUpperCase()] ? name.toUpperCase() : USN[normN(name)] || shortCode(name));
+    out.places.push({ name, code, ll, v });
+  }
+  if (!out.loading) hexPlacesCache.set(L.id, { key, out });
+  return out;
+}
+const shortCode = (n) => { const w = String(n).replace(/[^A-Za-z\s]/g, '').split(/\s+/).filter(Boolean); return (w.length > 1 ? w.slice(0, 3).map((x) => x[0]).join('') : (w[0] || '?').slice(0, 3)).toUpperCase(); };
+// approximate centres of US states (for CSVs that only have state names or codes)
+const US_LL = { AL: [-86.8, 32.8], AK: [-152, 64], AZ: [-111.7, 34.3], AR: [-92.4, 34.9], CA: [-119.6, 37.2], CO: [-105.5, 39], CT: [-72.7, 41.6], DE: [-75.5, 39], DC: [-77, 38.9], FL: [-81.7, 28.6], GA: [-83.4, 32.7], HI: [-157, 20.8], ID: [-114.6, 44.4], IL: [-89.2, 40], IN: [-86.3, 39.9], IA: [-93.5, 42.1], KS: [-98.4, 38.5], KY: [-85.3, 37.5], LA: [-92, 31], ME: [-69.2, 45.4], MD: [-76.8, 39], MA: [-71.8, 42.3], MI: [-84.7, 44.3], MN: [-94.3, 46.3], MS: [-89.7, 32.7], MO: [-92.5, 38.4], MT: [-109.6, 47], NE: [-99.8, 41.5], NV: [-116.6, 39.3], NH: [-71.6, 43.7], NJ: [-74.7, 40.2], NM: [-106.1, 34.4], NY: [-75.5, 42.9], NC: [-79.4, 35.6], ND: [-100.5, 47.5], OH: [-82.8, 40.3], OK: [-97.5, 35.6], OR: [-120.5, 43.9], PA: [-77.8, 40.9], RI: [-71.5, 41.7], SC: [-80.9, 33.9], SD: [-100.2, 44.4], TN: [-86.3, 35.9], TX: [-99.3, 31.5], UT: [-111.7, 39.3], VT: [-72.7, 44.1], VA: [-78.8, 37.5], WA: [-120.4, 47.4], WV: [-80.6, 38.6], WI: [-89.8, 44.6], WY: [-107.5, 43] };
+/** Snap places to a hex grid, keeping them roughly where they are on the map (greedy, nearest free cell). */
+function hexLayout(places, spacing) {
+  const my = (lat) => Math.log(Math.tan(Math.PI / 4 + clamp(lat, -80, 80) * D2R / 2)) / D2R;
+  const P = places.map((p) => ({ ...p, x: p.ll[0], y: -my(p.ll[1]) }));
+  if (!P.length) return { cells: [], w: 1, h: 1 };
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const p of P) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+  const area = Math.max(1e-6, (x1 - x0 + 1e-3) * (y1 - y0 + 1e-3));
+  const d = Math.sqrt((area / P.length) / (0.866 * spacing * spacing)) || 1; // hex column spacing (map units)
+  const rowH = d * 0.866, used = new Map(), cells = [];
+  const toCell = (x, y) => { const r = Math.round((y - y0) / rowH); const c = Math.round((x - x0) / d - (r & 1) * 0.5); return [c, r]; };
+  // biggest values first so they keep the best spots; then the rest
+  const order = P.map((p, i) => i).sort((a, b) => (P[b].v || 0) - (P[a].v || 0));
+  for (const i of order) {
+    const p = P[i]; const [c0, r0] = toCell(p.x, p.y); let best = null, bd = Infinity;
+    for (let rad = 0; rad < 40 && !best; rad++) {
+      for (let dr = -rad; dr <= rad; dr++) for (let dc = -rad; dc <= rad; dc++) {
+        if (Math.max(Math.abs(dr), Math.abs(dc)) !== rad) continue;
+        const c = c0 + dc, r = r0 + dr; if (used.has(`${c},${r}`)) continue;
+        const cx = x0 + (c + (r & 1) * 0.5) * d, cy = y0 + r * rowH, dd = (cx - p.x) ** 2 + (cy - p.y) ** 2;
+        if (dd < bd) { bd = dd; best = [c, r]; }
+      }
+    }
+    used.set(`${best[0]},${best[1]}`, 1); cells.push({ ...p, c: best[0], r: best[1] });
+  }
+  let c0 = Infinity, c1 = -Infinity, r0 = Infinity, r1 = -Infinity; for (const q of cells) { const cx = q.c + (q.r & 1) * 0.5; c0 = Math.min(c0, cx); c1 = Math.max(c1, cx); r0 = Math.min(r0, q.r); r1 = Math.max(r1, q.r); }
+  return { cells: cells.map((q) => ({ ...q, gx: q.c + (q.r & 1) * 0.5 - c0, gy: (q.r - r0) * 0.866 })), w: c1 - c0 + 1, h: (r1 - r0) * 0.866 + 1.15 };
+}
 function drawHexCarto(ctx, L, tm, o) {
   const s = L.style, fr = o.frame; if (!fr) return;
-  const unit = o.unit, u = u01(L, tm), Tb = table(s);
-  const sf = s.stateField || Tb.fields.find((f) => /state|abbr|code/i.test(f)) || Tb.fields[0], vf = s.field || guessField(Tb, 'num');
-  const vals = new Map();
-  for (const r of Tb.rows) { const raw = String(r.p[sf] ?? '').trim(); const code = US[raw.toUpperCase()] ? raw.toUpperCase() : USN[normN(raw)]; const v = num(r.p[vf]); if (code && isFinite(v)) vals.set(code, v); }
-  const vs = [...vals.values()]; const mn = Math.min(...vs), mx = Math.max(...vs);
+  const unit = o.unit, u = u01(L, tm);
+  // the tiles: [{ code, x, y, v }] in frame pixels
+  let tiles = [], R;
   ctx.save(); ctx.globalAlpha = tm.alpha;
   if (+s.bgAlpha > 0) { ctx.save(); ctx.globalAlpha *= +s.bgAlpha; ctx.fillStyle = s.bg || '#fff'; ctx.fillRect(fr.x, fr.y, fr.w, fr.h); ctx.restore(); }
   titleBlock(ctx, L, o, 'center');
-  const k = (fr.w / 1250) * (+s.tileSize || 1), R = 47 * k, Rt = R * (1 - (+s.gap || 0));
-  let cx = fr.x + fr.w * clamp(+s.cx, 0, 1), cy = fr.y + fr.h * clamp(+s.cy, 0, 1);
-  const [dx, dy] = placeAt(ctx, L, fr, cx - 560 * k, cy - 290 * k, 1120 * k, 580 * k, { key: 'grid' }); void dx; void dy;
-  const ox = cx - 628 * k, oy = cy - 350 * k;
-  const codes = Object.keys(US);
-  codes.forEach((code, n) => {
-    const [px, py] = US[code]; const x = ox + px * k, y = oy + py * k;
-    const a = u >= 1 ? 1 : L.anim === 'sweep' ? clamp((u * 1.35 - (x - fr.x) / fr.w) / 0.35, 0, 1) : L.anim === 'grow' ? clamp((u - (n / codes.length) * 0.5) / 0.5, 0, 1) : u;
+  const cx = fr.x + fr.w * clamp(+s.cx, 0, 1), cy = fr.y + fr.h * clamp(+s.cy, 0, 1);
+  if (s.layout === 'usa') {
+    const Tb = table(s.from === 'layer' ? ((o.scene?.layers || []).find((x) => x.id === s.layerId)?.style || s) : s);
+    const sf = s.stateField || Tb.fields.find((f) => /state|abbr|code/i.test(f)) || Tb.fields[0], vf = s.field || guessField(Tb, 'num');
+    const vals = new Map();
+    for (const r of Tb.rows) { const raw = String(r.p[sf] ?? '').trim(); const code = US[raw.toUpperCase()] ? raw.toUpperCase() : USN[normN(raw)]; const v = num(r.p[vf]); if (code && isFinite(v)) vals.set(code, v); }
+    const k = (fr.w / 1250) * (+s.tileSize || 1); R = 47 * k;
+    placeAt(ctx, L, fr, cx - 560 * k, cy - 290 * k, 1120 * k, 580 * k, { key: 'grid' });
+    tiles = Object.keys(US).map((code) => ({ code, x: cx - 628 * k + US[code][0] * k, y: cy - 350 * k + US[code][1] * k, v: vals.get(code) }));
+  } else {
+    const H0 = hexPlaces(L, o);
+    if (!H0.places.length) { ctx.font = `500 ${15 * unit}px ${UI}`; ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.textAlign = 'center'; ctx.fillText(H0.loading ? 'Loading places…' : 'Hex tile cartogram — load data with names or lat / lon (or pick a layer) in the settings', cx, cy); ctx.restore(); return; }
+    const lk = `${H0.places.length}|${H0.places.map((p) => p.code).join('').slice(0, 300)}|${s.cells}`;
+    let lay = L._hexLay?.key === lk ? L._hexLay.lay : null;
+    if (!lay) { lay = hexLayout(H0.places, +s.cells || 1.6); L._hexLay = { key: lk, lay }; }
+    const top = (s.title || s.subtitle) ? 90 * unit : 20 * unit;
+    const availW = fr.w * 0.9 * (+s.tileSize || 1), availH = (fr.h - top - 20 * unit) * (+s.tileSize || 1);
+    const step = Math.min(availW / lay.w, availH / lay.h); R = step / Math.sqrt(3);
+    const bw = lay.w * step, bh = lay.h * step;
+    const ox = cx - bw / 2 + step / 2, oy = Math.max(fr.y + top, cy - bh / 2) + step * 0.55;
+    placeAt(ctx, L, fr, cx - bw / 2, oy - step * 0.55, bw, bh, { key: 'grid' });
+    tiles = lay.cells.map((q) => ({ code: q.code, name: q.name, x: ox + q.gx * step, y: oy + q.gy * step, v: q.v }));
+  }
+  const vs = tiles.map((t) => t.v).filter(isFinite); const mn = Math.min(...vs), mx = Math.max(...vs);
+  const Rt = R * (1 - (+s.gap || 0)), k = R / 47;
+  tiles.forEach((tile, n) => {
+    const { x, y, v, code } = tile;
+    const a = u >= 1 ? 1 : L.anim === 'sweep' ? clamp((u * 1.35 - (x - fr.x) / fr.w) / 0.35, 0, 1) : L.anim === 'grow' ? clamp((u - (n / tiles.length) * 0.5) / 0.5, 0, 1) : u;
     if (a <= 0) return;
-    const v = vals.get(code); const t = isFinite(v) && mx > mn ? (v - mn) / (mx - mn) : 0.5;
+    const t = isFinite(v) && mx > mn ? (v - mn) / (mx - mn) : 0.5;
     ctx.save(); ctx.globalAlpha *= a;
     const hexPath = (r) => { ctx.beginPath(); for (let q = 0; q < 6; q++) { const an = (60 * q - 30) * D2R; q ? ctx.lineTo(x + r * Math.cos(an), y + r * Math.sin(an)) : ctx.moveTo(x + r * Math.cos(an), y + r * Math.sin(an)); } ctx.closePath(); };
     hexPath(Rt);
@@ -448,8 +539,10 @@ function drawHexCarto(ctx, L, tm, o) {
     }
     if (s.labels !== 'none') {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      if (s.labels === 'both' || s.labels === 'abbr') { ctx.font = `600 ${10.5 * k * 1.25}px ${UI}`; ctx.fillStyle = s.abbrColor; ctx.fillText(code, x, y - Rt * 0.66); }
-      if ((s.labels === 'both' || s.labels === 'value') && isFinite(v)) { ctx.font = `700 ${11 * k * 1.25}px ${UI}`; ctx.fillStyle = s.labelColor; ctx.fillText(`${s.prefix || ''}${(+v).toFixed(+s.decimals || 0)}${s.suffix || ''}`, x, y + Rt * 0.66); }
+      const kt = Math.min(k, 1.25 * unit);
+      let light = false; if (s.symbol === 'hexfill' && isFinite(v)) { const c = rampAt(s.scheme || 'YlOrRd', 0.1 + 0.9 * t); light = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11 > 150; }
+      if (s.labels === 'both' || s.labels === 'abbr') { ctx.font = `600 ${10.5 * kt * 1.25}px ${UI}`; ctx.fillStyle = light ? '#2a2a2a' : s.abbrColor; ctx.fillText(code, x, y - Rt * 0.66); }
+      if ((s.labels === 'both' || s.labels === 'value') && isFinite(v)) { ctx.font = `700 ${11 * kt * 1.25}px ${UI}`; ctx.fillStyle = light ? '#1b1b1b' : s.labelColor; ctx.fillText(`${s.prefix || ''}${Math.abs(v) >= 10000 ? fmtNum(v) : (+v).toFixed(+s.decimals || 0)}${s.suffix || ''}`, x, y + Rt * 0.66); }
     }
     ctx.restore();
   });
@@ -681,48 +774,113 @@ Norwegian Fjords | Ancient shield, ice-sculpted valleys | 61.15, 6.4 | 6.9 | Dee
 Patagonian Fjords | Where the Andes meet the sea | -49.2, -74.6 | 6.6 | Drowned glacial valleys carved into granite and metamorphic rock, uplifted by the subduction of the Nazca Plate — one of the most intricate coasts on Earth.
 New Zealand Fiordland | Southern Alps and ocean depths | -45.3, 167.4 | 7.4 | A rugged region of fjords such as Milford Sound, where the Pacific and Australian plates collide; Pleistocene glaciers carved its steep valleys.`;
 function wrapText(ctx, t, x, y, maxW, lh, maxLines = 12) { const words = String(t).split(/\s+/); let line = '', n = 0; for (const w of words) { const tt = line ? `${line} ${w}` : w; if (ctx.measureText(tt).width > maxW && line) { ctx.fillText(line, x, y + n * lh); line = w; if (++n >= maxLines) return; } else line = tt; } if (line) ctx.fillText(line, x, y + n * lh); }
+const LLRE = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
+function galleryPanels(s) {
+  const lines = String(s.panels && String(s.panels).trim() ? s.panels : GALLERY).split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((x) => x.length >= 3);
+  return lines.map(([title, sub, ll, z, text]) => { const m = String(ll || '').match(LLRE); return { title, sub, ll: m ? [+m[2], +m[1]] : null, place: ll, z: +z || 7, text: text || '' }; }).slice(0, 6);
+}
 function drawGallery(ctx, L, tm, o) {
   const s = L.style, fr = o.frame; if (!fr) return;
-  const unit = o.unit, u = u01(L, tm);
-  const lines = String(s.panels && String(s.panels).trim() ? s.panels : GALLERY).split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((x) => x.length >= 3);
-  const P = lines.map(([title, sub, ll, z, text]) => { const m = String(ll || '').match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/); return { title, sub, ll: m ? [+m[2], +m[1]] : null, z: +z || 7, text: text || '' }; }).filter((p) => p.ll).slice(0, 6);
+  const unit = o.unit, u = u01(L, tm), anim = L.anim || 'cascade';
+  const P = galleryPanels(s);
   ctx.save(); ctx.globalAlpha = tm.alpha;
   if (+s.bgAlpha > 0) {
     ctx.save(); ctx.globalAlpha *= +s.bgAlpha; ctx.fillStyle = s.bg; ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
     if (s.paper !== false) { const R = rng(3); ctx.globalAlpha = tm.alpha * +s.bgAlpha * 0.06; for (let i = 0; i < 900; i++) { ctx.fillStyle = R() > 0.5 ? '#fff' : '#000'; ctx.fillRect(fr.x + R() * fr.w, fr.y + R() * fr.h, 2 * unit, 2 * unit); } }
     ctx.restore();
   }
-  // title
   if (s.title || s.subtitle) { ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = s.titleColor; if (s.title) { ctx.font = `700 ${22 * unit}px ${UI}`; ctx.fillText(s.title, fr.x + fr.w / 2, fr.y + 20 * unit); } if (s.subtitle) { ctx.font = `500 ${12.5 * unit}px ${UI}`; ctx.fillText(s.subtitle, fr.x + fr.w / 2, fr.y + 48 * unit); } }
   const cols = clamp(Math.round(+s.cols || 2), 1, 3), rows = Math.ceil(P.length / cols);
   const top = fr.y + 78 * unit, bot = fr.y + fr.h - 30 * unit, rowH = (bot - top) / Math.max(1, rows);
   const T0 = Math.min(rowH * 0.86, (fr.w * (s.text !== false ? 0.42 : 0.8)) / cols) * (+s.tileSize || 1);
   const blockW = cols * T0 + (cols - 1) * 22 * unit, bx = fr.x + fr.w / 2 - blockW / 2;
-  P.forEach((p, i) => {
-    const c = i % cols, r = Math.floor(i / cols);
-    const a = L.anim === 'cascade' && u < 1 ? clamp((u - (i / P.length) * 0.6) / 0.4, 0, 1) : u; if (a <= 0) return;
-    const x = bx + c * (T0 + 22 * unit), y = top + r * rowH + (rowH - T0) / 2 + (1 - easeOut(a)) * 30 * unit, rad = T0 * (+s.corner || 0.12);
+  // timing: tour = 20 % to bring the tiles in, then one slot per tile
+  const D = Math.max(0.5, +L.duration || 6), tsec = tm.edit || anim === 'none' ? D : clamp(tm.tau, 0, D);
+  const inEnd = anim === 'tour' ? Math.min(1.2, D * 0.2) : D;
+  const uIn = tm.edit || anim === 'none' ? 1 : easeOut(clamp(tsec / inEnd, 0, 1));
+  const slot = anim === 'tour' && P.length ? (D - inEnd) / P.length : 0;
+  let focus = -1, fk = 0;
+  if (slot > 0 && !tm.edit) {
+    const x = (tsec - inEnd) / slot;
+    if (x >= 0 && x < P.length) { focus = Math.floor(x); const f = (x - focus) * slot, grow = Math.min(0.9, slot * 0.3), hold = Math.max(0, slot - 2 * grow); fk = f < grow ? H.ease(f / grow) : f < grow + hold ? 1 : 1 - H.ease((f - grow - hold) / grow); }
+  }
+  const live = (+s.liveZoom || 0) * (tsec / D);
+  const panel = (p, i, x, y, S, z, a, rad, big) => {
     ctx.save(); ctx.globalAlpha = tm.alpha * a;
-    if (s.shadow !== false) { ctx.save(); ctx.shadowColor = 'rgba(30,45,70,0.35)'; ctx.shadowBlur = 26 * unit; ctx.shadowOffsetY = 12 * unit; rr(ctx, x, y, T0, T0, rad); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore(); }
-    ctx.save(); rr(ctx, x, y, T0, T0, rad); ctx.clip();
-    drawTiles(ctx, s.src || 'satellite', p.ll, p.z, x, y, T0, T0);
-    const g = ctx.createLinearGradient(x, y, x + T0, y + T0); g.addColorStop(0, 'rgba(255,255,255,0.25)'); g.addColorStop(0.4, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.12)'); ctx.fillStyle = g; ctx.fillRect(x, y, T0, T0);
+    if (s.shadow !== false) { ctx.save(); ctx.shadowColor = 'rgba(30,45,70,0.35)'; ctx.shadowBlur = (big ? 40 : 26) * unit; ctx.shadowOffsetY = 12 * unit; rr(ctx, x, y, S, S * (big ? big : 1), rad); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore(); }
+    const Hh = S * (big || 1);
+    ctx.save(); rr(ctx, x, y, S, Hh, rad); ctx.clip();
+    if (p.ll) drawTiles(ctx, s.src || 'satellite', p.ll, clamp(z, 1, 19), x, y, S, Hh);
+    else { ctx.fillStyle = '#8fa3b8'; ctx.fillRect(x, y, S, Hh); ctx.fillStyle = '#fff'; ctx.font = `600 ${12 * unit}px ${UI}`; ctx.textAlign = 'center'; ctx.fillText(`“${p.place}” — press “Find the places typed by name”`, x + S / 2, y + Hh / 2, S - 20 * unit); }
+    const g = ctx.createLinearGradient(x, y, x + S, y + Hh); g.addColorStop(0, 'rgba(255,255,255,0.25)'); g.addColorStop(0.4, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.12)'); ctx.fillStyle = g; ctx.fillRect(x, y, S, Hh);
     ctx.restore();
-    rr(ctx, x, y, T0, T0, rad); ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2.5 * unit; ctx.stroke();
-    if (s.scale !== false) { const mpp = (156543.03 * Math.cos(p.ll[1] * D2R)) / 2 ** p.z; const ratio = Math.round(mpp / 0.00028 / (T0 / 256 / 2.2)); ctx.font = `600 ${9.5 * unit}px ${UI}`; ctx.fillStyle = s.inkColor; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(`⊕  1 : ${ratio.toLocaleString('en-US')}`, x + 6 * unit, y + T0 + 8 * unit); }
+    rr(ctx, x, y, S, Hh, rad); ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2.5 * unit; ctx.stroke();
+    if (s.scale !== false && p.ll) { const mpp = (156543.03 * Math.cos(p.ll[1] * D2R)) / 2 ** z; const ratio = Math.round(mpp / 0.00028 / (S / 256 / 2.2)); ctx.font = `600 ${9.5 * unit}px ${UI}`; ctx.fillStyle = big ? '#fff' : s.inkColor; ctx.textAlign = 'left'; ctx.textBaseline = big ? 'bottom' : 'top'; if (big) { ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 4 * unit; } ctx.fillText(`⊕  1 : ${ratio.toLocaleString('en-US')}`, x + 10 * unit, big ? y + Hh - 10 * unit : y + S + 8 * unit); ctx.shadowBlur = 0; }
+    if (big && fk > 0.6) {
+      ctx.globalAlpha = tm.alpha * clamp((fk - 0.6) / 0.4, 0, 1); ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 8 * unit; ctx.fillStyle = '#fff';
+      ctx.font = `700 ${24 * unit}px ${UI}`; ctx.fillText(p.title || '', x + 26 * unit, y + 22 * unit); ctx.font = `600 ${13 * unit}px ${UI}`; ctx.fillText(p.sub || '', x + 27 * unit, y + 54 * unit);
+    }
+    ctx.restore();
+  };
+  const geom = (i) => { const c = i % cols, r = Math.floor(i / cols); return { c, x: bx + c * (T0 + 22 * unit), y: top + r * rowH + (rowH - T0) / 2 }; };
+  P.forEach((p, i) => {
+    let a = anim === 'cascade' ? clamp((u - (i / P.length) * 0.6) / 0.4, 0, 1) : anim === 'fade' ? u : anim === 'tour' ? clamp((uIn - (i / P.length) * 0.5) / 0.5, 0, 1) : anim === 'zoomin' || anim === 'zoomout' ? clamp(u * 4, 0, 1) : 1;
+    if (a <= 0) return;
+    const G = geom(i); const y = G.y + (anim === 'cascade' || anim === 'tour' ? (1 - easeOut(a)) * 30 * unit : 0);
+    const k = anim === 'zoomin' || anim === 'zoomout' ? 1 - H.ease(clamp((u - (i / P.length) * 0.25) / 0.75, 0, 1)) : 0;
+    const z = p.z + live + (anim === 'zoomin' ? -k * (+s.zoomFrom || 4) : anim === 'zoomout' ? k * (+s.zoomFrom || 4) : 0);
+    if (i !== focus) panel(p, i, G.x, y, T0, z, a * (focus >= 0 ? 1 - 0.5 * fk : 1), T0 * (+s.corner || 0.12), 0);
     if (s.text !== false) {
-      const left = c === 0 && cols > 1, tx = left ? fr.x + 40 * unit : x + T0 + 30 * unit, tw = left ? x - tx - 30 * unit : Math.min(fr.x + fr.w - 40 * unit - tx, 300 * unit);
+      const left = G.c === 0 && cols > 1, tx = left ? fr.x + 40 * unit : G.x + T0 + 30 * unit, tw = left ? G.x - tx - 30 * unit : Math.min(fr.x + fr.w - 40 * unit - tx, 300 * unit);
       if (tw > 80 * unit) {
+        ctx.save(); ctx.globalAlpha = tm.alpha * a * (focus >= 0 ? 1 - fk : 1);
         ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = s.titleColor;
         ctx.font = `700 ${15 * unit}px ${UI}`; ctx.fillText(p.title || '', tx, y + 6 * unit);
         ctx.font = `600 ${10.5 * unit}px ${UI}`; ctx.fillStyle = s.inkColor; ctx.fillText(p.sub || '', tx, y + 26 * unit);
         ctx.font = `400 ${10 * unit}px ${UI}`; wrapText(ctx, p.text, tx, y + 48 * unit, tw, 14.5 * unit, Math.floor((T0 - 50 * unit) / (14.5 * unit)));
+        ctx.restore();
       }
     }
-    ctx.restore();
   });
+  if (focus >= 0 && fk > 0) {
+    const p = P[focus], G = geom(focus), m = 30 * unit;
+    const W = fr.w - 2 * m, Hf = fr.h - 2 * m;
+    const S = T0 + (W - T0) * fk, x = G.x + (fr.x + m - G.x) * fk, y = G.y + (fr.y + m - G.y) * fk;
+    const ratio = (T0 + (Hf - T0) * fk) / S;
+    const z = p.z + live + (+s.tourZoom || 0) * fk + Math.log2(S / T0) * 0.0;
+    panel(p, focus, x, y, S, z, 1, T0 * (+s.corner || 0.12) * (1 - fk * 0.6), ratio);
+  }
   ctx.restore();
 }
+CS_DEFAULTS.mapgallery.panels = GALLERY; // shown in the settings so it can be edited
+/** Settings buttons */
+async function geocode(q) {
+  const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error('Place search is not available right now');
+  const j = await r.json(); return j[0] ? [+(+j[0].lat).toFixed(4), +(+j[0].lon).toFixed(4)] : null;
+}
+export const CS_ACTIONS = {
+  async csAddView(L, { map }) {
+    const c = map.getCenter(), z = map.getZoom();
+    const cur = String(L.style.panels || '').trim() || GALLERY;
+    const n = cur.split('\n').filter((x) => x.trim()).length;
+    if (n >= 6) return 'A gallery holds up to 6 tiles — remove one first';
+    L.style.panels = `${cur}\nView ${n + 1} | | ${c.lat.toFixed(4)}, ${c.lng.toFixed(4)} | ${Math.max(1, z + 1).toFixed(1)} | `;
+    return 'Tile added — edit its title and text in the list (zoom out the map to add a wider view)';
+  },
+  async csGeocode(L) {
+    const lines = String(L.style.panels || '').trim() ? String(L.style.panels).split('\n') : GALLERY.split('\n');
+    let found = 0, miss = [];
+    for (let i = 0; i < lines.length; i++) {
+      const f = lines[i].split('|'); if (f.length < 3 || LLRE.test(f[2])) continue;
+      const q = f[2].trim(); if (!q) continue;
+      const ll = await geocode(q); if (!ll) { miss.push(q); continue; }
+      f[2] = ` ${ll[0]}, ${ll[1]} `; if (!f[0].trim()) f[0] = ` ${q} `; lines[i] = f.join('|'); found++;
+    }
+    L.style.panels = lines.join('\n');
+    return found || miss.length ? `${found} place${found === 1 ? '' : 's'} found${miss.length ? ` — not found: ${miss.join(', ')}` : ''}` : 'Every tile already has lat, lon';
+  },
+};
 
 // ================================================================= 8 · small multiples
 function hatch(ctx, color, unit, mode) {
