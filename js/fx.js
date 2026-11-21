@@ -44,6 +44,7 @@ import { SAR_KINDS, SAR_ANIMS, SAR_DEFAULTS, SAR_FORMS, SAR_SET, sarPhases, draw
 import { DF_KINDS, DF_ANIMS, DF_DEFAULTS, DF_FORMS, DF_SET, dfPhases, drawDocu } from './docufx.js';
 import { SW_KINDS, SW_ANIMS, SW_LAYER_DEFAULTS, SW_FORMS, SW_SET, swPhases, drawSiteWatch } from './sitewatch.js';
 import { GV_KINDS, GV_ANIMS, GV_LAYER_DEFAULTS, GV_FORMS, GV_SET, gvPhases, drawGeoViz } from './geoviz.js';
+import { MG_KINDS, MG_ANIMS, MG_LAYER_DEFAULTS, MG_FORMS, MG_SET, mgPhases, drawMilGfx } from './milgfx.js';
 import { CS_KINDS, CS_ANIMS, CS_LAYER_DEFAULTS, CS_FORMS, CS_SET, csPhases, drawCartoStyle } from './cartostyle.js';
 import { LS_KINDS, LS_ANIMS, LS_LAYER_DEFAULTS, LS_FORMS, LS_SET, lsPhases, drawLayerStack } from './layerstack.js';
 import { FIRMS_KINDS, FIRMS_ANIMS, FIRMS_DEFAULTS, FIRMS_FORMS, FIRMS_SET, firmsPhases, drawFirms } from './firms.js';
@@ -86,6 +87,7 @@ export const FX_KINDS = {
   ...GV_KINDS,
   ...LS_KINDS,
   ...CS_KINDS,
+  ...MG_KINDS,
   ...SAR_KINDS,
   ...TT_KINDS,
   ...TW_KINDS,
@@ -151,6 +153,7 @@ export const FX_ANIMS = {
   ...GV_ANIMS,
   ...LS_ANIMS,
   ...CS_ANIMS,
+  ...MG_ANIMS,
   ...SAR_ANIMS,
   ...TT_ANIMS,
   ...TW_ANIMS,
@@ -212,6 +215,7 @@ export const FX_DEFAULTS = {
   ...GV_LAYER_DEFAULTS,
   ...LS_LAYER_DEFAULTS,
   ...CS_LAYER_DEFAULTS,
+  ...MG_LAYER_DEFAULTS,
   ...SAR_DEFAULTS,
   ...TT_DEFAULTS,
   ...TW_DEFAULTS,
@@ -280,6 +284,7 @@ export const FX_FORMS = {
   ...GV_FORMS,
   ...LS_FORMS,
   ...CS_FORMS,
+  ...MG_FORMS,
   ...SAR_FORMS,
   ...TT_FORMS,
   ...TW_FORMS,
@@ -1461,6 +1466,7 @@ export function drawFX(ctx, L, tm, o, phase) {
   if (DF_SET.has(L.kind)) { drawDocu(ctx, L, tm, o, phase); return; }
   if (SW_SET.has(L.kind)) { drawSiteWatch(ctx, L, tm, o, phase); return; }
   if (GV_SET.has(L.kind)) { drawGeoViz(ctx, L, tm, o, phase); return; }
+  if (MG_SET.has(L.kind)) { drawMilGfx(ctx, L, tm, o, phase); return; }
   if (CS_SET.has(L.kind)) { drawCartoStyle(ctx, L, tm, o, phase); return; }
   if (LS_SET.has(L.kind)) { if (phase === 'captions') drawLayerStack(ctx, L, tm, o); return; }
   if (FIRMS_SET.has(L.kind)) { drawFirms(ctx, L, tm, o, phase, { placeAt, track: CFH.track }); return; }
@@ -1557,6 +1563,7 @@ export function fxPhases(kind) {
   if (GV_SET.has(kind)) return gvPhases(kind);
   if (LS_SET.has(kind)) return lsPhases(kind);
   if (CS_SET.has(kind)) return csPhases(kind);
+  if (MG_SET.has(kind)) return mgPhases(kind);
   if (SAR_SET.has(kind)) return sarPhases(kind);
   if (TT_SET.has(kind)) return ttPhases(kind);
   if (TR_SET.has(kind)) return trPhases(kind);

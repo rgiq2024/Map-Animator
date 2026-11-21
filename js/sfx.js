@@ -10,6 +10,7 @@ export const SFX_KINDS = new Set(['strike', 'bombing', 'trajectory', 'launch', '
 export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9, music: 'none', musicVolume: 0.45, zoomWind: true }; }
 
 import { TEXT_SFX, trailerSoundEvents, applyTextSound } from './trailer.js';
+import { MG_SET, mgSoundEvents } from './milgfx.js';
 import { fitSchedule } from './typewriter.js';
 import { playSample, samplesReady, MUSIC_TRACKS, trackBuffer } from './samples.js';
 
@@ -687,6 +688,7 @@ export function buildEvents(project, models) {
     const push = (t, type, p = {}) => { if (t >= m.trimIn - 0.01 && t <= m.trimOut) { const pt = P(Math.max(m.trimIn, t)); if (pt != null) ev.push({ t: pt, type, p }); } };
     for (const L of sc.layers || []) {
       if (L.hidden || L.style?.sound === false) continue;
+      if (MG_SET.has(L.kind)) { for (const e of mgSoundEvents(L)) push(e.t, e.type, e.p); continue; }
       if (textOnly && !TEXT_SFX.has(L.kind) && !(L.kind === 'ttitle' && (L.style?.look === 'typewriter' || (L.style?.textSound && L.style.textSound !== 'auto')))) continue;
       const s = L.style || {};
       if (TEXT_SFX.has(L.kind)) { for (const e of trailerSoundEvents(L)) push(e.t, e.type, e.p); continue; }
@@ -972,4 +974,4 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
   }
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || MG_SET.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };
