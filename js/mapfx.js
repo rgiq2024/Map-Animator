@@ -215,7 +215,7 @@ export function mxSoundEvents(L) {
   const s = L.style || {}; if (s.sound === false) return [];
   const t0 = +L.start || 0, D = Math.max(0.3, +L.duration || 2), v = s.soundVol ?? 1;
   if (L.kind === 'dofblur') return [{ t: t0, type: 'clip', p: { clip: 'dof-ambient-2', dur: D, vol: v, fadeIn: 0.8, fadeOut: 1.2 } }];
-  if (L.kind === 'inkreveal') return [{ t: t0, type: 'clip', p: { clip: 'ink-spread', dur: 3, vol: v, fadeIn: 0.02, fadeOut: 0.5 } }]; // effect only — the first 3 s, no music
+  if (L.kind === 'inkreveal') return [{ t: t0, type: 'clip', p: { clip: 'ink-spread', dur: 2, vol: v, fadeIn: 0.02, fadeOut: 0.4 } }]; // effect only — the first 2 s, no music
   if (L.kind === 'flickerzones') return [{ t: t0, type: 'clipflicker', p: { dur: L.anim === 'strobe' ? D : Math.max(0.6, +s.flickerFor + 0.3), rate: +s.rate || 12, vol: v } }];
   if (L.kind === 'softlabel') return [{ t: t0, type: 'swoosh', p: { vol: v * 0.5 } }];
   return [];
