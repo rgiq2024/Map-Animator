@@ -11,11 +11,21 @@ export function loadSamples() {
       const buf = await ac.decodeAudioData(await (await fetch(st.file)).arrayBuffer());
       sets[k] = { ...st, buf };
     }
+    // sounds taken from reference clips (sfx/clips/*.mp3) — whole recordings, played as beds
+    sets.clips = {};
+    await Promise.all(Object.entries(CLIP_SOUNDS).map(async ([k, c]) => { try { sets.clips[k] = await ac.decodeAudioData(await (await fetch(c.file)).arrayBuffer()); } catch { /* missing */ } }));
     lib = sets;
     return lib;
   })().catch(() => { loading = null; return null; });
   return loading;
 }
+export const CLIP_SOUNDS = {
+  'dof-ambient': { name: 'Depth-of-field drift (ambient)', file: 'sfx/clips/dof-ambient.mp3' },
+  'dof-ambient-2': { name: 'Depth-of-field drift 2 (ambient)', file: 'sfx/clips/dof-ambient-2.mp3' },
+  'ink-spread': { name: 'Ink spreading', file: 'sfx/clips/ink-spread.mp3' },
+  flicker: { name: 'Flicker', file: 'sfx/clips/flicker.mp3' },
+};
+export const clipBuffer = (k) => lib?.clips?.[k] || null;
 export const samplesReady = () => !!lib;
 let last = {};
 /**

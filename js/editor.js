@@ -1980,6 +1980,7 @@ export function createEditor() {
       if (k === 'firms') { const c = map.getCenter(); L.style.center = `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`; toast(firmsKey() ? 'Press “Fetch hotspots now” in the settings' : 'Add your free NASA FIRMS MAP_KEY in the settings, then press “Fetch hotspots now”', 5200); }
       if (k === 'catmarkers') toast('Edit the categories and places (Category | longitude, latitude) in the settings', 4200);
       addLayer(L);
+      if (k === 'dofblur' && b.dataset.drift) import('./mapfx.js').then(async ({ MX_ACTIONS }) => { const msg = await MX_ACTIONS.dofDrift(L, { map, scene: scene() }); save?.(); rebuild?.(); commitLayers(); renderLayerEditor(); repaint(); toast(msg, 5200); });
       if ((k === 'spotlight' && L.style.source === 'countries') || (k === 'regions' && L.style.source === 'countries')) {
         let n = 0;
         const fit = () => { const c = countriesByName(L.style.countries); if (!c) { if (n++ < 30) setTimeout(fit, 250); return; } if (!c.length) { toast('Country not found — check the name'); return; } let w = 180, s2 = 90, e2 = -180, n2 = -90; for (const x of c) { w = Math.min(w, x.bbox[0]); s2 = Math.min(s2, x.bbox[1]); e2 = Math.max(e2, x.bbox[2]); n2 = Math.max(n2, x.bbox[3]); } if (e2 - w < 120) flyToBounds([[w, s2], [e2, n2]], 0.12); repaint(); };
@@ -3340,7 +3341,7 @@ export function createEditor() {
     if (a === 'sarFit') fitSar(L);
     if (a === 'gvAction') {
       btn.disabled = true;
-      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (msg) toast(msg, 4200); } }
+      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const { MX_ACTIONS } = await import('./mapfx.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn] || MX_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (btn.dataset.fn === 'dofDrift') { save?.(); rebuild?.(); renderScenes?.(); repaint(); } if (msg) toast(msg, 4200); } }
       catch (err) { toast(err.message || 'Request failed', 5000); }
       btn.disabled = false;
     }

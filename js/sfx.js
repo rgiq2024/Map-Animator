@@ -11,8 +11,9 @@ export function defaultSound() { return { v2: true, auto: false, sfxVolume: 0.9,
 
 import { TEXT_SFX, trailerSoundEvents, applyTextSound } from './trailer.js';
 import { MG_SET, mgSoundEvents } from './milgfx.js';
+import { MX_SET, mxSoundEvents } from './mapfx.js';
 import { fitSchedule } from './typewriter.js';
-import { playSample, samplesReady, MUSIC_TRACKS, trackBuffer } from './samples.js';
+import { playSample, samplesReady, MUSIC_TRACKS, trackBuffer, clipBuffer } from './samples.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const noiseCache = new WeakMap();
@@ -71,6 +72,14 @@ function reverb(ctx, out) {
 
 // ---------------------------------------------------------------- effect synths: (ctx, out, when, p)
 const SYN = {
+  // a recorded clip sound (sfx/clips): looped to p.dur, faded in / out
+  clip(ctx, out, w, p) {
+    const buf = clipBuffer(p.clip); if (!buf) return;
+    const d = clamp(p.dur || buf.duration, 0.2, 120), v = p.vol ?? 1, fi = Math.min(p.fadeIn ?? 0.15, d / 3), fo = Math.min(p.fadeOut ?? 0.6, d / 2);
+    const s0 = ctx.createBufferSource(); s0.buffer = buf; s0.loop = d > buf.duration + 0.05; s0.playbackRate.value = p.rate || 1;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, w); g.gain.linearRampToValueAtTime(v, w + fi); g.gain.setValueAtTime(v, w + d - fo); g.gain.linearRampToValueAtTime(0.0001, w + d);
+    s0.connect(g).connect(out); s0.start(w, (p.offset || 0) % buf.duration); s0.stop(w + d + 0.05);
+  },
   explosion(ctx, out, w, p) {
     const k = clamp(p.size || 1, 0.3, 3);
     const v = (p.vol ?? 1) * Math.min(1.2, 0.55 + 0.25 * k);
@@ -544,7 +553,9 @@ Object.assign(SYN, {
   },
 });
 /** The sound library: sounds you can drop on the timeline. */
+for (const [k, c] of Object.entries({ clipdof: 'dof-ambient', clipdof2: 'dof-ambient-2', clipink: 'ink-spread', clipflicker: 'flicker' })) SYN[k] = (ctx, out, w, p) => { const b = clipBuffer(c); if (b) SYN.clip(ctx, out, w, { ...p, clip: c, dur: p.whole === false ? p.dur : b.duration, fadeOut: 0.3 }); };
 export const SOUND_LIBRARY = {
+  'Recorded clips': { clipdof: 'Map drift ambience (depth of field)', clipdof2: 'Map drift ambience 2', clipink: 'Ink spreading', clipflicker: 'Flicker' },
   'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
   'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', rocket: 'Rocket launch' },
@@ -689,6 +700,7 @@ export function buildEvents(project, models) {
     for (const L of sc.layers || []) {
       if (L.hidden || L.style?.sound === false) continue;
       if (MG_SET.has(L.kind)) { for (const e of mgSoundEvents(L)) push(e.t, e.type, e.p); continue; }
+      if (MX_SET.has(L.kind)) { for (const e of mxSoundEvents(L)) push(e.t, e.type, e.p); continue; }
       if (textOnly && !TEXT_SFX.has(L.kind) && !(L.kind === 'ttitle' && (L.style?.look === 'typewriter' || (L.style?.textSound && L.style.textSound !== 'auto')))) continue;
       const s = L.style || {};
       if (TEXT_SFX.has(L.kind)) { for (const e of trailerSoundEvents(L)) push(e.t, e.type, e.p); continue; }
@@ -974,4 +986,4 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
   }
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || MG_SET.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || MG_SET.has(L.kind) || MX_SET.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };
