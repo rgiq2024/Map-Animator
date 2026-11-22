@@ -553,6 +553,33 @@ Object.assign(SYN, {
   },
 });
 /** The sound library: sounds you can drop on the timeline. */
+// ink / liquid reveal sounds (made here) — shaped like the ink-spread recording: a hush, a low swell, then a crackling burst that settles
+function inkSound(ctx, out, w, p, kind) {
+  const d = clamp(p.dur || 2, 0.6, 8), v = p.vol ?? 1, a0 = w + d * 0.12, b0 = w + d * 0.42;
+  // 1 · low swell (rumble)
+  const r = src(ctx, 'brown', w, d), rf = filt(ctx, 'lowpass', kind === 'liquid' ? 260 : 170), rg = env(ctx, w, [[a0 - w, 0.0001], [a0 - w + 0.08, 0.025 * v], [b0 - w, 0.035 * v], [d * 0.7, 0.1 * v], [d, 0.0001, 1]]);
+  r.connect(rf).connect(rg).connect(out);
+  const lo = osc(ctx, 'sine', 55, a0, d); lo.frequency.linearRampToValueAtTime(kind === 'sizzle' ? 90 : 72, b0); const lg = env(ctx, a0, [[0.01, 0.0001], [b0 - a0, 0.03 * v], [d - (a0 - w), 0.0001, 1]]); lo.connect(lg).connect(out);
+  // 2 · textured burst: noise through a band filter, chopped into grains
+  const n = src(ctx, kind === 'liquid' ? 'pink' : 'white', w, d), bf = filt(ctx, 'bandpass', kind === 'sizzle' ? 5200 : kind === 'liquid' ? 700 : 3200, kind === 'liquid' ? 6 : 0.9);
+  if (kind === 'liquid') { bf.frequency.setValueAtTime(500, b0); bf.frequency.exponentialRampToValueAtTime(1900, w + d * 0.9); }
+  const gg = ctx.createGain(); gg.gain.setValueAtTime(0.0001, w);
+  const peak = (kind === 'sizzle' ? 0.5 : kind === 'liquid' ? 0.55 : 0.42) * v; let t = b0 - w, i = 1;
+  const pre = (b0 - w) - 0.25; for (let q = Math.max(0.05, a0 - w); q < pre; q += 0.03) gg.gain.setValueAtTime(0.008 * v * (q / pre), w + q); // faint fizz in the swell
+  while (t < d - 0.02) {
+    const f = (t - (b0 - w)) / (d - (b0 - w)), envv = f < 0.12 ? 0.55 + f / 0.12 * 0.45 : 1 - (f - 0.12) * 0.55;
+    const r1 = ((i * 2654435761) >>> 0) % 1000 / 1000, r2 = ((i * 40503 + 7) >>> 0) % 1000 / 1000;
+    gg.gain.setValueAtTime(peak * envv * (0.25 + 0.75 * r1), w + t);
+    t += (kind === 'liquid' ? 0.035 : 0.012) + r2 * (kind === 'liquid' ? 0.05 : 0.02); i++;
+  }
+  gg.gain.setValueAtTime(peak * 0.3, w + d - 0.05); gg.gain.linearRampToValueAtTime(0.0001, w + d);
+  n.connect(bf).connect(gg).connect(out);
+  // 3 · a soft splat where the burst starts
+  const sp = src(ctx, 'white', b0, 0.25), sf = filt(ctx, 'lowpass', 1800), sg = env(ctx, b0, [[0.005, 0.35 * v], [0.22, 0.0001, 1]]); sp.connect(sf).connect(sg).connect(out);
+}
+SYN.inkbleed = (ctx, out, w, p) => inkSound(ctx, out, w, p, 'ink');
+SYN.inksizzle = (ctx, out, w, p) => inkSound(ctx, out, w, p, 'sizzle');
+SYN.inkliquid = (ctx, out, w, p) => inkSound(ctx, out, w, p, 'liquid');
 // electrical flicker (made here): mains hum that stutters with crackle bursts
 SYN.clipflicker = (ctx, out, w, p) => {
   const d = clamp(p.dur || 2.5, 0.3, 20), v = p.vol ?? 1, rate = p.rate || 12;
@@ -565,6 +592,7 @@ SYN.clipflicker = (ctx, out, w, p) => {
 };
 for (const [k, c] of Object.entries({ clipdof: 'dof-ambient-2', clipdof2: 'dof-ambient-2', clipink: 'ink-spread' })) SYN[k] = (ctx, out, w, p) => { const b = clipBuffer(c); if (b) SYN.clip(ctx, out, w, { ...p, clip: c, dur: p.whole === false ? p.dur : b.duration, fadeOut: 0.3 }); };
 export const SOUND_LIBRARY = {
+  'Ink & liquid reveals': { inkbleed: 'Ink bleed (swell + crackle)', inksizzle: 'Ink sizzle (bright crackle)', inkliquid: 'Liquid spread (bubbly)', clipink: 'Ink spreading (recorded, 2 s)' },
   'Recorded clips': { clipdof2: 'Map drift ambience (depth of field)', clipink: 'Ink spreading', clipflicker: 'Electrical flicker' },
   'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
   'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },

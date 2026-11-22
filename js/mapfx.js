@@ -26,7 +26,7 @@ export const MX_ANIMS = {
 };
 export const MX_DEFAULTS = {
   dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient-2' },
-  inkreveal: { color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
+  inkreveal: { snd: 'inkbleed', sndDur: 2, color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
   flickerzones: { from: 'countries', layerId: '', countries: 'France, Germany, Italy, Spain, Poland, Belgium, Netherlands, Switzerland, Austria, Czechia', data: '', sample: '', color: '#ffffff', fill: 0.18, stroke: '#ffffff', strokeWidth: 1.2, rate: 12, flickerFor: 2.2, maxA: 0.9, sound: true, soundVol: 1 },
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
 };
@@ -43,7 +43,7 @@ export const MX_FORMS = {
     ['style.labels', 'Blur labels and markers too (put this layer on top)', 'switch'], ['style.vignette', 'Vignette', 'range', [0, 1, 0.01]],
     ...SND,
   ],
-  inkreveal: [['style.color', 'Ink colour', 'color'], ['style.opacity', 'Opacity', 'range', [0.1, 1, 0.01]], ['style.seedX', 'Starts from ←→ (0…1 across the area)', 'range', [0, 1, 0.01]], ['style.seedY', 'Starts from ↑↓', 'range', [0, 1, 0.01]], ['style.rough', 'Ragged front', 'range', [0, 1, 0.01]], ['style.smoke', 'Smoky edges while spreading', 'range', [0, 1, 0.01]], ['style.texture', 'Ink texture', 'range', [0, 1, 0.01]], ['style.edge', 'Outline at the end', 'switch'], ['style.edgeColor', 'Outline colour', 'color', null, (L) => !!L.style.edge], ...SND],
+  inkreveal: [['style.color', 'Ink colour', 'color'], ['style.opacity', 'Opacity', 'range', [0.1, 1, 0.01]], ['style.seedX', 'Starts from ←→ (0…1 across the area)', 'range', [0, 1, 0.01]], ['style.seedY', 'Starts from ↑↓', 'range', [0, 1, 0.01]], ['style.rough', 'Ragged front', 'range', [0, 1, 0.01]], ['style.smoke', 'Smoky edges while spreading', 'range', [0, 1, 0.01]], ['style.texture', 'Ink texture', 'range', [0, 1, 0.01]], ['style.edge', 'Outline at the end', 'switch'], ['style.edgeColor', 'Outline colour', 'color', null, (L) => !!L.style.edge], ...SND, ['style.snd', 'Sound', 'select', { inkbleed: 'Ink bleed (swell + crackle)', inksizzle: 'Ink sizzle (bright crackle)', inkliquid: 'Liquid spread (bubbly)', clip: 'Ink spreading (recorded, 2 s)' }, (L) => L.style.sound !== false], ['style.sndDur', 'Sound length (s)', 'range', [0.6, 6, 0.1], (L) => L.style.sound !== false && L.style.snd !== 'clip']],
   flickerzones: [
     ['style.from', 'Areas from', 'select', { countries: 'Countries (by name)', layer: 'Another layer (areas, boundaries, a thematic map)', data: 'My GeoJSON / KML / shapefile' }],
     ['style.countries', 'Countries (comma-separated)', 'textarea', null, (L) => L.style.from === 'countries'],
@@ -215,7 +215,7 @@ export function mxSoundEvents(L) {
   const s = L.style || {}; if (s.sound === false) return [];
   const t0 = +L.start || 0, D = Math.max(0.3, +L.duration || 2), v = s.soundVol ?? 1;
   if (L.kind === 'dofblur') return [{ t: t0, type: 'clip', p: { clip: 'dof-ambient-2', dur: D, vol: v, fadeIn: 0.8, fadeOut: 1.2 } }];
-  if (L.kind === 'inkreveal') return [{ t: t0, type: 'clip', p: { clip: 'ink-spread', dur: 2, vol: v, fadeIn: 0.02, fadeOut: 0.4 } }]; // effect only — the first 2 s, no music
+  if (L.kind === 'inkreveal') return s.snd === 'clip' ? [{ t: t0, type: 'clip', p: { clip: 'ink-spread', dur: 2, vol: v, fadeIn: 0.02, fadeOut: 0.4 } }] : [{ t: t0, type: s.snd || 'inkbleed', p: { dur: +s.sndDur || 2, vol: v } }];
   if (L.kind === 'flickerzones') return [{ t: t0, type: 'clipflicker', p: { dur: L.anim === 'strobe' ? D : Math.max(0.6, +s.flickerFor + 0.3), rate: +s.rate || 12, vol: v } }];
   if (L.kind === 'softlabel') return [{ t: t0, type: 'swoosh', p: { vol: v * 0.5 } }];
   return [];
