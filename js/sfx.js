@@ -553,9 +553,19 @@ Object.assign(SYN, {
   },
 });
 /** The sound library: sounds you can drop on the timeline. */
-for (const [k, c] of Object.entries({ clipdof: 'dof-ambient', clipdof2: 'dof-ambient-2', clipink: 'ink-spread', clipflicker: 'flicker' })) SYN[k] = (ctx, out, w, p) => { const b = clipBuffer(c); if (b) SYN.clip(ctx, out, w, { ...p, clip: c, dur: p.whole === false ? p.dur : b.duration, fadeOut: 0.3 }); };
+// electrical flicker (made here): mains hum that stutters with crackle bursts
+SYN.clipflicker = (ctx, out, w, p) => {
+  const d = clamp(p.dur || 2.5, 0.3, 20), v = p.vol ?? 1, rate = p.rate || 12;
+  const hum = osc(ctx, 'sawtooth', 100, w, d), hf = filt(ctx, 'lowpass', 900), hg = ctx.createGain(); hg.gain.value = 0;
+  hum.connect(hf).connect(hg).connect(out);
+  let t = 0, i = 0;
+  while (t < d) { const on = ((i * 2654435761) >>> 0) % 100 > 38; hg.gain.setValueAtTime(on ? 0.05 * v : 0.004 * v, w + t); if (on) SYN.click?.(ctx, out, w + t, { vol: 0.35 * v }); t += (0.5 + (((i * 40503) >>> 0) % 100) / 100) / rate; i++; }
+  hg.gain.setValueAtTime(0.05 * v, w + d - 0.25); hg.gain.linearRampToValueAtTime(0.0001, w + d);
+  const n = src(ctx, 'white', w, d), nf = filt(ctx, 'highpass', 3000), ng = env(ctx, w, [[0.02, 0.05 * v], [d - 0.2, 0.03 * v], [d, 0.001, 1]]); n.connect(nf).connect(ng).connect(out);
+};
+for (const [k, c] of Object.entries({ clipdof: 'dof-ambient-2', clipdof2: 'dof-ambient-2', clipink: 'ink-spread' })) SYN[k] = (ctx, out, w, p) => { const b = clipBuffer(c); if (b) SYN.clip(ctx, out, w, { ...p, clip: c, dur: p.whole === false ? p.dur : b.duration, fadeOut: 0.3 }); };
 export const SOUND_LIBRARY = {
-  'Recorded clips': { clipdof: 'Map drift ambience (depth of field)', clipdof2: 'Map drift ambience 2', clipink: 'Ink spreading', clipflicker: 'Flicker' },
+  'Recorded clips': { clipdof2: 'Map drift ambience (depth of field)', clipink: 'Ink spreading', clipflicker: 'Electrical flicker' },
   'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
   'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', horn: 'Train / ship horn', rocket: 'Rocket launch' },

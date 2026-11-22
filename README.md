@@ -402,3 +402,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Sound library: new **Recorded clips** group (map drift ambience ×2, ink spreading, flicker).
 - Sound library now lists **every** sound effect the app makes (58): added **Digital interface typing** and **Train / ship horn**; fixed Digital typing failing when placed from the library.
 - Recorded clip sounds: the speaking voice is removed (background sound kept) — done by `.github/workflows/sfx-devoice.yml`.
+- Voices removed: the two clip recordings that were only a man talking (DOF1, FLK) are gone; depth of field now uses the voice-free drift ambience, flickering districts use a new electrical-flicker sound made in the app. The remaining clips (drift ambience, ink spreading) have the voice taken out.

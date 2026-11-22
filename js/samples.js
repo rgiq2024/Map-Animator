@@ -20,12 +20,10 @@ export function loadSamples() {
   return loading;
 }
 export const CLIP_SOUNDS = {
-  'dof-ambient': { name: 'Depth-of-field drift (ambient)', file: 'sfx/clips/dof-ambient.mp3' },
   'dof-ambient-2': { name: 'Depth-of-field drift 2 (ambient)', file: 'sfx/clips/dof-ambient-2.mp3' },
   'ink-spread': { name: 'Ink spreading', file: 'sfx/clips/ink-spread.mp3' },
-  flicker: { name: 'Flicker', file: 'sfx/clips/flicker.mp3' },
 };
-export const clipBuffer = (k) => lib?.clips?.[k] || null;
+export const clipBuffer = (k) => lib?.clips?.[k === 'dof-ambient' ? 'dof-ambient-2' : k] || null; // dof-ambient (voice only) was removed
 export const samplesReady = () => !!lib;
 let last = {};
 /**

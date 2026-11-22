@@ -10,7 +10,7 @@ const { clamp, ease, UI, polysOf, pathPolys, labelPoint, hashStr, off } = H;
 const D2R = Math.PI / 180;
 const seg = (t, a, b) => clamp((t - a) / Math.max(1e-6, b - a), 0, 1);
 const rgbOf = (c) => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ''); if (!m) return [200, 20, 30]; const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
-const SND = [['style.sound', 'Sound (from the reference clip)', 'switch'], ['style.soundVol', 'Sound volume', 'range', [0, 2, 0.05], (L) => L.style.sound !== false]];
+const SND = [['style.sound', 'Sound', 'switch'], ['style.soundVol', 'Sound volume', 'range', [0, 2, 0.05], (L) => L.style.sound !== false]];
 
 export const MX_KINDS = {
   dofblur: { name: 'Depth of field', icon: '◎', geom: null, desc: 'A camera focus band across the map — everything above and below goes soft, like a tilted lens; the focus can rack from near to far, labels can blur with it. Pair it with “Make the camera drift” for a continuous pan' },
@@ -25,7 +25,7 @@ export const MX_ANIMS = {
   softlabel: { rise: 'Fade in and drift up', fade: 'Fade in', type: 'Type on', none: 'Shown' },
 };
 export const MX_DEFAULTS = {
-  dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient' },
+  dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient-2' },
   inkreveal: { color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
   flickerzones: { from: 'countries', layerId: '', countries: 'France, Germany, Italy, Spain, Poland, Belgium, Netherlands, Switzerland, Austria, Czechia', data: '', sample: '', color: '#ffffff', fill: 0.18, stroke: '#ffffff', strokeWidth: 1.2, rate: 12, flickerFor: 2.2, maxA: 0.9, sound: true, soundVol: 1 },
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
@@ -41,7 +41,6 @@ export const MX_FORMS = {
     ['style.band', 'Sharp band height', 'range', [0, 0.8, 0.01]], ['style.feather', 'Soft transition', 'range', [0.02, 0.8, 0.01]],
     ['style.blur', 'Blur strength (px)', 'range', [0, 40, 0.5]], ['style.angle', 'Band angle (°)', 'range', [-60, 60, 1]],
     ['style.labels', 'Blur labels and markers too (put this layer on top)', 'switch'], ['style.vignette', 'Vignette', 'range', [0, 1, 0.01]],
-    ['style.clip', 'Ambience', 'select', { 'dof-ambient': 'Map drift ambience', 'dof-ambient-2': 'Map drift ambience 2' }, (L) => L.style.sound !== false],
     ...SND,
   ],
   inkreveal: [['style.color', 'Ink colour', 'color'], ['style.opacity', 'Opacity', 'range', [0.1, 1, 0.01]], ['style.seedX', 'Starts from ←→ (0…1 across the area)', 'range', [0, 1, 0.01]], ['style.seedY', 'Starts from ↑↓', 'range', [0, 1, 0.01]], ['style.rough', 'Ragged front', 'range', [0, 1, 0.01]], ['style.smoke', 'Smoky edges while spreading', 'range', [0, 1, 0.01]], ['style.texture', 'Ink texture', 'range', [0, 1, 0.01]], ['style.edge', 'Outline at the end', 'switch'], ['style.edgeColor', 'Outline colour', 'color', null, (L) => !!L.style.edge], ...SND],
@@ -215,9 +214,9 @@ export function drawMapFx(ctx, L, tm, o, phase) {
 export function mxSoundEvents(L) {
   const s = L.style || {}; if (s.sound === false) return [];
   const t0 = +L.start || 0, D = Math.max(0.3, +L.duration || 2), v = s.soundVol ?? 1;
-  if (L.kind === 'dofblur') return [{ t: t0, type: 'clip', p: { clip: s.clip || 'dof-ambient', dur: D, vol: v, fadeIn: 0.8, fadeOut: 1.2 } }];
+  if (L.kind === 'dofblur') return [{ t: t0, type: 'clip', p: { clip: 'dof-ambient-2', dur: D, vol: v, fadeIn: 0.8, fadeOut: 1.2 } }];
   if (L.kind === 'inkreveal') return [{ t: t0, type: 'clip', p: { clip: 'ink-spread', dur: Math.min(7.9, Math.max(1.5, D + 1)), vol: v, fadeIn: 0.05, fadeOut: 0.6 } }];
-  if (L.kind === 'flickerzones') return [{ t: t0, type: 'clip', p: { clip: 'flicker', dur: Math.min(3.8, L.anim === 'strobe' ? D : Math.max(0.6, +s.flickerFor + 0.4)), vol: v, fadeIn: 0.02, fadeOut: 0.3 } }];
+  if (L.kind === 'flickerzones') return [{ t: t0, type: 'clipflicker', p: { dur: L.anim === 'strobe' ? D : Math.max(0.6, +s.flickerFor + 0.3), rate: +s.rate || 12, vol: v } }];
   if (L.kind === 'softlabel') return [{ t: t0, type: 'swoosh', p: { vol: v * 0.5 } }];
   return [];
 }
