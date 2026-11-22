@@ -346,7 +346,7 @@ Object.assign(SYN, {
   /** digital interface text ticks (recorded) — one per letter; p.hits or n over dur */
   digital(ctx, out, w, p) {
     const v = p.vol ?? 1;
-    const hits = p.hits ? p.hits.filter((h) => h[1] !== 'r').map((h) => h[0]) : Array.from({ length: Math.max(1, Math.min(150, Math.round(p.n || 12))) }, (_, i, a) => (i / a.length) * (p.dur || a.length / 20));
+    const hits = p.hits ? p.hits.filter((h) => h[1] !== 'r').map((h) => h[0]) : (() => { const n = Math.max(1, Math.min(150, Math.round(p.n || 12))); return Array.from({ length: n }, (_, i) => (i / n) * (p.dur || n / 20)); })();
     if (samplesReady()) { hits.forEach((dt, i) => playSample(ctx, out, 'digital', 'keys', w + dt, { vol: 1.1 * v, rate: 0.97 + ((i * 37) % 7) / 100, n: i })); return; }
     hits.forEach((dt) => SYN.beep(ctx, out, w + dt, { freq: 2400, vol: 0.25 * v }));
   },
@@ -558,10 +558,10 @@ export const SOUND_LIBRARY = {
   'Recorded clips': { clipdof: 'Map drift ambience (depth of field)', clipdof2: 'Map drift ambience 2', clipink: 'Ink spreading', clipflicker: 'Flicker' },
   'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
   'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
-  'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', rocket: 'Rocket launch' },
+  'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', horn: 'Train / ship horn', rocket: 'Rocket launch' },
   'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
   'Military & radar': { radar: 'Radar sweep', acquire: 'Missile seeker growl', lockon: 'Lock-on tone', missilewarn: 'Missile warning', morse: 'Morse code (SOS)', comms: 'Radio chatter', teletype: 'Teletype', datalink: 'Data link', servo: 'Camera gimbal', klaxon: 'Klaxon', siren: 'Air-raid siren', countdown: 'Countdown beeps' },
-  'Text & titles': { typewriter: 'Typewriter (keys, bell, carriage return)', ticks: 'Typing ticks (location slate)', keys: 'Keyboard typing', boom: 'Trailer boom (title card)', decode: 'Data decode (glitch type-on)', granted: 'Access granted' },
+  'Text & titles': { typewriter: 'Typewriter (keys, bell, carriage return)', ticks: 'Typing ticks (location slate)', keys: 'Keyboard typing', boom: 'Trailer boom (title card)', decode: 'Data decode (glitch type-on)', digital: 'Digital interface typing', granted: 'Access granted' },
   'Ambience': { wind: 'Wind', rain: 'Rain', storm: 'Storm (wind, rain, thunder)', crowd: 'Crowd murmur' },
 };
 export const SOUND_NAMES = Object.assign({}, ...Object.values(SOUND_LIBRARY));
