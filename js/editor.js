@@ -4277,6 +4277,7 @@ export function createEditor() {
     $('#show-credits').checked = !!project.credits;
     $('#resolution').value = String(project.resolution);
     $('#fps').value = String(project.fps);
+    { const ea = { sfx: true, music: true, tracks: true, ...(project.exportAudio || {}) }; for (const k of ['sfx', 'music', 'tracks']) { const el = $(`#exp-${k}`); if (el) el.checked = ea[k] !== false; } }
     $('#join').innerHTML = Object.entries(TRANSITIONS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
     $('#join').value = sc.transition || 'cut';
     $('#join-secs').value = String(sc.transitionSeconds || 0.8);
@@ -4571,6 +4572,7 @@ export function createEditor() {
   $('#resolution').addEventListener('change', (e) => setResolution(e.target.value));
   $('#resolution-top').addEventListener('change', (e) => setResolution(e.target.value));
   $('#fps').addEventListener('change', (e) => { project.fps = +e.target.value; updateEstimate(); save(); });
+  for (const k of ['sfx', 'music', 'tracks']) $(`#exp-${k}`)?.addEventListener('change', (e) => { project.exportAudio = { sfx: true, music: true, tracks: true, ...(project.exportAudio || {}), [k]: e.target.checked }; save(); });
   $('#join').addEventListener('change', (e) => { scene().transition = e.target.value; renderExportSettings(); save(); });
   $('#play-preview').onclick = () => { time = 0; setViewMode('play'); setPlaying(true); };
 
@@ -5250,7 +5252,13 @@ export function createEditor() {
         durationOf: (sc) => buildScene(sc, frame.w, frame.h).duration,
         mapFilter: (sc, tt) => mapFilterAt(sc, tt),
         background: spaceBg,
-        mixAudio: (project.audio || []).some((t) => !t.muted) || hasSound(project) ? (d) => mixProject(project, d, soundEvents()) : null,
+        mixAudio: (() => {
+          const ea = { sfx: true, music: true, tracks: true, ...(project.exportAudio || {}) };
+          const P = { ...project, audio: ea.tracks ? project.audio : [], sound: { ...(project.sound || {}), ...(ea.music ? {} : { music: 'none' }) } };
+          const hasT = (P.audio || []).some((t) => !t.muted), hasM = ea.music && hasSound(P) && project.sound?.music && project.sound.music !== 'none';
+          if (!hasT && !hasM && !(ea.sfx && hasSound(P))) return null;
+          return (d) => mixProject(P, d, ea.sfx ? soundEvents() : []);
+        })(),
         beforeFrame: async (sc, m, t) => { await seekScene(sc, t, layerTiming); await cartoReady(); },
         prepareScene: async (sc) => {
           await applyLook(sc);
