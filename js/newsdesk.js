@@ -167,7 +167,7 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
     const D = 9;
     const z = Math.max(zClose, res?.frames?.[0]?.minzoom || 0);
     sc.camera.mode = 'keyframes';
-    sc.camera.keys = [K(0, V(focus, z - 0.3), 'linear'), K(D, V(focus, z + 0.15), 'linear')];
+    sc.camera.keys = [K(0, V(focus, z), 'linear'), K(D, V(focus, z), 'linear')];
     sc.stillStart = 0; sc.stillEnd = 0.3;
     sc.layers.push(L('ttitle', null, 0.2, { duration: 1, name: 'Satellite title', style: { look: 'split', kicker: 'Satellite view', text: res?.frames?.length > 1 ? 'Before and after' : 'From space', sub: text.place || '', position: 'custom', pos: { x: 0.22, y: 0.24 }, size: 0.55, color: '#ffffff', accent: '#7fb6ff', font: 'sans' } }));
     if (res?.frames?.length) {
@@ -342,7 +342,7 @@ export async function buildDisasterBrief(inc, text, media = [], opts = {}, onSta
   // 3 · Pre & post satellite
   {
     const D = 9, z = Math.max(zClose, fr[0]?.minzoom || 0);
-    const sc = scene('Pre & post satellite', sat0, [K(0, V(focus, z - 0.3), 'linear'), K(D, V(focus, z + 0.15), 'linear')], 0.3);
+    const sc = scene('Pre & post satellite', sat0, [K(0, V(focus, z), 'linear'), K(D, V(focus, z), 'linear')], 0.3);
     inWindow(sc, 'A');
     if (fr.length) {
       const per = fr.length > 1 ? 3.6 : 7;

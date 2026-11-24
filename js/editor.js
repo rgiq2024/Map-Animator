@@ -3341,7 +3341,7 @@ export function createEditor() {
     if (a === 'sarFit') fitSar(L);
     if (a === 'gvAction') {
       btn.disabled = true;
-      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const { MX_ACTIONS } = await import('./mapfx.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn] || MX_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (btn.dataset.fn === 'dofDrift') { save?.(); rebuild?.(); renderScenes?.(); repaint(); } if (msg) toast(msg, 4200); } }
+      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const { MX_ACTIONS } = await import('./mapfx.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn] || MX_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (['dofDrift', 'mapStill', 'mapMove'].includes(btn.dataset.fn)) { save?.(); rebuild?.(); renderScenes?.(); repaint(); } if (msg) toast(msg, 4200); } }
       catch (err) { toast(err.message || 'Request failed', 5000); }
       btn.disabled = false;
     }

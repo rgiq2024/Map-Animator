@@ -234,5 +234,23 @@ export const MX_ACTIONS = {
     L.start = 0; L.duration = len;
     return `Camera drifts ${km} km over ${len.toFixed(1)} s, tilted ${pitch}° — play to see it; change distance, direction or tilt and press the button again`;
   },
+  /** hold the map still for the whole scene (no zoom / pan / shake); the old moves are kept so they can be put back */
+  async mapStill(L, { scene }) {
+    const sc = scene; if (!sc?.camera) return '';
+    const keys = sc.camera.keys || [];
+    if (sc.camera.mode !== 'keyframes' || keys.length < 2) return 'The map is already still in this scene';
+    const moving = keys.some((k) => JSON.stringify(k.view) !== JSON.stringify(keys[0].view));
+    if (!moving) return 'The map is already still in this scene';
+    sc.camera.movingKeys = JSON.parse(JSON.stringify(keys));
+    const pick = L.style?.stillAt === 'start' ? keys[0] : L.style?.stillAt === 'middle' ? keys[Math.floor(keys.length / 2)] : keys.at(-1);
+    const view = JSON.parse(JSON.stringify(pick.view));
+    sc.camera.keys = [{ t: 0, ease: 'linear', view }, { t: keys.at(-1).t || 5, ease: 'linear', view: JSON.parse(JSON.stringify(view)) }];
+    return 'Map is now still for this scene — press “Bring back the map movement” to undo';
+  },
+  async mapMove(L, { scene }) {
+    const sc = scene; if (!sc?.camera?.movingKeys) return 'No earlier map movement saved for this scene';
+    sc.camera.keys = sc.camera.movingKeys; delete sc.camera.movingKeys; sc.camera.mode = 'keyframes';
+    return 'Map movement is back';
+  },
 };
 void SAMPLE_NAMES;
