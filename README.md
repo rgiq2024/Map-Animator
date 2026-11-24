@@ -408,3 +408,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Realistic fire & smoke element (intensity, spread, wind, smoke colour/amount, embers, glow, build-up/die-down, fire sound) with 7 presets; GEO·BRIEF mini-globe country label alignment fix + position/size/nudge settings.
 - GEO·BRIEF: 'Make the map still' / 'Bring back the map movement' buttons (hold at start/middle/end view); auto news before/after scenes now use a still map.
 - Export: switches to mute effect sounds, music, and uploaded audio/voiceover in the exported video only.
+- Export sound switches now default to off (silent video unless switched on).
