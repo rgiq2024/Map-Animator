@@ -75,7 +75,7 @@ export const BR_FORMS = {
     ['style.event', 'Event', 'text'], ['style.eventIcon', 'Event icon', 'select', ICONS], ['style.assessment', 'Assessment', 'text'],
     ['style.coords', 'Coordinates text', 'text'], ['style.sources', 'Sources (closing card)', 'text', null, (L) => L.style.layout === 'end'],
     ['style.accent', 'Accent colour', 'color'], ['style.bg', 'Background', 'color'],
-    ['style.globe', 'Globe', 'switch', null, (L) => L.style.layout === 'A'], ['style.windowTag', 'Place tag in the map window', 'switch'], ['style.scale', 'Scale bar', 'switch', null, (L) => L.style.layout === 'B'],
+    ['style.globe', 'Globe', 'switch', null, (L) => /^(A|zoom|full)$/.test(L.style.layout)], ['style.globeLabel', 'Globe country label', 'select', { below: 'Below the globe (centred)', above: 'Above the globe', left: 'Left of the globe', right: 'Right of the globe', inside: 'Inside the globe', pin: 'Next to the pin (with leader)', none: 'Hidden' }, (L) => /^(zoom|full)$/.test(L.style.layout) && L.style.globe !== false], ['style.globeLabelSize', 'Label size', 'range', [0.5, 2.5, 0.05], (L) => /^(zoom|full)$/.test(L.style.layout) && L.style.globe !== false && L.style.globeLabel !== 'none'], ['style.globeLabelDx', 'Label nudge ← →', 'range', [-200, 200, 1], (L) => /^(zoom|full)$/.test(L.style.layout) && L.style.globe !== false && L.style.globeLabel !== 'none'], ['style.globeLabelDy', 'Label nudge ↑ ↓', 'range', [-200, 200, 1], (L) => /^(zoom|full)$/.test(L.style.layout) && L.style.globe !== false && L.style.globeLabel !== 'none'], ['style.globeLabelColor', 'Label border colour', 'color', null, (L) => /^(zoom|full)$/.test(L.style.layout) && L.style.globe !== false && L.style.globeLabel !== 'none'], ['style.windowTag', 'Place tag in the map window', 'switch'], ['style.scale', 'Scale bar', 'switch', null, (L) => L.style.layout === 'B'],
     ['style.beforeMedia', 'Before image (your picture)', 'image', null, (L) => L.style.layout !== 'end'],
     ['style.beforeLabel', 'Before — label', 'text', null, (L) => L.style.layout !== 'end'], ['style.beforeDate', 'Before — date', 'text', null, (L) => L.style.layout !== 'end'],
     ['style.beforeZoom', 'Before — zoom', 'range', [1, 6, 0.05], (L) => L.style.layout !== 'end'], ['style.beforeX', 'Before — move ←→', 'range', [-1, 1, 0.01], (L) => L.style.layout !== 'end'], ['style.beforeY', 'Before — move ↑↓', 'range', [-1, 1, 0.01], (L) => L.style.layout !== 'end'],
@@ -153,11 +153,16 @@ function brackets(ctx, x, y, w, h, u, acc, len = 14) {
   ctx.moveTo(x + l, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + h - l);
   ctx.stroke();
 }
-function caps(ctx, text, x, y, size, color, weight = 700, spacing = 0.12, align = 'left') {
-  ctx.font = `${weight} ${size}px ${SANS}`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+function caps(ctx, text, x, y, size, color, weight = 700, spacing = 0.12, align = 'left', base = 'alphabetic') {
+  ctx.font = `${weight} ${size}px ${SANS}`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base;
   try { ctx.letterSpacing = `${size * spacing}px`; } catch { /* old browsers */ }
   ctx.fillText(String(text || '').toUpperCase(), x, y);
   try { ctx.letterSpacing = '0px'; } catch { /* */ }
+}
+/** width of caps() text including its letter spacing */
+function capsW(ctx, text, size, weight = 700, spacing = 0.12) {
+  ctx.font = `${weight} ${size}px ${SANS}`; const t = String(text || '').toUpperCase();
+  return ctx.measureText(t).width + Math.max(0, t.length - 1) * size * spacing;
 }
 /** simple line icons, centred on (x, y), size s */
 function icon(ctx, name, x, y, s, col) {
@@ -873,7 +878,25 @@ function drawFrameBody(ctx, L, tm, o) {
       ctx.strokeStyle = hexA(acc, 0.8); ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(gx, gy, R, 0, Math.PI * 2); ctx.stroke();
       ctx.strokeStyle = hexA(acc, 0.35); ctx.beginPath(); ctx.arc(gx, gy, R * 1.12, 0, Math.PI * 2); ctx.stroke();
       const name = String(s.country || c?.name || '').toUpperCase();
-      if (name) { ctx.font = `800 ${10.5 * u}px ${SANS}`; const tw = ctx.measureText(name).width + 18 * u; const lx = gx + R * 0.6 - tw / 2, ly = gy + R * 1.12 + 6 * u; ctx.fillStyle = 'rgba(4,10,18,0.9)'; rr(ctx, lx, ly, tw, 19 * u, 3 * u); ctx.fill(); ctx.strokeStyle = acc; ctx.lineWidth = 1 * u; ctx.stroke(); caps(ctx, name, lx + 9 * u, ly + 13.5 * u, 10.5 * u, '#fff', 800, 0.1); }
+      const gl = s.globeLabel || 'below';
+      if (name && gl !== 'none') {
+        const fs = 10.5 * u * clamp(+s.globeLabelSize || 1, 0.5, 2.5), sp = 0.1, pad = fs * 0.85, bh = fs * 1.8;
+        const tw = capsW(ctx, name, fs, 800, sp) + 2 * pad;
+        let pin = null; if (G) { const q = G.proj(ll); if (q[2]) pin = [gx - G.S / 2 + q[0], gy - G.S / 2 + q[1]]; }
+        let lx, ly;
+        if (gl === 'above') { lx = gx - tw / 2; ly = gy - R * 1.12 - 6 * u - bh; }
+        else if (gl === 'left') { lx = gx - R * 1.12 - 8 * u - tw; ly = gy - bh / 2; }
+        else if (gl === 'right') { lx = gx + R * 1.12 + 8 * u; ly = gy - bh / 2; }
+        else if (gl === 'inside') { lx = gx - tw / 2; ly = gy + R * 0.55 - bh / 2; }
+        else if (gl === 'pin' && pin) { lx = pin[0] + 14 * u; ly = pin[1] - bh - 10 * u; }
+        else { lx = gx - tw / 2; ly = gy + R * 1.12 + 6 * u; }
+        lx += (+s.globeLabelDx || 0) * u; ly += (+s.globeLabelDy || 0) * u;
+        lx = clamp(lx, fr.x + 4 * u, fr.x + fr.w - tw - 4 * u); ly = clamp(ly, fr.y + 4 * u, fr.y + fr.h - bh - 4 * u);
+        const lc = s.globeLabelColor || acc;
+        if (gl === 'pin' && pin) { ctx.strokeStyle = lc; ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(pin[0], pin[1]); ctx.lineTo(lx, ly + bh); ctx.stroke(); }
+        ctx.fillStyle = 'rgba(4,10,18,0.9)'; rr(ctx, lx, ly, tw, bh, 3 * u); ctx.fill(); ctx.strokeStyle = lc; ctx.lineWidth = 1 * u; ctx.stroke();
+        ctx.textBaseline = 'middle'; caps(ctx, name, lx + tw / 2 + fs * sp / 2, ly + bh / 2 + fs * 0.04, fs, '#fff', 800, sp, 'center', 'middle');
+      }
       ctx.restore();
     }
     // before / after (compact)
@@ -1009,8 +1032,7 @@ function drawFrameBody(ctx, L, tm, o) {
         ctx.fillStyle = '#ff3b30'; ctx.beginPath(); ctx.arc(px, py, 3.5 * u, 0, Math.PI * 2); ctx.fill();
         const name = String(s.country || c?.name || '').toUpperCase();
         if (name) {
-          ctx.font = `800 ${11 * u}px ${SANS}`;
-          const tw = ctx.measureText(name).width + 16 * u;
+          const tw = capsW(ctx, name, 11 * u, 800, 0.06) + 16 * u;
           const lx = gx - R - 6 * u, ly = py - 9 * u;
           ctx.strokeStyle = acc; ctx.lineWidth = 1 * u; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(lx + tw, ly + 9 * u); ctx.stroke();
           ctx.fillStyle = 'rgba(4,10,18,0.88)'; rr(ctx, lx, ly, tw, 18 * u, 3 * u); ctx.fill(); ctx.strokeStyle = acc; ctx.stroke();

@@ -405,3 +405,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Voices removed: the two clip recordings that were only a man talking (DOF1, FLK) are gone; depth of field now uses the voice-free drift ambience, flickering districts use a new electrical-flicker sound made in the app. The remaining clips (drift ambience, ink spreading) have the voice taken out.
 - Ink-spread reveal: sound is now only the 2-second spreading effect (no background music).
 - New sound group **Ink & liquid reveals** (made in the app, shaped like the ink-spread recording — hush, swell, crackling burst): Ink bleed, Ink sizzle, Liquid spread, plus the 2 s recording. The Ink-spread reveal has a Sound choice and a sound length; Ink bleed is the default.
+- Realistic fire & smoke element (intensity, spread, wind, smoke colour/amount, embers, glow, build-up/die-down, fire sound) with 7 presets; GEO·BRIEF mini-globe country label alignment fix + position/size/nudge settings.

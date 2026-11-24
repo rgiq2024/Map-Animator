@@ -591,11 +591,28 @@ SYN.clipflicker = (ctx, out, w, p) => {
   const n = src(ctx, 'white', w, d), nf = filt(ctx, 'highpass', 3000), ng = env(ctx, w, [[0.02, 0.05 * v], [d - 0.2, 0.03 * v], [d, 0.001, 1]]); n.connect(nf).connect(ng).connect(out);
 };
 for (const [k, c] of Object.entries({ clipdof: 'dof-ambient-2', clipdof2: 'dof-ambient-2', clipink: 'ink-spread' })) SYN[k] = (ctx, out, w, p) => { const b = clipBuffer(c); if (b) SYN.clip(ctx, out, w, { ...p, clip: c, dur: p.whole === false ? p.dur : b.duration, fadeOut: 0.3 }); };
+// fire (made here): low roar that breathes, plus random wood crackles and pops
+SYN.fire = (ctx, out, w, p) => {
+  const d = clamp(p.dur || 6, 0.5, 60), v = p.vol ?? 1;
+  const ramp = p.anim === 'build' ? Math.min(d * 0.6, 4) : 0.6, tail = p.anim === 'dieout' ? d * 0.6 : 1.2;
+  const roar = src(ctx, 'brown', w, d), rf = filt(ctx, 'lowpass', 420), rg = env(ctx, w, [[ramp, 0.55 * v], [Math.max(ramp + 0.01, d - tail), 0.5 * v], [d, 0.0001, 1]]);
+  const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.7; lg.gain.value = 0.18 * v; lfo.connect(lg).connect(rg.gain); lfo.start(w); lfo.stop(w + d);
+  roar.connect(rf).connect(rg).connect(out);
+  const hiss = src(ctx, 'pink', w, d), hf = filt(ctx, 'bandpass', 2400, 0.6), hg = env(ctx, w, [[ramp, 0.06 * v], [Math.max(ramp + 0.01, d - tail), 0.05 * v], [d, 0.0001, 1]]); hiss.connect(hf).connect(hg).connect(out);
+  let t = 0.05, i = 0;
+  while (t < d - 0.05) {
+    const r1 = ((i * 2654435761) >>> 0) % 1000 / 1000, r2 = ((i * 40503 + 11) >>> 0) % 1000 / 1000;
+    const lvl = t < ramp ? t / ramp : t > d - tail ? Math.max(0, (d - t) / tail) : 1;
+    const pop = src(ctx, 'white', w + t, 0.05 + r2 * 0.05, false), pf = filt(ctx, 'bandpass', 900 + r1 * 4200, 1.4), pg = env(ctx, w + t, [[0.002, (0.12 + r1 * 0.35) * v * lvl], [0.03 + r2 * 0.05, 0.0001, 1]]);
+    pop.connect(pf).connect(pg).connect(out);
+    t += 0.03 + r2 * r2 * 0.32; i++;
+  }
+};
 export const SOUND_LIBRARY = {
   'Ink & liquid reveals': { inkbleed: 'Ink bleed (swell + crackle)', inksizzle: 'Ink sizzle (bright crackle)', inkliquid: 'Liquid spread (bubbly)', clipink: 'Ink spreading (recorded, 2 s)' },
   'Recorded clips': { clipdof2: 'Map drift ambience (depth of field)', clipink: 'Ink spreading', clipflicker: 'Electrical flicker' },
   'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
-  'Action': { explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
+  'Action': { fire: 'Fire (roar + crackle)', explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', horn: 'Train / ship horn', rocket: 'Rocket launch' },
   'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
   'Military & radar': { radar: 'Radar sweep', acquire: 'Missile seeker growl', lockon: 'Lock-on tone', missilewarn: 'Missile warning', morse: 'Morse code (SOS)', comms: 'Radio chatter', teletype: 'Teletype', datalink: 'Data link', servo: 'Camera gimbal', klaxon: 'Klaxon', siren: 'Air-raid siren', countdown: 'Countdown beeps' },
@@ -739,6 +756,7 @@ export function buildEvents(project, models) {
       if (L.hidden || L.style?.sound === false) continue;
       if (MG_SET.has(L.kind)) { for (const e of mgSoundEvents(L)) push(e.t, e.type, e.p); continue; }
       if (MX_SET.has(L.kind)) { for (const e of mxSoundEvents(L)) push(e.t, e.type, e.p); continue; }
+      if (L.kind === 'fireplume') { if (L.style?.sound === true && L.anim !== 'none') { const D = Math.max(0.5, +L.duration || 6) + (+L.hold || 0); push(+L.start || 0, 'fire', { dur: +L.style.sndDur || D, vol: (L.style.soundVol ?? 0.8) * clamp(0.5 + 0.5 * (+(L.style.intensity ?? 1)), 0.3, 2), anim: L.anim }); } continue; }
       if (textOnly && !TEXT_SFX.has(L.kind) && !(L.kind === 'ttitle' && (L.style?.look === 'typewriter' || (L.style?.textSound && L.style.textSound !== 'auto')))) continue;
       const s = L.style || {};
       if (TEXT_SFX.has(L.kind)) { for (const e of trailerSoundEvents(L)) push(e.t, e.type, e.p); continue; }
@@ -1024,4 +1042,4 @@ export function scheduleAll(ctx, out, project, events, from, to, when) {
   }
   return { sfx, mus, nodes };
 }
-export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || MG_SET.has(L.kind) || MX_SET.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };
+export const hasSound = (project) => { const s = { ...defaultSound(), ...(project.sound || {}) }; return s.auto || (s.music && s.music !== 'none') || (project.sfx || []).some((c) => !c.muted) || project.scenes?.some((sc) => (sc.layers || []).some((L) => (TEXT_SFX.has(L.kind) || (L.kind === 'fireplume' && L.style?.sound === true) || MG_SET.has(L.kind) || MX_SET.has(L.kind) || (L.kind === 'ttitle' && L.style?.look === 'typewriter')) && !L.hidden && L.style?.sound !== false)); };

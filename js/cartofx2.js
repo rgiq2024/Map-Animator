@@ -38,7 +38,7 @@ export const CF2_KINDS = {
   leader: { name: 'Leader-line label', icon: '⌐', geom: 'point', desc: 'A label on a leader line: white box, sci-fi underline with coordinates, big serif title with an elbow line, black tag or pill' },
   spokes: { name: 'Distance spokes', icon: '✳', geom: 'point', desc: 'Coloured lines from a home / base to nearby places, each with an icon card and the distance' },
   lights: { name: 'Runway lights', icon: '∴', geom: 'line', desc: 'Twinkling or chasing lights along a runway, road or border' },
-  fireplume: { name: 'Fire plume', icon: '🔥', geom: 'point', desc: 'Animated flames and smoke rising from a site, on a ringed marker' },
+  fireplume: { name: 'Fire & smoke', icon: '🔥', geom: 'point', desc: 'Realistic animated fire: flames, smoke column, embers and ground glow — with intensity, spread, wind and sound' },
   missiles: { name: 'Missile trails', icon: '☄', geom: 'line', desc: 'Glowing missiles with wavy smoke trails from the launch site to the target, with an explosion on impact' },
   regions: { name: 'Coloured regions / choropleth', icon: '▤', geom: null, desc: 'States, districts or countries each in its own colour with names — or coloured by your values with a legend' },
   quakes: { name: 'Event timeline (earthquakes)', icon: '◉', geom: null, desc: 'Dots sized by magnitude appearing day by day with a timeline — your list or live USGS earthquakes' },
@@ -50,7 +50,7 @@ export const CF2_ANIMS = {
   leader: { draw: 'Line draws, then the text', fade: 'Fade in', none: 'Shown' },
   spokes: { grow: 'Lines grow one by one', fade: 'Fade in', none: 'Shown' },
   lights: { chase: 'Chasing (runway approach)', twinkle: 'Twinkle', on: 'Switch on one by one', none: 'Steady' },
-  fireplume: { burn: 'Burning', none: 'Marker only' },
+  fireplume: { burn: 'Burning (steady)', build: 'Builds up (grows)', flare: 'Flare-up (burst, then steady)', dieout: 'Dies down (smoke stays)', none: 'Marker only' },
   missiles: { fly: 'Fly and explode', none: 'Trails only' },
   regions: { cascade: 'Regions colour in one by one', fade: 'Fade in', none: 'Shown' },
   quakes: { timeline: 'Day by day', none: 'All shown' },
@@ -65,7 +65,7 @@ export const CF2_DEFAULTS = {
     pois: 'Punalau Beach | -156.65, 21.02 | beach | #a8862a\nKasiiso Secondary School | -156.70, 20.98 | school | #1d6fa5\nMaui Urgent Care Center | -156.66, 20.93 | hospital | #3f9b3a\nMaui Police Department | -156.68, 20.89 | police | #c8501e',
   } },
   lights: { anim: 'chase', duration: 3, style: { color: '#fff7d6', spacing: 1, size: 1, rows: 'pairs', width: 22, speed: 1, glow: true } },
-  fireplume: { anim: 'burn', duration: 6, style: { size: 1, ring: true, icon: 'nuclear', ringColor: '#f5a623', smoke: true } },
+  fireplume: { anim: 'burn', duration: 6, style: { look: 'real', size: 1, intensity: 1, spread: 1, height: 1, wind: 0.25, speed: 1, smoke: true, smokeTone: 'dark', smokeAmount: 1, smokeHeight: 1, smokeOpacity: 0.85, embers: true, glow: true, ring: false, icon: 'factory', ringColor: '#f5a623', sound: true, soundVol: 0.8 } },
   missiles: { anim: 'fly', duration: 4, style: { count: 3, color: '#ffd23c', spread: 1, wiggle: 1, size: 1, explode: true, head: '#ffffff' } },
   regions: { anim: 'cascade', duration: 3, style: {
     source: 'osm', area: 'Manipur', level: 5, countries: 'Germany, France, Poland, Italy, Spain', mode: 'categorical', palette: 'vivid',
@@ -102,7 +102,15 @@ export const CF2_FORMS = {
     ['style.rows', 'Lights', 'select', { single: 'One row', pairs: 'Two rows (runway edges)', center: 'Two rows + centre line' }], ['style.width', 'Runway width (px)', 'range', [4, 80, 1], (L) => L.style.rows !== 'single'],
     ['style.spacing', 'Spacing', 'range', [0.3, 4, 0.05]], ['style.size', 'Light size', 'range', [0.3, 3, 0.05]], ['style.color', 'Colour', 'color'], ['style.speed', 'Speed', 'range', [0.1, 4, 0.05]], ['style.glow', 'Glow', 'switch'],
   ],
-  fireplume: [['style.size', 'Size', 'range', [0.3, 4, 0.05]], ['style.ring', 'Ringed marker', 'switch'], ['style.icon', 'Marker icon', 'select', { nuclear: 'Nuclear', factory: 'Factory', none: 'None' }, (L) => L.style.ring !== false], ['style.ringColor', 'Ring colour', 'color', null, (L) => L.style.ring !== false], ['style.smoke', 'Smoke', 'switch']],
+  fireplume: [['style.look', 'Look', 'select', { real: 'Realistic (flames, smoke, embers, glow)', classic: 'Simple (classic)' }], ['style.size', 'Size', 'range', [0.3, 6, 0.05]],
+    ['style.intensity', 'Fire intensity', 'range', [0, 3, 0.05], (L) => L.style.look !== 'classic'], ['style.spread', 'Fire spread (width)', 'range', [0.2, 6, 0.05], (L) => L.style.look !== 'classic'], ['style.height', 'Flame height', 'range', [0.2, 4, 0.05], (L) => L.style.look !== 'classic'],
+    ['style.wind', 'Wind (lean ← −  /  + →)', 'range', [-1, 1, 0.05], (L) => L.style.look !== 'classic'], ['style.speed', 'Flicker speed', 'range', [0.2, 3, 0.05], (L) => L.style.look !== 'classic'], ['style.softness', 'Flame softness (blur)', 'range', [0, 3, 0.05], (L) => L.style.look !== 'classic'], ['style.flames', 'Flames', 'switch', null, (L) => L.style.look !== 'classic'],
+    ['style.smoke', 'Smoke', 'switch'], ['style.smokeTone', 'Smoke colour', 'select', { black: 'Black (oil / plastic)', dark: 'Dark grey', brown: 'Brown', grey: 'Grey', white: 'White (steam)' }, (L) => L.style.look !== 'classic' && L.style.smoke !== false],
+    ['style.smokeAmount', 'Smoke amount', 'range', [0, 3, 0.05], (L) => L.style.look !== 'classic' && L.style.smoke !== false], ['style.smokeHeight', 'Smoke column height', 'range', [0.2, 4, 0.05], (L) => L.style.look !== 'classic' && L.style.smoke !== false], ['style.smokeOpacity', 'Smoke opacity', 'range', [0, 1, 0.01], (L) => L.style.look !== 'classic' && L.style.smoke !== false],
+    ['style.embers', 'Embers / sparks', 'switch', null, (L) => L.style.look !== 'classic'], ['style.emberAmount', 'Ember amount', 'range', [0.2, 4, 0.05], (L) => L.style.look !== 'classic' && L.style.embers !== false],
+    ['style.glow', 'Ground glow', 'switch', null, (L) => L.style.look !== 'classic'], ['style.glowStrength', 'Glow strength', 'range', [0, 2, 0.05], (L) => L.style.look !== 'classic' && L.style.glow !== false], ['style.glowSize', 'Glow size', 'range', [0.3, 3, 0.05], (L) => L.style.look !== 'classic' && L.style.glow !== false],
+    ['style.ring', 'Ringed marker', 'switch'], ['style.icon', 'Marker icon', 'select', { nuclear: 'Nuclear', factory: 'Factory', none: 'None' }, (L) => !!L.style.ring], ['style.ringColor', 'Ring colour', 'color', null, (L) => !!L.style.ring],
+    ['style.sound', 'Fire sound (roar + crackle)', 'switch'], ['style.soundVol', 'Sound volume', 'range', [0, 2, 0.05], (L) => L.style.sound !== false]],
   missiles: [['style.count', 'Missiles', 'range', [1, 12, 1]], ['style.spread', 'Spread', 'range', [0, 4, 0.05]], ['style.wiggle', 'Wavy trail', 'range', [0, 3, 0.05]], ['style.color', 'Trail colour', 'color'], ['style.size', 'Size', 'range', [0.3, 3, 0.05]], ['style.explode', 'Explosion on impact', 'switch']],
   regions: [
     ['style.source', 'Regions', 'select', { osm: 'States / districts of a place (OpenStreetMap)', countries: 'Countries' }],
@@ -329,6 +337,53 @@ function drawLights(ctx, L, tm, o) {
 }
 
 // ================================================================= fire plume
+// ---- realistic fire: cached sprites (flame tongues, lumpy smoke puffs) drawn as particles
+const FIRE_SPR = { smoke: new Map() };
+function sprCanvas(w, h) {
+  if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
+  return Object.assign(document.createElement('canvas'), { width: w, height: h });
+}
+function flameSprites() {
+  if (FIRE_SPR.flame) return FIRE_SPR.flame;
+  const mk = (stops) => {
+    const c = sprCanvas(64, 128), g = c.getContext('2d');
+    g.translate(32, 80); g.scale(1, 2.1);
+    const gr = g.createRadialGradient(0, 4, 0, 0, 0, 30);
+    stops.forEach(([o, col]) => gr.addColorStop(o, col));
+    g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 30, 0, 7); g.fill();
+    return c;
+  };
+  FIRE_SPR.flame = [
+    mk([[0, 'rgba(255,255,235,0.95)'], [0.35, 'rgba(255,230,140,0.75)'], [0.7, 'rgba(255,150,40,0.3)'], [1, 'rgba(255,90,20,0)']]), // core
+    mk([[0, 'rgba(255,215,110,0.85)'], [0.45, 'rgba(255,135,30,0.55)'], [0.8, 'rgba(220,60,10,0.18)'], [1, 'rgba(180,30,5,0)']]), // body
+    mk([[0, 'rgba(255,120,30,0.6)'], [0.5, 'rgba(200,50,10,0.3)'], [1, 'rgba(120,20,5,0)']]), // tips
+  ];
+  return FIRE_SPR.flame;
+}
+function smokeSprite(rgb, seed) {
+  const key = rgb.join(',') + ':' + seed;
+  let c = FIRE_SPR.smoke.get(key); if (c) return c;
+  c = sprCanvas(128, 128); const g = c.getContext('2d'), r = rng(1000 + seed);
+  for (let i = 0; i < 26; i++) {
+    const a = r() * Math.PI * 2, d = r() * 30, x = 64 + Math.cos(a) * d, y = 64 + Math.sin(a) * d * 0.85, rad = 16 + r() * 22;
+    const lit = 0.75 + r() * 0.5 - (y - 64) / 160; // top a bit lighter, underside darker
+    const col = rgb.map((v) => Math.round(clamp(v * lit, 0, 255)));
+    const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+    gr.addColorStop(0, `rgba(${col},0.5)`); gr.addColorStop(0.6, `rgba(${col},0.28)`); gr.addColorStop(1, `rgba(${col},0)`);
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+  }
+  FIRE_SPR.smoke.set(key, c); return c;
+}
+const SMOKE_TONES = { black: [28, 25, 24], dark: [58, 54, 52], grey: [118, 116, 114], white: [222, 222, 218], brown: [92, 72, 52] };
+/** fire strength 0..1+ over the layer's life, by animation */
+function fireLevel(L, tm) {
+  const D = Math.max(0.5, +L.duration || 6), tau = tm.edit ? D * 0.5 : (tm.tau ?? D);
+  const a = L.anim;
+  if (a === 'build') return 0.12 + 0.88 * ease(clamp(tau / (D * 0.6), 0, 1));
+  if (a === 'dieout') return 1 - 0.9 * ease(clamp((tau - D * 0.35) / (D * 0.65), 0, 1));
+  if (a === 'flare') return 1 + 0.6 * Math.exp(-((tau - D * 0.3) ** 2) / 0.35);
+  return 1;
+}
 function drawFirePlume(ctx, L, tm, o) {
   const s = L.style, unit = o.unit;
   if (L.geom?.type !== 'Point') return;
@@ -336,7 +391,7 @@ function drawFirePlume(ctx, L, tm, o) {
   const S = 1 * unit * (+s.size || 1);
   const t = o.time || 0;
   ctx.save(); ctx.globalAlpha *= tm.alpha;
-  if (s.ring !== false) {
+  if (s.ring === true || (s.ring !== false && s.look === 'classic')) {
     ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.55);
     ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8 * S;
     ctx.strokeStyle = s.ringColor || '#f5a623'; ctx.lineWidth = 6 * S; ctx.beginPath(); ctx.arc(0, 0, 24 * S, 0, 7); ctx.stroke();
@@ -345,31 +400,165 @@ function drawFirePlume(ctx, L, tm, o) {
     if (s.icon !== 'none') { ctx.scale(1, 1 / 0.55); glyph(ctx, s.icon || 'nuclear', -14 * S, -14 * S * 0.55, 28 * S, '#f5c518'); }
     ctx.restore();
   }
-  if (L.anim !== 'none' || tm.edit) {
-    const r = rng(hashStr(L.id));
-    const ph0 = r() * 10;
-    // smoke
-    if (s.smoke !== false) for (let i = 0; i < 10; i++) {
-      const life = 2.6, ph = ((t + ph0 + i * (life / 10)) % life) / life;
-      const px = x + Math.sin(i * 3.1 + t * 0.7) * 6 * S + ph * 18 * S, py = y - 40 * S - ph * 110 * S;
-      const rad = (10 + ph * 26) * S;
-      const g = ctx.createRadialGradient(px, py, 0, px, py, rad); g.addColorStop(0, `rgba(70,64,60,${0.45 * (1 - ph)})`); g.addColorStop(1, 'rgba(70,64,60,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, rad, 0, 7); ctx.fill();
+  if (L.anim === 'none' && !tm.edit) { ctx.restore(); return; }
+  const r0 = rng(hashStr(L.id || 'fire')), ph0 = r0() * 10;
+  if (s.look === 'classic') { drawFireClassic(ctx, s, x, y, S, t, ph0); ctx.restore(); return; }
+  const lvl = fireLevel(L, tm);
+  const I = clamp(+(s.intensity ?? 1), 0, 3) * lvl;              // flame intensity
+  const spread = clamp(+(s.spread ?? 1), 0.2, 6);                 // width of the burning front
+  const Hm = clamp(+(s.height ?? 1), 0.2, 4);                     // flame height
+  const wind = clamp(+(s.wind ?? 0.25), -1, 1);                   // lean (− left, + right)
+  const speed = clamp(+(s.speed ?? 1), 0.2, 3);
+  const W = 22 * S * spread, Hf = 62 * S * Hm * Math.sqrt(Math.max(0.05, I));
+  const nSrc = Math.max(1, Math.round(1 + spread * 2.5));
+  const srcs = []; { const r = rng(hashStr(L.id || 'f') + 7); for (let i = 0; i < nSrc; i++) srcs.push({ dx: nSrc === 1 ? 0 : (i / (nSrc - 1) - 0.5) * 2 * W * (0.85 + r() * 0.15), dy: (r() - 0.5) * W * 0.25, h: 0.6 + r() * 0.55, f: 0.6 + r() * 1.2, p: r() * 10 }); }
+  const srcH = (sr) => sr.h * (0.78 + 0.22 * Math.sin(t * sr.f * 2.3 * speed + sr.p) + 0.1 * Math.sin(t * 7.1 * speed + sr.p * 3));
+  const flick = 0.85 + 0.1 * Math.sin(t * 13 * speed + ph0) + 0.05 * Math.sin(t * 29 * speed);
+  // 1 · ground glow (light thrown on the map around the fire)
+  if (s.glow !== false && I > 0.02) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const gR = (W + 40 * S) * (0.8 + 0.4 * Math.sqrt(I)) * (+s.glowSize || 1);
+    ctx.translate(x, y); ctx.scale(1, 0.5);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, gR);
+    const ga = clamp(0.38 * Math.min(1.6, I) * flick * (s.glowStrength ?? 1), 0, 1);
+    g.addColorStop(0, `rgba(255,150,50,${ga})`); g.addColorStop(0.45, `rgba(255,90,20,${ga * 0.45})`); g.addColorStop(1, 'rgba(255,60,10,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, gR, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  // 2 · smoke column (behind the flames), oldest puffs first
+  if (s.smoke !== false) {
+    const amt = clamp(+(s.smokeAmount ?? 1), 0, 3) * (L.anim === 'dieout' ? Math.max(0.55, lvl) : Math.max(0.3, Math.min(1.3, lvl)));
+    const tone = SMOKE_TONES[s.smokeTone || 'dark'] || SMOKE_TONES.dark;
+    const rgb = s.smokeColor ? (s.smokeColor.match(/\w\w/g) || []).map((h) => parseInt(h, 16)).slice(0, 3) : tone;
+    const Hs = 230 * S * clamp(+(s.smokeHeight ?? 1), 0.2, 4) * (0.7 + 0.3 * Math.sqrt(Math.max(0.1, I)));
+    const n = Math.round(clamp(40 * amt * (0.6 + spread * 0.4), 0, 180));
+    const life = 6 / speed, opa = clamp(+(s.smokeOpacity ?? 0.85), 0, 1);
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const ph = ((t + ph0 + (i / n) * life) % life) / life;
+      const sr = srcs[i % nSrc];
+      const rise = Math.pow(ph, 0.85);
+      const curl = Math.sin(ph * 6 + i * 1.7 + t * 0.4) * (8 + ph * 26) * S;
+      const px = x + sr.dx * (1 - ph * 0.7) + wind * Math.pow(ph, 1.4) * Hs * 1.3 + curl;
+      const py = y + sr.dy - Hf * 0.55 - rise * Hs;
+      const rad = (16 + ph * 95) * S * (0.7 + spread * 0.18) * (0.8 + 0.4 * ((i * 37) % 10) / 10);
+      const a = opa * Math.min(1, ph / 0.05) * Math.pow(1 - ph, 0.75);
+      pts.push([ph, px, py, rad, a, i]);
     }
-    // flame tongues
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 26; i++) {
-      const life = 0.9 + (i % 5) * 0.12, ph = ((t * 1.3 + ph0 + i * 0.137) % life) / life;
-      const spread = (Math.sin(i * 12.9898) * 0.5) * 22 * S * (1 - ph * 0.6);
-      const px = x + spread + Math.sin(t * 9 + i) * 3 * S, py = y - 6 * S - ph * 70 * S;
-      const rad = (13 - ph * 10) * S * (0.7 + ((i * 7) % 5) / 8);
-      const c = ph < 0.3 ? [255, 245, 190] : ph < 0.6 ? [255, 180, 60] : [235, 80, 30];
-      const g = ctx.createRadialGradient(px, py, 0, px, py, rad); g.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${0.55 * (1 - ph)})`); g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
-      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(px, py, rad * 0.7, rad * 1.3, 0, 0, 7); ctx.fill();
+    pts.sort((a, b) => b[0] - a[0]);
+    for (const [ph, px, py, rad, a, i] of pts) {
+      const spr = smokeSprite(rgb, i % 4);
+      ctx.save(); ctx.globalAlpha *= clamp(a, 0, 1); ctx.translate(px, py); ctx.rotate(i * 0.9 + ph * 1.5);
+      ctx.drawImage(spr, -rad, -rad, rad * 2, rad * 2);
+      // underside lit by the flames
+      if (ph < 0.2 && I > 0.05 && s.flames !== false) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha *= clamp((1 - ph / 0.2) * 0.32 * Math.min(1.4, I), 0, 1); ctx.drawImage(smokeSprite([255, 120, 40], i % 4), -rad, -rad, rad * 2, rad * 2); }
+      ctx.restore();
     }
+  }
+  // 3 · flames: swaying tongues per source (outer red-orange, inner yellow-white core) + detached wisps
+  const outer = ctx;
+  if (I > 0.02 && s.flames !== false) {
+    const sc = Math.max(1, Math.hypot(outer.getTransform().a, outer.getTransform().b));
+    const bx0 = x - W - Hf * 1.2 - 30 * S, by0 = y - Hf * 2.6 - 30 * S, bw0 = 2 * (W + Hf * 1.2 + 30 * S), bh0 = Hf * 2.6 + 50 * S;
+    const BW = Math.min(2400, Math.ceil(bw0 * sc)), BH = Math.min(2400, Math.ceil(bh0 * sc));
+    let buf = FIRE_SPR.buf; if (!buf || buf.width < BW || buf.height < BH) buf = FIRE_SPR.buf = sprCanvas(Math.max(BW, buf?.width || 0), Math.max(BH, buf?.height || 0));
+    const bctx = buf.getContext('2d'); bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, buf.width, buf.height);
+    bctx.setTransform(BW / bw0, 0, 0, BH / bh0, -bx0 * BW / bw0, -by0 * BH / bh0);
+    // eslint-disable-next-line no-shadow
+    const ctx = bctx;
+    ctx.save(); const A0 = 1;
+    const tongue = (bx, by, w, h, tx, c0, c1, c2, a) => {
+      if (h < 1 || a <= 0.003) return;
+      const g = ctx.createLinearGradient(bx, by, bx + tx, by - h);
+      g.addColorStop(0, c0.replace('A', a)); g.addColorStop(0.35, c1.replace('A', a)); g.addColorStop(0.75, c2.replace('A', a * 0.7)); g.addColorStop(1, c2.replace('A', 0));
+      ctx.fillStyle = g; ctx.beginPath();
+      ctx.moveTo(bx - w / 2, by);
+      ctx.bezierCurveTo(bx - w * 0.62, by - h * 0.35, bx + tx * 0.3 - w * 0.3, by - h * 0.7, bx + tx, by - h);
+      ctx.bezierCurveTo(bx + tx * 0.3 + w * 0.3, by - h * 0.7, bx + w * 0.62, by - h * 0.35, bx + w / 2, by);
+      ctx.quadraticCurveTo(bx, by + w * 0.28, bx - w / 2, by); ctx.fill();
+    };
+    const nT = Math.round(clamp(3 + I * 2.5, 2, 9));
+    const items = [];
+    for (let j = 0; j < nSrc; j++) {
+      const sr = srcs[j], base = Hf * srcH(sr);
+      for (let k = 0; k < nT; k++) {
+        const q = j * 31 + k * 7, f = (q * 0.6180339) % 1;
+        const life = (0.7 + f * 0.5) / speed, ph = ((t + ph0 + f * 3) % life) / life;
+        const hh = base * (0.45 + 0.55 * Math.sin(Math.PI * ph)) * (0.55 + f * 0.45);
+        const bw = (W / Math.max(1, nSrc)) * 1.5 * (0.55 + 0.5 * ((q * 0.37) % 1)) + 9 * S;
+        const ox = ((k + 0.5) / nT - 0.5) * bw * 0.9;
+        const tx = Math.sin(t * 5.3 * speed + q) * hh * 0.12 + Math.sin(t * 11 * speed + q * 2) * hh * 0.05 + wind * hh * 0.55;
+        items.push([x + sr.dx + ox, y + sr.dy + (((q * 0.7548) % 1) - 0.5) * bw * 0.45, bw * 0.55, hh, tx]);
+      }
+    }
+    const aI = Math.min(1, 0.45 + I * 0.4);
+    // outer flame body
     ctx.globalCompositeOperation = 'source-over';
+    for (const [bx, by, w, h, tx] of items) tongue(bx, by, w * 1.25, h * 1.12, tx * 1.1, 'rgba(255,150,40,A)', 'rgba(245,95,20,A)', 'rgba(170,35,5,A)', A0 * 0.82 * aI);
+    // hot inner flame (additive)
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [bx, by, w, h, tx] of items) tongue(bx, by, w * 0.7, h * 0.72, tx * 0.8, 'rgba(255,250,225,A)', 'rgba(255,215,110,A)', 'rgba(255,140,30,A)', A0 * 0.55 * aI);
+    // detached wisps of flame rising off the tips
+    const nw = Math.round(clamp(nSrc * 3 * Math.min(2, I), 2, 60));
+    for (let i = 0; i < nw; i++) {
+      const sr = srcs[i % nSrc], life = (0.45 + ((i * 7) % 5) * 0.06) / speed, ph = ((t + ph0 + i * 0.29) % life) / life;
+      const hh = Hf * srcH(sr), bx = x + sr.dx + Math.sin(i * 9.1) * W / Math.max(1, nSrc) * 0.6 + wind * hh * (0.5 + ph * 0.4);
+      const by = y + sr.dy - hh * (0.55 + ph * 0.75), ww = (7 + (i % 3) * 3) * S * (1 - ph * 0.5);
+      tongue(bx, by, ww, ww * 2.6, wind * ww, 'rgba(255,210,110,A)', 'rgba(255,130,30,A)', 'rgba(200,50,10,A)', A0 * 0.6 * (1 - ph) * aI);
+    }
+    // glowing bed along the whole burning front
+    { const ew = W + 16 * S, eh = Math.max(8 * S, W * 0.22); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = A0 * clamp(0.6 * flick * Math.min(1, I), 0, 1);
+      ctx.save(); ctx.translate(x, y); ctx.scale(1, eh / ew); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, ew); g.addColorStop(0, 'rgba(255,200,100,0.85)'); g.addColorStop(0.6, 'rgba(255,110,30,0.45)'); g.addColorStop(1, 'rgba(200,50,10,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, ew, 0, 7); ctx.fill(); ctx.restore(); }
+    // white-hot base glow
+    ctx.globalAlpha = A0 * clamp(0.55 * flick * Math.min(1, I), 0, 1);
+    for (const sr of srcs) { const bz = (W / Math.max(1, nSrc)) * 0.9 + 8 * S; const g = ctx.createRadialGradient(x + sr.dx, y + sr.dy - bz * 0.2, 0, x + sr.dx, y + sr.dy - bz * 0.2, bz); g.addColorStop(0, 'rgba(255,240,200,0.9)'); g.addColorStop(0.5, 'rgba(255,170,60,0.4)'); g.addColorStop(1, 'rgba(255,100,20,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x + sr.dx, y + sr.dy - bz * 0.2, bz, bz * 0.6, 0, 0, 7); ctx.fill(); }
+    ctx.restore();
+    // composite: a soft blurred glow pass, then the flames themselves slightly softened
+    const soft = clamp(+(s.softness ?? 1), 0, 3);
+    outer.save();
+    const fb = (px) => { try { outer.filter = px > 0.05 ? `blur(${px}px)` : 'none'; } catch { /* */ } };
+    outer.globalCompositeOperation = 'lighter'; fb(6 * S * soft * sc); outer.globalAlpha *= 0.55;
+    outer.drawImage(buf, 0, 0, BW, BH, bx0, by0, bw0, bh0);
+    outer.globalAlpha /= 0.55; outer.globalCompositeOperation = 'source-over'; fb(1.1 * S * soft * sc);
+    outer.drawImage(buf, 0, 0, BW, BH, bx0, by0, bw0, bh0);
+    fb(0); outer.restore();
+  }
+  // 4 · embers / sparks
+  if (s.embers !== false && I > 0.05) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const n = Math.round(clamp(22 * I * (+s.emberAmount || 1) * (0.6 + spread * 0.4), 0, 160));
+    for (let i = 0; i < n; i++) {
+      const life = (1.6 + ((i * 13) % 7) * 0.25) / speed, ph = ((t + ph0 * 3 + i * 0.311) % life) / life;
+      const sr = srcs[i % nSrc];
+      const px = x + sr.dx + Math.sin(i * 4.7) * W * 0.3 + Math.sin(t * 3 + i) * 10 * S * ph + wind * ph * ph * Hf * 2.2;
+      const py = y + sr.dy - Hf * 0.3 - ph * Hf * (2 + ((i * 5) % 4) * 0.4);
+      const a = (1 - ph) * (0.5 + 0.5 * Math.sin(t * 20 + i * 3)), rz = (1.1 + ((i * 3) % 3) * 0.5) * S;
+      ctx.fillStyle = `rgba(255,${Math.round(200 - ph * 120)},${Math.round(90 - ph * 70)},${clamp(a, 0, 1)})`;
+      ctx.beginPath(); ctx.arc(px, py, rz, 0, 7); ctx.fill();
+    }
+    ctx.restore();
   }
   ctx.restore();
+}
+function drawFireClassic(ctx, s, x, y, S, t, ph0) {
+  if (s.smoke !== false) for (let i = 0; i < 10; i++) {
+    const life = 2.6, ph = ((t + ph0 + i * (life / 10)) % life) / life;
+    const px = x + Math.sin(i * 3.1 + t * 0.7) * 6 * S + ph * 18 * S, py = y - 40 * S - ph * 110 * S;
+    const rad = (10 + ph * 26) * S;
+    const g = ctx.createRadialGradient(px, py, 0, px, py, rad); g.addColorStop(0, `rgba(70,64,60,${0.45 * (1 - ph)})`); g.addColorStop(1, 'rgba(70,64,60,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, rad, 0, 7); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 26; i++) {
+    const life = 0.9 + (i % 5) * 0.12, ph = ((t * 1.3 + ph0 + i * 0.137) % life) / life;
+    const spread = (Math.sin(i * 12.9898) * 0.5) * 22 * S * (1 - ph * 0.6);
+    const px = x + spread + Math.sin(t * 9 + i) * 3 * S, py = y - 6 * S - ph * 70 * S;
+    const rad = (13 - ph * 10) * S * (0.7 + ((i * 7) % 5) / 8);
+    const c = ph < 0.3 ? [255, 245, 190] : ph < 0.6 ? [255, 180, 60] : [235, 80, 30];
+    const g = ctx.createRadialGradient(px, py, 0, px, py, rad); g.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${0.55 * (1 - ph)})`); g.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(px, py, rad * 0.7, rad * 1.3, 0, 0, 7); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 // ================================================================= missile trails
