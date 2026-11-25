@@ -57,8 +57,10 @@ export const MX_FORMS = {
   ],
   layerswipe: [
     ['', 'Import each road file with the buttons below (GeoJSON, shapefile .zip, KML, GPX — UTM / Web Mercator files are converted automatically), or pick layers you already added. A GeoTIFF: add it with Imagery → Georeferenced image, then pick it. Your imagery underneath stays visible on both sides.', 'note'],
+    ['', '🛰 Add imagery under both sides (GeoTIFF / image)', 'gvaction', 'swipeImagery'],
     ['', '📂 Import file for side A', 'gvaction', 'swipeImportA'],
     ['', '📂 Import file for side B', 'gvaction', 'swipeImportB'],
+    ['', '🖼 Use a GeoTIFF / image as side A', 'gvaction', 'swipeTifA'], ['', '🖼 Use a GeoTIFF / image as side B', 'gvaction', 'swipeTifB'],
     ['style.layerA', 'Left / first side (A)', 'layerref', 'any'], ['style.labelA', 'Name of A', 'text', null, (L) => L.style.labels !== false],
     ['style.layerB', 'Right / second side (B)', 'layerref', 'any'], ['style.labelB', 'Name of B', 'text', null, (L) => L.style.labels !== false],
     ['style.dir', 'Divider', 'select', { lr: 'Vertical — swipes left ↔ right', tb: 'Horizontal — swipes top ↕ bottom', diag: 'Diagonal' }, (L) => L.anim !== 'blink'],
@@ -358,6 +360,9 @@ export const MX_ACTIONS = {
     sc.camera.keys = [{ t: 0, ease: 'linear', view }, { t: keys.at(-1).t || 5, ease: 'linear', view: JSON.parse(JSON.stringify(view)) }];
     return 'Map is now still for this scene — press “Bring back the map movement” to undo';
   },
+  swipeImagery(L) { globalThis.__swipeGeoImage?.(L.id, 'under'); return ''; },
+  swipeTifA(L) { globalThis.__swipeGeoImage?.(L.id, 'A'); return ''; },
+  swipeTifB(L) { globalThis.__swipeGeoImage?.(L.id, 'B'); return ''; },
   swipeImportA(L) { globalThis.__swipeImportFor = { id: L.id, side: 'A' }; document.getElementById('file-layers')?.click(); return ''; },
   swipeImportB(L) { globalThis.__swipeImportFor = { id: L.id, side: 'B' }; document.getElementById('file-layers')?.click(); return ''; },
   async mapMove(L, { scene }) {

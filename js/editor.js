@@ -2154,7 +2154,7 @@ export function createEditor() {
         h += '<p class="hint-line">Low ground floods first, using real elevation data. Turn on 3D mountains and tilt the camera for a 3D look.</p>';
       }
     } else if (L.kind === 'line') {
-      h += '<h5>Line</h5>' + fRow('Colour', fColor('style.color', s.color)) + fRow('Width', fRange('style.width', s.width, 1, 16, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Arrow at the end', fSw('style.arrow', s.arrow)) + fRow('Vehicle at the tip while drawing', fSel('style.head', s.head || 'none', { none: 'None', train: 'Train 🚆', car: 'Car 🚗', truck: 'Truck 🚚', plane: 'Plane ✈️', ship: 'Ship 🚢', walk: 'Walking 🚶', bike: 'Bicycle 🚲' })) + fRow('Glow', fSw('style.glow', s.glow));
+      h += '<h5>Line</h5>' + fRow('Colour', fColor('style.color', s.color)) + fRow('Width', fRange('style.width', s.width, 1, 16, 0.5)) + fRow('Style', fSel('style.dash', s.dash, DASH)) + fRow('Arrow at the end', fSw('style.arrow', s.arrow)) + (((L.geom?.type === 'MultiLineString' && L.geom.coordinates.length > 3)) ? fRow('Arrows on every road of the network', fSw('style.arrowAll', s.arrowAll === true)) : '') + fRow('White outline (casing)', fSw('style.casing', s.casing ?? !(L.geom?.type === 'MultiLineString' && L.geom.coordinates.length > 3))) + fRow('Vehicle at the tip while drawing', fSel('style.head', s.head || 'none', { none: 'None', train: 'Train 🚆', car: 'Car 🚗', truck: 'Truck 🚚', plane: 'Plane ✈️', ship: 'Ship 🚢', walk: 'Walking 🚶', bike: 'Bicycle 🚲' })) + fRow('Glow', fSw('style.glow', s.glow));
     } else if (L.kind === 'point') {
       h += '<h5>Symbol</h5>' + fRow('Marker', fSel('style.marker', s.marker, MARKERS));
       if (s.marker === 'emoji') h += fRow('Emoji', fText('style.emoji', s.emoji, '📍'));
@@ -3191,6 +3191,7 @@ export function createEditor() {
     if (id === 'wb-fmt') { const L = selLayer && layerById(selLayer); if (L?.style.source === 'wayback' && wbList) { pushUndo(); for (const f of L.style.frames || []) { const r = wbList.find((x) => x.num === f.release); if (r) f.label = wbLabel(r, wbFilter.fmt); } save(); repaint(); } }
     renderLayerEditor();
   });
+  globalThis.__swipeGeoImage = (id, role) => { geoPick = { mode: 'new', kind: 'image', swipe: { id, role } }; $('#file-geoimg').click(); };
   $('#file-geoimg').addEventListener('change', async (e) => {
     const files = [...e.target.files];
     e.target.value = '';
@@ -3236,6 +3237,13 @@ export function createEditor() {
       }
       layersOf().push(...added);
       selLayer = added.at(-1).id;
+      if (pick.swipe) { // from a Layer swipe: imagery goes to the bottom (under the roads); A / B also become that side
+        const arr = layersOf(), S = arr.find((x) => x.id === pick.swipe.id);
+        for (const L of added) { arr.splice(arr.indexOf(L), 1); arr.unshift(L); L.start = 0; L.anim = L.anim === 'none' ? 'none' : 'fade'; }
+        if (S && /^[AB]$/.test(pick.swipe.role)) { S.style['layer' + pick.swipe.role] = added[0].id; if (!S.style['label' + pick.swipe.role] || /^Dataset [AB]$/.test(S.style['label' + pick.swipe.role])) S.style['label' + pick.swipe.role] = labelFromName(added[0].name) || added[0].name; }
+        if (S) selLayer = S.id;
+        toast(pick.swipe.role === 'under' ? 'Imagery added under the roads (shows on both sides)' : `Image is side ${pick.swipe.role} of the swipe`, 4200);
+      }
       setViewMode('edit');
     } else {
       const L = layerById(pick.id);
@@ -3801,7 +3809,8 @@ export function createEditor() {
     };
     merge(as, 'Polygon', 'MultiPolygon');
     merge('line', 'LineString', 'MultiLineString');
-    { // everything from one file belongs together (a layer swipe compares the whole file); give generic names the file name
+    ls.forEach((l) => { if (l.kind === 'line' && ls.length + (l.geom?.coordinates?.length || 0) > 4) { l.style.arrow = false; l.style.casing = false; if (l.anim === 'draw' && l.geom?.type === 'MultiLineString') l.anim = 'grow'; } });
+        { // everything from one file belongs together (a layer swipe compares the whole file); give generic names the file name
       const base = pendingImport.name.replace(/\.[^.]+$/, ''), grp = 'imp-' + Date.now().toString(36);
       ls.forEach((l, i) => { l.group = grp; if (/^(Line|Area|Boundary|Point)$/.test(l.name || '')) l.name = ls.length > 1 ? `${base} · ${l.name.toLowerCase()} ${i + 1}` : base; });
     }
@@ -3819,7 +3828,8 @@ export function createEditor() {
         const base = pendingImport.name.replace(/\.[^.]+$/, '');
         if (!S.style['label' + side] || /^Dataset [AB]$/.test(S.style['label' + side])) S.style['label' + side] = base;
         const col = side === 'A' ? '#6bd43a' : '#2a5bff';
-        ls.forEach((l) => { if (l.kind === 'line') { l.style.color = col; l.anim = 'none'; } else if (l.kind === 'area' || l.kind === 'boundary') { l.style.color = col; } });
+        ls.forEach((l) => { if (l.kind === 'line') { l.style.color = col; l.style.width = 3; l.anim = 'grow'; l.start = 0; l.duration = 3; } else if (l.kind === 'area' || l.kind === 'boundary') { l.style.color = col; } });
+        if ((+S.start || 0) < 3.2) S.start = 3.2; // roads grow first, then the swipe starts
         selLayer = S.id;
         toast(`${base} is side ${side} of the swipe`);
       }

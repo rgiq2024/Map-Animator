@@ -61,7 +61,7 @@ export const ANIMS = {
   boundary: { draw: 'Trace the outline', fade: 'Fade in', grow: 'Grow from the centre', wipe: 'Wipe across', flash: 'Flash, then stay', pulse: 'Glowing pulse', none: 'No animation' },
   area: { fade: 'Fade in', draw: 'Trace, then fill', grow: 'Grow from the centre', wipe: 'Wipe across', flash: 'Flash, then stay', pulse: 'Glowing pulse', none: 'No animation' },
   flood: { spread: 'Spread from a point', rise: 'Rise and fill', wipe: 'Flow in from a side', terrain: 'Rising water on real terrain', none: 'Already flooded' },
-  line: { draw: 'Draw along', fade: 'Fade in', flow: 'Flowing dashes', none: 'No animation' },
+  line: { draw: 'Draw along', grow: 'Road network grows (roads appear one by one)', sweep: 'Road network draws in from left to right', center: 'Road network grows out from the centre', fade: 'Fade in', flow: 'Flowing dashes', none: 'No animation' },
   point: { pop: 'Pop in', drop: 'Drop in', fade: 'Fade in', none: 'No animation' },
   label: { fade: 'Fade in', typewriter: 'Typewriter', slideUp: 'Slide up', pop: 'Pop in', none: 'No animation' },
   caption: { slide: 'Slide in', fade: 'Fade in', typewriter: 'Typewriter', pop: 'Pop in', wipe: 'Wipe', none: 'No animation' },
@@ -433,13 +433,33 @@ function drawLineLayer(ctx, L, tm, proj, unit) {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   if (s.glow) { ctx.shadowColor = s.color; ctx.shadowBlur = 10 * unit; }
-  for (const line of linesOf(L.geom)) {
+  const lines = linesOf(L.geom), many = lines.length > 3;
+  // road networks (many lines): no arrow heads or white casing unless asked for
+  const showArrow = s.arrow && (!many || s.arrowAll === true), casing = s.casing ?? !many;
+  // network animations: each road gets its own window of the animation
+  const NET = { grow: 1, sweep: 1, center: 1 };
+  let order = null, bb = null;
+  if (NET[L.anim] && !tm.edit && tm.u < 1) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const firsts = lines.map((ln) => { const p = proj(ln[0]), q = proj(ln[ln.length - 1]); const m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; x0 = Math.min(x0, m[0]); y0 = Math.min(y0, m[1]); x1 = Math.max(x1, m[0]); y1 = Math.max(y1, m[1]); return m; });
+    bb = [x0, y0, x1, y1];
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, R = Math.hypot(x1 - x0, y1 - y0) / 2 || 1;
+    if (L.anim === 'grow') { const idx = firsts.map((m, i) => [Math.sin(i * 12.9898) * 43758.5453 % 1, i]).sort((a, b) => a[0] - b[0]); order = new Array(lines.length); idx.forEach(([, i], r) => { order[i] = r / Math.max(1, lines.length); }); }
+    else if (L.anim === 'sweep') order = firsts.map((m) => (x1 > x0 ? (m[0] - x0) / (x1 - x0) : 0));
+    else order = firsts.map((m) => clamp(Math.hypot(m[0] - cx, m[1] - cy) / R, 0, 1));
+  }
+  let li = -1;
+  for (const line of lines) {
+    li++;
     const pts = line.map(proj);
     if (pts.length < 2) continue;
     let draw = pts;
-    if (L.anim === 'draw' && tm.u < 1) {
+    let uu = tm.u;
+    if (order) { const st = order[li] * 0.7; uu = clamp((tm.u - st) / 0.3, 0, 1); if (uu <= 0) continue; }
+    if ((L.anim === 'draw' || order) && uu < 1) {
+      const tmu = uu;
       const total = screenLen(pts);
-      let target = total * ease(tm.u), acc = 0;
+      let target = total * ease(tmu), acc = 0;
       draw = [pts[0]];
       for (let i = 1; i < pts.length; i++) {
         const seg = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
@@ -458,7 +478,7 @@ function drawLineLayer(ctx, L, tm, proj, unit) {
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth = w + 3 * unit;
     ctx.setLineDash(L.anim === 'flow' || s.dash === 'railway' ? [] : dashOf(s.dash, w));
-    if (s.dash !== 'dotted') ctx.stroke();
+    if (s.dash !== 'dotted' && casing) ctx.stroke();
     if (s.dash === 'railway') {
       // sleepers across the track every few pixels
       ctx.save(); ctx.shadowBlur = 0; ctx.setLineDash([]);
@@ -489,7 +509,7 @@ function drawLineLayer(ctx, L, tm, proj, unit) {
       ctx.fillText({ train: '🚆', car: '🚗', truck: '🚚', plane: '✈️', ship: '🚢', walk: '🚶', bike: '🚲' }[s.head] || s.head, a[0], a[1]);
       ctx.restore();
     }
-    if (s.arrow) {
+    if (showArrow) {
       const a = draw.at(-1), b = draw[Math.max(0, draw.length - 2)];
       let k = draw.length - 2;
       let pb = b;
