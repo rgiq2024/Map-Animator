@@ -363,6 +363,34 @@ export async function readDataFiles(files) {
   return { text: JSON.stringify(gj), name: label, note: `${gj.features.length} features${simplified ? ` · simplified (${Math.round(n / 1000)}k points)` : ''}` };
 }
 
+/** GeoJSON in projected metres (UTM by its EPSG code, or Web Mercator) → longitude / latitude, in place. Returns a note, '' if nothing to do. */
+export function reprojectGeoJSON(gj) {
+  let first = null;
+  const walk = (c, fn) => (typeof c[0] === 'number' ? fn(c) : c.map((x) => walk(x, fn)));
+  const each = (g, fn) => { if (!g) return; if (g.type === 'GeometryCollection') g.geometries.forEach((x) => each(x, fn)); else g.coordinates = walk(g.coordinates, fn); };
+  const feats = gj.type === 'FeatureCollection' ? gj.features : gj.type === 'Feature' ? [gj] : [{ geometry: gj }];
+  for (const f of feats) { if (first) break; each(f.geometry, (c) => { if (!first) first = c; return c; }); }
+  if (!first) return '';
+  const crs = String(gj.crs?.properties?.name || gj.crs?.properties?.code || '');
+  const code = +((/EPSG:{1,2}(\d+)/i.exec(crs) || /(\d{4,5})$/.exec(crs) || [])[1] || 0);
+  const geographic = Math.abs(first[0]) <= 180 && Math.abs(first[1]) <= 90;
+  if (geographic && (!code || code === 4326 || code === 4269 || code === 4258 || code === 84)) return '';
+  const WGS = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]]]';
+  let wkt = null, label = '';
+  if ((code >= 32601 && code <= 32660) || (code >= 32701 && code <= 32760)) {
+    const zone = code % 100, south = code > 32700;
+    wkt = `PROJCS["UTM",${WGS},PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",500000],PARAMETER["False_Northing",${south ? 10000000 : 0}],PARAMETER["Central_Meridian",${-183 + 6 * zone}],PARAMETER["Scale_Factor",0.9996],PARAMETER["Latitude_Of_Origin",0],UNIT["Meter",1]]`;
+    label = `UTM zone ${zone}${south ? 'S' : 'N'}`;
+  } else if (code === 3857 || code === 900913 || code === 102100 || (!code && Math.abs(first[0]) <= 20037509 && Math.abs(first[1]) <= 20037509)) {
+    wkt = `PROJCS["WGS_1984_Web_Mercator_Auxiliary_Sphere",${WGS},PROJECTION["Mercator_Auxiliary_Sphere"],UNIT["Meter",1.0]]`; label = 'Web Mercator';
+  }
+  const inv = wkt && prjInverse(wkt);
+  if (!inv) throw new Error(`This file is in a projected coordinate system${code ? ` (EPSG:${code})` : ''} the app can't convert — please export it as GeoJSON in WGS 84 (EPSG:4326)`);
+  for (const f of feats) each(f.geometry, (c) => { const r = inv(c[0], c[1]); return c.length > 2 ? [r[0], r[1], c[2]] : r; });
+  delete gj.crs;
+  return `converted from ${label} to longitude / latitude`;
+}
+
 // ================================================================= classification
 export const CLASSIFY = { quantile: 'Quantile (same number in each class)', equal: 'Equal interval', jenks: 'Natural breaks (Jenks)', stddev: 'Standard deviation', pretty: 'Rounded (pretty) breaks', manual: 'Manual breaks' };
 function jenks(data, k) {

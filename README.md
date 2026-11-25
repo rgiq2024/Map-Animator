@@ -410,3 +410,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Export: switches to mute effect sounds, music, and uploaded audio/voiceover in the exported video only.
 - Export sound switches now default to off (silent video unless switched on).
 - Layer swipe: compare two layers (road GeoJSON/shapefile/KML, GeoTIFF/raster, any element) with an animated divider, labels and colour swatches; imported files are grouped so the whole file swipes together.
+- Import: top-of-panel import button; shapefile (.zip / .shp+.dbf+.prj), TopoJSON, multiple files; UTM / Web Mercator GeoJSON converted automatically; Layer swipe 'Import file for side A/B' buttons.

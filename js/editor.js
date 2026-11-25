@@ -31,7 +31,7 @@ import { analysisFilter, movingTargets } from './analysis.js';
 import { PC_COLLECTIONS, pcRenders, pcScenes, pcDayTiles, cdseScenes } from './pcsat.js';
 import { DOTA, CLASS_INFO, detectCanvas, quadSize, loadModel } from './objdetect.js';
 import { tourLength } from './globefx.js';
-import { parseTable, dataOf, readDataFiles } from './geodata.js';
+import { parseTable, dataOf, readDataFiles, reprojectGeoJSON } from './geodata.js';
 import { thematicBounds } from './thematic.js';
 import { openTracker } from './vtracker.js';
 import { VIDEO_RECTS } from './screenfx.js';
@@ -3752,22 +3752,34 @@ export function createEditor() {
   // import
   let pendingImport = null;
   $('#import-layers').onclick = () => $('#file-layers').click();
+  $('#import-layers-top')?.addEventListener('click', () => $('#file-layers').click());
   $('#file-layers').addEventListener('change', async (e) => {
-    const f = e.target.files[0];
+    const files = [...e.target.files];
     e.target.value = '';
-    if (!f) return;
-    let obj;
-    try { obj = await readLayerFile(f); } catch (err) { toast(err.message || 'Could not read that file'); return; }
+    if (!files.length) return;
+    const shpSet = files.some((x) => /\.(shp|zip|topojson)$/i.test(x.name));
+    // several separate files (not the parts of one shapefile): import each in turn
+    if (!shpSet && files.length > 1) { for (const one of files) await importLayerFileObj(one); return; }
+    await importLayerFileObj(files[0], shpSet ? files : null);
+  });
+  async function importLayerFileObj(f, parts = null) {
+    let obj, note = '';
+    try {
+      if (parts) { const r = await readDataFiles(parts); obj = JSON.parse(r.text); }
+      else obj = await readLayerFile(f);
+      note = reprojectGeoJSON(obj);
+    } catch (err) { toast(err.message || 'Could not read that file'); return; }
     const probe = layersFromGeoJSON(obj, 'area', 0);
     if (!probe.length) { toast('No shapes found in that file'); return; }
+    if (note) toast(`${f.name}: ${note}`);
     const polys = probe.filter((l) => l.kind === 'area').length;
-    pendingImport = { obj, name: f.name };
+    pendingImport = { obj, name: parts ? (parts.find((x) => /\.(shp|zip)$/i.test(x.name)) || f).name : f.name };
     if (polys) {
       $('#import-title').textContent = `Import ${f.name}`;
       $('#import-info').textContent = `${probe.length} shape${probe.length === 1 ? '' : 's'} found, ${polys} of them area${polys === 1 ? '' : 's'}.`;
       $('#import-modal').showModal();
     } else finishImport('boundary');
-  });
+  }
   $('#import-modal').addEventListener('click', (e) => {
     const b = e.target.closest('[data-as]');
     if (!b) return;
@@ -3798,6 +3810,20 @@ export function createEditor() {
     pushUndo();
     layersOf().push(...ls);
     selLayer = ls[0]?.id || null;
+    { // imported from a Layer swipe's "Import" button → put it on that swipe's free side, in its own colour
+      const want = globalThis.__swipeImportFor; globalThis.__swipeImportFor = null;
+      const S = want && layersOf().find((x) => x.id === want.id && x.kind === 'layerswipe');
+      if (S && ls[0]) {
+        const side = want.side || (!S.style.layerA ? 'A' : 'B');
+        S.style['layer' + side] = ls[0].id;
+        const base = pendingImport.name.replace(/\.[^.]+$/, '');
+        if (!S.style['label' + side] || /^Dataset [AB]$/.test(S.style['label' + side])) S.style['label' + side] = base;
+        const col = side === 'A' ? '#6bd43a' : '#2a5bff';
+        ls.forEach((l) => { if (l.kind === 'line') { l.style.color = col; l.anim = 'none'; } else if (l.kind === 'area' || l.kind === 'boundary') { l.style.color = col; } });
+        selLayer = S.id;
+        toast(`${base} is side ${side} of the swipe`);
+      }
+    }
     commitLayers();
     renderLayerEditor();
     const all = ls.map(layerBounds).filter(Boolean);

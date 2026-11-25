@@ -56,7 +56,9 @@ export const MX_FORMS = {
     ['style.fill', 'Fill after settling', 'range', [0, 1, 0.01]], ['style.stroke', 'Outline colour', 'color'], ['style.strokeWidth', 'Outline width', 'range', [0, 6, 0.1]], ...SND,
   ],
   layerswipe: [
-    ['', 'Add both datasets first (Layers → import your GeoJSON / shapefile / KML, or a GeoTIFF / image), then pick them here. Your imagery underneath stays visible on both sides.', 'note'],
+    ['', 'Import each road file with the buttons below (GeoJSON, shapefile .zip, KML, GPX — UTM / Web Mercator files are converted automatically), or pick layers you already added. A GeoTIFF: add it with Imagery → Georeferenced image, then pick it. Your imagery underneath stays visible on both sides.', 'note'],
+    ['', '📂 Import file for side A', 'gvaction', 'swipeImportA'],
+    ['', '📂 Import file for side B', 'gvaction', 'swipeImportB'],
     ['style.layerA', 'Left / first side (A)', 'layerref', 'any'], ['style.labelA', 'Name of A', 'text', null, (L) => L.style.labels !== false],
     ['style.layerB', 'Right / second side (B)', 'layerref', 'any'], ['style.labelB', 'Name of B', 'text', null, (L) => L.style.labels !== false],
     ['style.dir', 'Divider', 'select', { lr: 'Vertical — swipes left ↔ right', tb: 'Horizontal — swipes top ↕ bottom', diag: 'Diagonal' }, (L) => L.anim !== 'blink'],
@@ -356,6 +358,8 @@ export const MX_ACTIONS = {
     sc.camera.keys = [{ t: 0, ease: 'linear', view }, { t: keys.at(-1).t || 5, ease: 'linear', view: JSON.parse(JSON.stringify(view)) }];
     return 'Map is now still for this scene — press “Bring back the map movement” to undo';
   },
+  swipeImportA(L) { globalThis.__swipeImportFor = { id: L.id, side: 'A' }; document.getElementById('file-layers')?.click(); return ''; },
+  swipeImportB(L) { globalThis.__swipeImportFor = { id: L.id, side: 'B' }; document.getElementById('file-layers')?.click(); return ''; },
   async mapMove(L, { scene }) {
     const sc = scene; if (!sc?.camera?.movingKeys) return 'No earlier map movement saved for this scene';
     sc.camera.keys = sc.camera.movingKeys; delete sc.camera.movingKeys; sc.camera.mode = 'keyframes';
