@@ -409,3 +409,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - GEO·BRIEF: 'Make the map still' / 'Bring back the map movement' buttons (hold at start/middle/end view); auto news before/after scenes now use a still map.
 - Export: switches to mute effect sounds, music, and uploaded audio/voiceover in the exported video only.
 - Export sound switches now default to off (silent video unless switched on).
+- Layer swipe: compare two layers (road GeoJSON/shapefile/KML, GeoTIFF/raster, any element) with an animated divider, labels and colour swatches; imported files are grouped so the whole file swipes together.

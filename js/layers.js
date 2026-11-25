@@ -2,6 +2,7 @@ import { traceRing } from './antimeridian.js';
 // Map layers that animate: boundaries, areas, floods, lines, points / animated symbols, text labels and
 // on-screen captions. Everything is drawn on the 2D overlay from GeoJSON-style geometry in lng/lat.
 // (Terrain-based rising floods are rendered by flood.js inside the map itself.)
+import { swipeClipFor } from './mapfx.js';
 import { simplify, toMerc } from './geo.js';
 import { signImage } from './signs.js';
 import { placeAt, setBoxSink } from './place.js';
@@ -820,6 +821,12 @@ function drawLayersInner(ctx, o, phase) {
   for (const L of layers) drawOne(ctx, o, L, phase);
 }
 function drawOne(ctx, o, L, phase) {
+  // one side of a layer swipe: clip it to its half of the divider
+  const clip = !L.hidden && swipeClipFor(o, L);
+  if (clip) { ctx.save(); try { clip(ctx); drawOneInner(ctx, o, L, phase); } finally { ctx.restore(); } return; }
+  drawOneInner(ctx, o, L, phase);
+}
+function drawOneInner(ctx, o, L, phase) {
   const { proj, unit, time, frame } = o;
   const tokens = o.tokens || {};
   {

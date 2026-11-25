@@ -3789,6 +3789,10 @@ export function createEditor() {
     };
     merge(as, 'Polygon', 'MultiPolygon');
     merge('line', 'LineString', 'MultiLineString');
+    { // everything from one file belongs together (a layer swipe compares the whole file); give generic names the file name
+      const base = pendingImport.name.replace(/\.[^.]+$/, ''), grp = 'imp-' + Date.now().toString(36);
+      ls.forEach((l, i) => { l.group = grp; if (/^(Line|Area|Boundary|Point)$/.test(l.name || '')) l.name = ls.length > 1 ? `${base} · ${l.name.toLowerCase()} ${i + 1}` : base; });
+    }
     const pts = ls.filter((l) => l.kind === 'point');
     if (pts.length > 80) ls = ls.filter((l) => l.kind !== 'point' || pts.indexOf(l) < 80);
     pushUndo();

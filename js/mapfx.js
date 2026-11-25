@@ -16,21 +16,24 @@ export const MX_KINDS = {
   dofblur: { name: 'Depth of field', icon: '◎', geom: null, desc: 'A camera focus band across the map — everything above and below goes soft, like a tilted lens; the focus can rack from near to far, labels can blur with it. Pair it with “Make the camera drift” for a continuous pan' },
   inkreveal: { name: 'Ink-spread reveal', icon: '🩸', geom: 'polygon', desc: 'An area fills like ink spreading on paper from a starting point, with smoky edges that settle into a clean shape' },
   flickerzones: { name: 'Flickering districts', icon: '▦', geom: null, desc: 'Districts, regions or countries flash bright and dark like a failing light, then settle into an outlined map' },
+  layerswipe: { name: 'Layer swipe (compare two layers)', icon: '◧', geom: null, desc: 'Compare any two layers you added — two road networks (GeoJSON, shapefile, KML), two GeoTIFF / raster images, or any elements — with a divider that slides across the map: one dataset on each side, labelled' },
   softlabel: { name: 'Soft map label', icon: 'Aa', geom: 'point', desc: 'A soft white label on the map — “Track Point 1” — that fades and drifts in, and blurs with the depth of field' },
 };
 export const MX_ANIMS = {
   dofblur: { rack: 'Focus racks from one place to another', breathe: 'Focus drifts back and forth', fade: 'Blur fades in', none: 'Fixed focus' },
   inkreveal: { spread: 'Ink spreads from the start point', fade: 'Fade in', none: 'Shown' },
   flickerzones: { flicker: 'Flicker, then settle', strobe: 'Keep flickering', fade: 'Fade in', none: 'Shown' },
+  layerswipe: { sweep: 'Swipe across and back', once: 'Swipe once (A → B)', hold: 'Fixed divider (no movement)', blink: 'Cross-fade A ↔ B (no divider)' },
   softlabel: { rise: 'Fade in and drift up', fade: 'Fade in', type: 'Type on', none: 'Shown' },
 };
 export const MX_DEFAULTS = {
   dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient-2' },
   inkreveal: { snd: 'inkbleed', sndDur: 2, color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
   flickerzones: { from: 'countries', layerId: '', countries: 'France, Germany, Italy, Spain, Poland, Belgium, Netherlands, Switzerland, Austria, Czechia', data: '', sample: '', color: '#ffffff', fill: 0.18, stroke: '#ffffff', strokeWidth: 1.2, rate: 12, flickerFor: 2.2, maxA: 0.9, sound: true, soundVol: 1 },
+  layerswipe: { layerA: '', layerB: '', dir: 'lr', split: 0.5, cycles: 1, hold: 0.12, labels: true, labelA: 'Dataset A', labelB: 'Dataset B', labelPos: 'top', textSize: 1, lineColor: '#ffffff', lineWidth: 3, knob: true, chips: true },
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
 };
-const DUR = { dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
+const DUR = { layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
 export const MX_LAYER_DEFAULTS = Object.fromEntries(Object.keys(MX_KINDS).map((k) => [k, { anim: Object.keys(MX_ANIMS[k])[0], duration: DUR[k], style: MX_DEFAULTS[k] }]));
 export const MX_FORMS = {
   dofblur: [
@@ -52,10 +55,115 @@ export const MX_FORMS = {
     ['style.color', 'Flash colour', 'color'], ['style.maxA', 'Brightest flash', 'range', [0.1, 1, 0.01]], ['style.rate', 'Flicker speed (flashes / s)', 'range', [1, 40, 0.5]], ['style.flickerFor', 'Flicker for (s)', 'range', [0.2, 10, 0.1]],
     ['style.fill', 'Fill after settling', 'range', [0, 1, 0.01]], ['style.stroke', 'Outline colour', 'color'], ['style.strokeWidth', 'Outline width', 'range', [0, 6, 0.1]], ...SND,
   ],
+  layerswipe: [
+    ['', 'Add both datasets first (Layers → import your GeoJSON / shapefile / KML, or a GeoTIFF / image), then pick them here. Your imagery underneath stays visible on both sides.', 'note'],
+    ['style.layerA', 'Left / first side (A)', 'layerref', 'any'], ['style.labelA', 'Name of A', 'text', null, (L) => L.style.labels !== false],
+    ['style.layerB', 'Right / second side (B)', 'layerref', 'any'], ['style.labelB', 'Name of B', 'text', null, (L) => L.style.labels !== false],
+    ['style.dir', 'Divider', 'select', { lr: 'Vertical — swipes left ↔ right', tb: 'Horizontal — swipes top ↕ bottom', diag: 'Diagonal' }, (L) => L.anim !== 'blink'],
+    ['style.split', 'Divider position (fixed, and while editing)', 'range', [0, 1, 0.01]],
+    ['style.cycles', 'Swipes back and forth (times)', 'range', [0.5, 6, 0.5], (L) => L.anim === 'sweep' || L.anim === 'blink'],
+    ['style.hold', 'Pause at each end', 'range', [0, 0.4, 0.01], (L) => L.anim !== 'hold'],
+    ['style.lineColor', 'Divider colour', 'color', null, (L) => L.anim !== 'blink'], ['style.lineWidth', 'Divider width', 'range', [0, 10, 0.5], (L) => L.anim !== 'blink'], ['style.knob', 'Handle on the divider', 'switch', null, (L) => L.anim !== 'blink'],
+    ['style.labels', 'Name labels', 'switch'], ['style.labelPos', 'Labels at', 'select', { top: 'Top', bottom: 'Bottom', middle: 'Middle' }, (L) => L.style.labels !== false], ['style.textSize', 'Label size', 'range', [0.5, 2.5, 0.05], (L) => L.style.labels !== false],
+    ['style.chips', 'Colour swatch of each layer in its label', 'switch', null, (L) => L.style.labels !== false],
+  ],
   softlabel: [['style.text', 'Text', 'text'], ['style.size', 'Size', 'range', [0.4, 4, 0.05]], ['style.color', 'Colour', 'color'], ['style.weight', 'Weight', 'select', { 300: 'Light', 500: 'Medium', 700: 'Bold' }], ['style.shadow', 'Soft shadow', 'range', [0, 1, 0.01]], ['style.dot', 'Dot at the place', 'switch'], ...SND],
 };
 export const MX_SET = new Set(Object.keys(MX_KINDS));
 export const mxPhases = (k) => (k === 'inkreveal' || k === 'flickerzones' ? ['below'] : ['captions']);
+
+// ---------------------------------------------------------------- layer swipe
+/** divider position 0..1 (fraction of the frame showing A) for a swipe layer at time t (null = editing) */
+function swipePos(S, t) {
+  const s = S.style, sp = clamp(+(s.split ?? 0.5), 0, 1);
+  if (t == null || S.anim === 'hold') return sp;
+  const D = Math.max(0.3, +S.duration || 8), u = clamp((t - (+S.start || 0)) / D, 0, 1), h = clamp(+(s.hold ?? 0.12), 0, 0.45);
+  if (S.anim === 'once') return 1 - ease(seg(u, h, 1 - h));
+  const c = Math.max(0.5, +s.cycles || 1);
+  // sweep / blink: A → B → A …, with a pause at each end
+  const k = u * c, f = k - Math.floor(k);
+  const g = (x) => ease(seg(x, h / 2, 0.5 - h / 2)) - ease(seg(x, 0.5 + h / 2, 1 - h / 2));
+  return 1 - g(f);
+}
+function swipeGeo(S, p, fr) {
+  const d = S.style.dir || 'lr';
+  let n = d === 'tb' ? [0, 1] : d === 'diag' ? [0.857, 0.514] : [1, 0];
+  const ext = Math.abs(n[0]) * fr.w + Math.abs(n[1]) * fr.h; // frame length along the normal
+  const cx = fr.x + fr.w / 2, cy = fr.y + fr.h / 2, o = (p - 0.5) * ext;
+  return { n, P: [cx + n[0] * o, cy + n[1] * o], ext };
+}
+function halfPlane(ctx, P, n, side) {
+  const B = 1e5, tx = -n[1], ty = n[0], sx = n[0] * side * B, sy = n[1] * side * B;
+  ctx.beginPath(); ctx.moveTo(P[0] + tx * B, P[1] + ty * B); ctx.lineTo(P[0] - tx * B, P[1] - ty * B);
+  ctx.lineTo(P[0] - tx * B + sx, P[1] - ty * B + sy); ctx.lineTo(P[0] + tx * B + sx, P[1] + ty * B + sy); ctx.closePath(); ctx.clip();
+}
+/** If layer L is one side of a layer swipe in this scene, return a function that clips ctx to its side (call between save/restore). */
+export function swipeClipFor(o, L) {
+  const layers = o.scene?.layers; if (!layers || L.kind === 'layerswipe') return null;
+  for (const S of layers) {
+    if (S.kind !== 'layerswipe' || S.hidden) continue;
+    const a = S.style.layerA, b = S.style.layerB; if (!a && !b) continue;
+    const grp = (id) => { const R = id && layers.find((x) => x.id === id); return R ? (x) => x.id === R.id || (R.group && x.group === R.group) : () => false; };
+    const side = grp(a)(L) ? -1 : grp(b)(L) ? 1 : 0; if (!side) continue;
+    const fr = o.frame || { x: 0, y: 0, w: 1e4, h: 1e4 };
+    const p = swipePos(S, o.time);
+    if (S.anim === 'blink') { const w = side < 0 ? p : 1 - p; return (ctx) => { ctx.globalAlpha *= w; }; }
+    const { n, P } = swipeGeo(S, p, fr);
+    return (ctx) => halfPlane(ctx, P, n, side);
+  }
+  return null;
+}
+function layerColor(R) { const st = R?.style || {}; return st.color || st.stroke || st.lineColor || st.fill || st.accent || '#888'; }
+function drawSwipe(ctx, L, tm, o) {
+  const s = L.style, fr = o.frame; if (!fr) return;
+  const u = o.unit, p = swipePos(L, o.time), A = tm.alpha ?? 1; if (A <= 0) return;
+  const lay = o.scene?.layers || [], RA = lay.find((x) => x.id === s.layerA), RB = lay.find((x) => x.id === s.layerB);
+  ctx.save(); ctx.globalAlpha *= A;
+  ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.clip();
+  const blink = L.anim === 'blink';
+  const { n, P } = swipeGeo(L, p, fr), tx = -n[1], ty = n[0];
+  if (!blink && +s.lineWidth > 0) {
+    const B = Math.hypot(fr.w, fr.h);
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 6 * u;
+    ctx.strokeStyle = s.lineColor || '#fff'; ctx.lineWidth = (+s.lineWidth || 3) * u;
+    ctx.beginPath(); ctx.moveTo(P[0] - tx * B, P[1] - ty * B); ctx.lineTo(P[0] + tx * B, P[1] + ty * B); ctx.stroke();
+    if (s.knob !== false) {
+      // handle in the middle of the divider (inside the frame)
+      const t0 = ((fr.x + fr.w / 2 - P[0]) * tx + (fr.y + fr.h / 2 - P[1]) * ty);
+      const kx = P[0] + tx * t0, ky = P[1] + ty * t0, R = 17 * u;
+      ctx.fillStyle = s.lineColor || '#fff'; ctx.beginPath(); ctx.arc(kx, ky, R, 0, 7); ctx.fill(); ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#1b2430'; const an = Math.atan2(n[1], n[0]);
+      for (const sg of [-1, 1]) { ctx.save(); ctx.translate(kx, ky); ctx.rotate(an + (sg < 0 ? Math.PI : 0)); ctx.beginPath(); ctx.moveTo(R * 0.72, 0); ctx.lineTo(R * 0.22, -R * 0.38); ctx.lineTo(R * 0.22, R * 0.38); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    }
+    ctx.shadowColor = 'transparent';
+  }
+  if (s.labels !== false) {
+    const fs = 15 * u * clamp(+s.textSize || 1, 0.5, 2.5), pad = fs * 0.7, bh = fs * 2;
+    const pos = s.labelPos || 'top';
+    const yOf = () => (pos === 'bottom' ? fr.y + fr.h - bh - 18 * u : pos === 'middle' ? fr.y + fr.h / 2 - bh / 2 + (s.knob !== false ? 34 * u : 0) : fr.y + 18 * u);
+    const pill = (text, col, x, y, align, a) => {
+      if (!text || a <= 0.01) return;
+      ctx.save(); ctx.globalAlpha *= a;
+      ctx.font = `700 ${fs}px Inter, system-ui, sans-serif`; const sw = s.chips !== false ? fs * 1.1 : 0;
+      const w = ctx.measureText(text).width + pad * 2 + sw;
+      const lx = clamp(align === 'right' ? x - w : x, fr.x + 8 * u, fr.x + fr.w - w - 8 * u), ly = clamp(y, fr.y + 8 * u, fr.y + fr.h - bh - 8 * u);
+      ctx.fillStyle = 'rgba(10,14,20,0.82)'; ctx.beginPath(); ctx.roundRect(lx, ly, w, bh, bh / 2); ctx.fill();
+      if (sw) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(lx + pad + fs * 0.35, ly + bh / 2, fs * 0.36, 0, 7); ctx.fill(); }
+      ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(text, lx + pad + sw, ly + bh / 2 + fs * 0.04);
+      ctx.restore();
+    };
+    const ca = layerColor(RA), cb = layerColor(RB);
+    if (blink) {
+      pill(s.labelA, ca, fr.x + 18 * u, yOf(), 'left', p); pill(s.labelB, cb, fr.x + 18 * u, yOf(), 'left', 1 - p);
+    } else if ((s.dir || 'lr') === 'tb') {
+      pill(s.labelA, ca, fr.x + 18 * u, P[1] - bh - 14 * u, 'left', clamp(p * 8, 0, 1)); pill(s.labelB, cb, fr.x + 18 * u, P[1] + 14 * u, 'left', clamp((1 - p) * 8, 0, 1));
+    } else {
+      const y = yOf(), along = (yy) => P[0] - (n[1] / n[0]) * (yy + bh / 2 - P[1]); const xl = along(y);
+      pill(s.labelA, ca, xl - 14 * u, y, 'right', clamp(p * 8, 0, 1)); pill(s.labelB, cb, xl + 14 * u, y, 'left', clamp((1 - p) * 8, 0, 1));
+    }
+  }
+  ctx.restore();
+}
 
 const T = (L, tm) => (tm.edit || L.anim === 'none' ? 1e9 : tm.tau || 0);
 
@@ -209,6 +317,7 @@ export function drawMapFx(ctx, L, tm, o, phase) {
   if (L.kind === 'inkreveal' && phase === 'below') return drawInk(ctx, L, tm, o);
   if (L.kind === 'flickerzones' && phase === 'below') return drawFlicker(ctx, L, tm, o);
   if (L.kind === 'softlabel' && phase === 'captions') return drawSoft(ctx, L, tm, o);
+  if (L.kind === 'layerswipe' && phase === 'captions') return drawSwipe(ctx, L, tm, o);
   return undefined;
 }
 export function mxSoundEvents(L) {
