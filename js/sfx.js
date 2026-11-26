@@ -756,7 +756,7 @@ export function buildEvents(project, models) {
       if (L.hidden || L.style?.sound === false) continue;
       if (MG_SET.has(L.kind)) { for (const e of mgSoundEvents(L)) push(e.t, e.type, e.p); continue; }
       if (MX_SET.has(L.kind)) { for (const e of mxSoundEvents(L)) push(e.t, e.type, e.p); continue; }
-      if (L.kind === 'fireplume') { if (L.style?.sound === true && L.anim !== 'none') { const D = Math.max(0.5, +L.duration || 6) + (+L.hold || 0); push(+L.start || 0, 'fire', { dur: +L.style.sndDur || D, vol: (L.style.soundVol ?? 0.8) * clamp(0.5 + 0.5 * (+(L.style.intensity ?? 1)), 0.3, 2), anim: L.anim }); } continue; }
+      if (L.kind === 'fireplume') { if (L.style?.sound === true && L.anim === 'explode') push(+L.start || 0, 'explosion', { vol: (L.style.soundVol ?? 0.8) * 1.3 }); if (L.style?.sound === true && L.anim !== 'none') { const D = Math.max(0.5, +L.duration || 6) + (+L.hold || 0); push(+L.start || 0, 'fire', { dur: +L.style.sndDur || D, vol: (L.style.soundVol ?? 0.8) * clamp(0.5 + 0.5 * (+(L.style.intensity ?? 1)), 0.3, 2), anim: L.anim }); } continue; }
       if (textOnly && !TEXT_SFX.has(L.kind) && !(L.kind === 'ttitle' && (L.style?.look === 'typewriter' || (L.style?.textSound && L.style.textSound !== 'auto')))) continue;
       const s = L.style || {};
       if (TEXT_SFX.has(L.kind)) { for (const e of trailerSoundEvents(L)) push(e.t, e.type, e.p); continue; }

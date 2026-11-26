@@ -412,3 +412,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Layer swipe: compare two layers (road GeoJSON/shapefile/KML, GeoTIFF/raster, any element) with an animated divider, labels and colour swatches; imported files are grouped so the whole file swipes together.
 - Import: top-of-panel import button; shapefile (.zip / .shp+.dbf+.prj), TopoJSON, multiple files; UTM / Web Mercator GeoJSON converted automatically; Layer swipe 'Import file for side A/B' buttons.
 - Roads: networks drawn without arrows/white casing by default; new 'road network grows / draws in left→right / grows from centre' animations; Layer swipe: add GeoTIFF imagery under both sides or as side A/B.
+- Fire & smoke: 'Explosion, then burns' animation (flash, fireball, shock wave, debris, explosion sound) + preset button.

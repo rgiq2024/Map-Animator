@@ -50,7 +50,7 @@ export const CF2_ANIMS = {
   leader: { draw: 'Line draws, then the text', fade: 'Fade in', none: 'Shown' },
   spokes: { grow: 'Lines grow one by one', fade: 'Fade in', none: 'Shown' },
   lights: { chase: 'Chasing (runway approach)', twinkle: 'Twinkle', on: 'Switch on one by one', none: 'Steady' },
-  fireplume: { burn: 'Burning (steady)', build: 'Builds up (grows)', flare: 'Flare-up (burst, then steady)', dieout: 'Dies down (smoke stays)', none: 'Marker only' },
+  fireplume: { explode: 'Explosion, then burns', burn: 'Burning (steady)', build: 'Builds up (grows)', flare: 'Flare-up (burst, then steady)', dieout: 'Dies down (smoke stays)', none: 'Marker only' },
   missiles: { fly: 'Fly and explode', none: 'Trails only' },
   regions: { cascade: 'Regions colour in one by one', fade: 'Fade in', none: 'Shown' },
   quakes: { timeline: 'Day by day', none: 'All shown' },
@@ -110,6 +110,7 @@ export const CF2_FORMS = {
     ['style.embers', 'Embers / sparks', 'switch', null, (L) => L.style.look !== 'classic'], ['style.emberAmount', 'Ember amount', 'range', [0.2, 4, 0.05], (L) => L.style.look !== 'classic' && L.style.embers !== false],
     ['style.glow', 'Ground glow', 'switch', null, (L) => L.style.look !== 'classic'], ['style.glowStrength', 'Glow strength', 'range', [0, 2, 0.05], (L) => L.style.look !== 'classic' && L.style.glow !== false], ['style.glowSize', 'Glow size', 'range', [0.3, 3, 0.05], (L) => L.style.look !== 'classic' && L.style.glow !== false],
     ['style.ring', 'Ringed marker', 'switch'], ['style.icon', 'Marker icon', 'select', { nuclear: 'Nuclear', factory: 'Factory', none: 'None' }, (L) => !!L.style.ring], ['style.ringColor', 'Ring colour', 'color', null, (L) => !!L.style.ring],
+    ['style.blastSize', 'Explosion size', 'range', [0.3, 4, 0.05], (L) => L.anim === 'explode'], ['style.blastLen', 'Explosion length', 'range', [0.4, 3, 0.05], (L) => L.anim === 'explode'], ['style.shock', 'Shock wave ring', 'switch', null, (L) => L.anim === 'explode'],
     ['style.sound', 'Fire sound (roar + crackle)', 'switch'], ['style.soundVol', 'Sound volume', 'range', [0, 2, 0.05], (L) => L.style.sound !== false]],
   missiles: [['style.count', 'Missiles', 'range', [1, 12, 1]], ['style.spread', 'Spread', 'range', [0, 4, 0.05]], ['style.wiggle', 'Wavy trail', 'range', [0, 3, 0.05]], ['style.color', 'Trail colour', 'color'], ['style.size', 'Size', 'range', [0.3, 3, 0.05]], ['style.explode', 'Explosion on impact', 'switch']],
   regions: [
@@ -382,6 +383,7 @@ function fireLevel(L, tm) {
   if (a === 'build') return 0.12 + 0.88 * ease(clamp(tau / (D * 0.6), 0, 1));
   if (a === 'dieout') return 1 - 0.9 * ease(clamp((tau - D * 0.35) / (D * 0.65), 0, 1));
   if (a === 'flare') return 1 + 0.6 * Math.exp(-((tau - D * 0.3) ** 2) / 0.35);
+  if (a === 'explode') { const E = 1.6; return tau < 0.25 ? 0.15 : tau < E ? 0.15 + 1.35 * ease(clamp((tau - 0.25) / 0.8, 0, 1)) : 1 + 0.5 * Math.exp(-(tau - E) / 1.5); }
   return 1;
 }
 function drawFirePlume(ctx, L, tm, o) {
@@ -523,6 +525,8 @@ function drawFirePlume(ctx, L, tm, o) {
     outer.drawImage(buf, 0, 0, BW, BH, bx0, by0, bw0, bh0);
     fb(0); outer.restore();
   }
+  // 5 · explosion (fireball, shock wave, debris) at the start
+  if (L.anim === 'explode' && !tm.edit) drawExplosion(ctx, L, tm, x, y, S, s);
   // 4 · embers / sparks
   if (s.embers !== false && I > 0.05) {
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -538,6 +542,55 @@ function drawFirePlume(ctx, L, tm, o) {
     }
     ctx.restore();
   }
+  ctx.restore();
+}
+function drawExplosion(ctx, L, tm, x, y, S, s) {
+  const tau = tm.tau ?? 99, E = 2.4 * clamp(+(s.blastLen ?? 1), 0.4, 3), e = tau / E;
+  if (e < 0 || e >= 1) return;
+  const B = clamp(+(s.blastSize ?? 1), 0.3, 4) * S, r = rng(hashStr((L.id || 'x') + 'b'));
+  ctx.save();
+  // flash
+  if (tau < 0.35) { ctx.globalCompositeOperation = 'lighter'; const fa = (1 - tau / 0.35) ** 1.5, R = 380 * B * (0.6 + tau); const g = ctx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, `rgba(255,250,230,${0.95 * fa})`); g.addColorStop(0.25, `rgba(255,210,120,${0.6 * fa})`); g.addColorStop(1, 'rgba(255,140,40,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fill(); }
+  // shock wave on the ground
+  if (s.shock !== false) {
+    const sw = clamp(e * 1.8, 0, 1), R = 24 * B + Math.pow(sw, 0.55) * 300 * B;
+    if (sw < 1) { ctx.globalCompositeOperation = 'source-over'; ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.5);
+      ctx.strokeStyle = `rgba(255,236,200,${0.75 * (1 - sw)})`; ctx.lineWidth = (10 * (1 - sw) + 1.5) * B; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke();
+      const g = ctx.createRadialGradient(0, 0, R * 0.7, 0, 0, R); g.addColorStop(0, 'rgba(120,100,80,0)'); g.addColorStop(1, `rgba(150,130,110,${0.35 * (1 - sw)})`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill(); ctx.restore(); }
+  }
+  // debris and sparks thrown out
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 46; i++) {
+    const a = r() * Math.PI * 2, v = (120 + r() * 260) * B, up = (80 + r() * 260) * B, t = tau * (0.9 + r() * 0.3);
+    if (t > 1.6) continue;
+    const px = x + Math.cos(a) * v * t, py = y + Math.sin(a) * v * 0.45 * t - up * t + 420 * B * t * t * 0.5;
+    const ox = x + Math.cos(a) * v * (t - 0.05), oy = y + Math.sin(a) * v * 0.45 * (t - 0.05) - up * (t - 0.05) + 420 * B * (t - 0.05) ** 2 * 0.5;
+    const al = clamp(1 - t / 1.6, 0, 1);
+    ctx.strokeStyle = `rgba(255,${180 + (i % 3) * 25},90,${al})`; ctx.lineWidth = (1 + (i % 3)) * B * 0.8; ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(px, py); ctx.stroke();
+  }
+  // fireball rising and rolling into black smoke
+  const rise = Math.pow(e, 0.7) * 150 * B, R0 = 30 * B + Math.pow(e, 0.45) * 95 * B;
+  const cx = x, cy = y - 20 * B - rise;
+  const puffs = 30;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < puffs; i++) {
+      const a = r() * Math.PI * 2, d = Math.sqrt(r()) * R0 * 0.85, pr = R0 * (0.35 + r() * 0.35);
+      const px = cx + Math.cos(a + e * 1.5) * d, py = cy + Math.sin(a + e * 1.5) * d * 0.75 + (i % 4) * 4 * B;
+      if (pass === 0) { // dark smoke grows as the fire cools
+        const da = clamp((e - 0.15) / 0.35, 0, 1) * (1 - Math.max(0, (e - 0.75) / 0.25)) * 0.8;
+        if (da <= 0.01) continue;
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = da; const sp = smokeSprite(SMOKE_TONES.black, i % 4); ctx.drawImage(sp, px - pr * 1.3, py - pr * 1.3, pr * 2.6, pr * 2.6); ctx.globalAlpha = 1;
+      } else { // burning core
+        const heat = clamp(1 - e * 1.6 + (1 - d / R0) * 0.35, 0, 1); if (heat <= 0.02) continue;
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        const c = heat > 0.7 ? '255,245,200' : heat > 0.4 ? '255,175,60' : '230,80,20';
+        g.addColorStop(0, `rgba(${c},${0.55 * heat})`); g.addColorStop(1, `rgba(${c},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, pr, 0, 7); ctx.fill();
+      }
+    }
+  }
+  // the column under the fireball
+  if (e < 0.7) { ctx.globalCompositeOperation = 'lighter'; const ca = (1 - e / 0.7) * 0.7, w = R0 * 0.35; const g = ctx.createLinearGradient(x, y, cx, cy); g.addColorStop(0, `rgba(255,200,90,${ca})`); g.addColorStop(1, `rgba(255,110,30,${ca * 0.3})`); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x - w * 0.6, y); ctx.quadraticCurveTo(x - w * 0.3, (y + cy) / 2, cx - w, cy); ctx.lineTo(cx + w, cy); ctx.quadraticCurveTo(x + w * 0.3, (y + cy) / 2, x + w * 0.6, y); ctx.closePath(); ctx.fill(); }
   ctx.restore();
 }
 function drawFireClassic(ctx, s, x, y, S, t, ph0) {
