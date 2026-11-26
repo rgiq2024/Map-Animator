@@ -50,7 +50,8 @@ export const BR_FORMS = {
   briefmark: [['style.text', 'Label', 'text'], ['style.sub', 'Second line', 'text'], ['style.dx', 'Label offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Label offset ↑↓', 'range', [-400, 400, 1]], ['style.accent', 'Colour', 'color'], ['style.ring', 'Pulsing ring', 'switch'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
   briefing: [
     ['style.layout', 'Layout', 'select', LAYOUTS],
-    ['style.globeLook', 'Globe look', 'select', { dots: 'Dot matrix (dotted land)', theme: 'From the theme', land: 'Solid land', grid: 'Grid lines' }],
+    ['style.globeLook', 'Intro globe look', 'select', { dots: 'Dot matrix (dotted land)', theme: 'From the theme', land: 'Solid land', grid: 'Grid lines' }, (L) => L.style.layout === 'intro'],
+    ['style.mofaMain', 'Main picture', 'select', { after: 'Your AFTER picture (if you added one)', map: 'The live map / satellite imagery' }, (L) => L.style.layout === 'mofa'],
     ['style.lensMag', 'Lens zoom (×)', 'range', [1.5, 10, 0.1], (L) => L.style.layout === 'mofa'], ['style.lensSize', 'Lens size', 'range', [0.4, 2, 0.05], (L) => L.style.layout === 'mofa'],
     ['style.lensRing', 'Lens tick ring', 'switch', null, (L) => L.style.layout === 'mofa'], ['style.lensMarker', 'Pulsing marker in the lens', 'switch', null, (L) => L.style.layout === 'mofa'],
     ['style.cells', 'Info bar — one “Label | Value” per line (empty = date, place, event, assessment)', 'textarea', null, (L) => L.style.layout === 'mofa'],
@@ -672,7 +673,7 @@ export function drawBriefing(ctx, L, tm, o) {
   const TH = BR_THEMES[L.style.theme] || BR_THEMES.navy;
   if (TH.font && !fontsAsked.has(TH.font) && typeof document !== 'undefined' && document.fonts?.load) { fontsAsked.add(TH.font); Promise.all([500, 600, 700].map((w) => document.fonts.load(`${w} 20px "${TH.font}"`))).then(() => lastMapRepaint()).catch(() => {}); }
   const keep = [DISP, SANS, MONO, GLOBE_LOOK];
-  DISP = TH.disp; SANS = TH.sans; MONO = TH.mono; GLOBE_LOOK = L.style.globeLook === 'theme' ? TH.globe : L.style.globeLook || 'dots';
+  DISP = TH.disp; SANS = TH.sans; MONO = TH.mono; GLOBE_LOOK = TH.globe;
   FX = [];
   try { drawFrameBody(ctx, L, tm, o); } finally { [DISP, SANS, MONO, GLOBE_LOOK] = keep; }
   drawFx(ctx);
@@ -809,7 +810,9 @@ function drawFrameBody(ctx, L, tm, o) {
     ctx.save(); ctx.globalAlpha *= stage(0); if (!partOn(s, 'introGlobe')) ctx.globalAlpha = 0;
     const glow = ctx.createRadialGradient(cx, gy, R * 0.9, cx, gy, R * 1.12);
     glow.addColorStop(0, hexA(acc, 0.28)); glow.addColorStop(1, hexA(acc, 0)); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, gy, R * 1.12, 0, Math.PI * 2); ctx.fill();
+    const keepG = GLOBE_LOOK; GLOBE_LOOK = s.globeLook === 'theme' ? (BR_THEMES[s.theme] || BR_THEMES.navy).globe : s.globeLook || 'dots';
     const G = ll && globeImage(ll[0], clamp(ll[1] - 28, -60, 60), Math.round(R / 8) * 8, '', acc);
+    GLOBE_LOOK = keepG;
     if (G) { ctx.save(); ctx.beginPath(); ctx.arc(cx, gy, R, 0, Math.PI * 2); ctx.clip(); ctx.globalAlpha *= 0.9; ctx.drawImage(G.cv, cx - G.S / 2, gy - G.S / 2); ctx.restore(); }
     else { ctx.fillStyle = '#0a1d36'; ctx.beginPath(); ctx.arc(cx, gy, R, 0, Math.PI * 2); ctx.fill(); }
     ctx.strokeStyle = hexA(acc, 0.7); ctx.lineWidth = 1.4 * u; ctx.beginPath(); ctx.arc(cx, gy, R, 0, Math.PI * 2); ctx.stroke();
@@ -931,6 +934,16 @@ function drawFrameBody(ctx, L, tm, o) {
   if (Bx.mofa) {
     // ---- MOFA: map fills the frame; title top-left, dotted globe, before inset, AFTER label, magnifier lens, info bar
     const [wx, wy, ww, wh] = win;
+    // your AFTER picture fills the window (the site is the middle of the picture); otherwise the live map shows
+    const AF = BA[1]?.media && s.mofaMain !== 'map' ? imageFor(BA[1].media) : null;
+    if (AF && !AF.ready) AF.p?.then?.(() => o.map?.triggerRepaint?.());
+    let main = null;
+    if (AF?.ready) {
+      const z = Math.max(1, +BA[1].zoom || 1), kk2 = Math.max(ww / AF.w, wh / AF.h) * z, dw = AF.w * kk2, dh = AF.h * kk2;
+      const ox = wx + (ww - dw) / 2 - (+BA[1].px || 0) * (dw - ww) / 2, oy = wy + (wh - dh) / 2 - (+BA[1].py || 0) * (dh - wh) / 2;
+      main = { k: kk2, ox, oy, dw, dh, site: [ox + dw / 2, oy + dh / 2] };
+      if (partOn(s, 'frame')) { ctx.save(); rr(ctx, wx, wy, ww, wh, 6 * u); ctx.clip(); ctx.drawImage(AF.bmp, ox, oy, dw, dh); ctx.restore(); ctx.strokeStyle = hexA(acc, 0.5); ctx.lineWidth = 1.2 * u; rr(ctx, wx, wy, ww, wh, 6 * u); ctx.stroke(); }
+    }
     ctx.save(); rr(ctx, wx, wy, ww, wh, 6 * u); ctx.clip(); if (!partOn(s, 'titleBlock')) ctx.globalAlpha = 0;
     const lf = ctx.createLinearGradient(wx, 0, wx + ww * 0.45, 0); lf.addColorStop(0, 'rgba(3,9,18,0.72)'); lf.addColorStop(1, 'rgba(3,9,18,0)'); ctx.fillStyle = lf; ctx.fillRect(wx, wy, ww * 0.45, wh);
     const bf = ctx.createLinearGradient(0, wy + wh * 0.7, 0, wy + wh); bf.addColorStop(0, 'rgba(3,9,18,0)'); bf.addColorStop(1, 'rgba(3,9,18,0.6)'); ctx.fillStyle = bf; ctx.fillRect(wx, wy + wh * 0.7, ww, wh * 0.3);
@@ -986,14 +999,20 @@ function drawFrameBody(ctx, L, tm, o) {
     }
     // magnifier lens: a small ring on the site, a line, and a big lens showing it enlarged
     if (partOn(s, 'lens') && ll) {
-      const p = o.proj(ll), mag = clamp(+s.lensMag || 3, 1.2, 12);
+      const p = main ? main.site : o.proj(ll), mag = clamp(+s.lensMag || 3, 1.2, 12);
       const BR = Bx.lens[2] * fr.w * clamp(+s.lensSize || 1, 0.3, 2.5), sr = BR / mag;
       const grow = easeOut(reveal('lens'));
       ctx.save(); ctx.globalAlpha *= stage(3);
       const cx = fr.x + Bx.lens[0] * fr.w, cy = fr.y + Bx.lens[1] * fr.h;
       const [dx, dy] = at('lens', [cx - BR, cy - BR, 2 * BR, 2 * BR]);
       // the enlarged view (grabbed before anything is drawn on top of it)
-      const grab = lensGrab(ctx, L, o, ll, p, 2 * BR, 2 * BR, mag, dx, dy);
+      let grab = null;
+      if (main) { // straight from the picture, at its full resolution
+        const T = ctx.getTransform(), Sx = Math.abs(T.a) || 1, cw2 = Math.max(2, Math.round(2 * BR * Sx));
+        let C = LENS_CV.get(L.id + ':lensimg'); if (!C || C.width !== cw2) { C = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(cw2, cw2) : Object.assign(document.createElement('canvas'), { width: cw2, height: cw2 }); LENS_CV.set(L.id + ':lensimg', C); }
+        const g = C.getContext('2d'), side2 = (2 * BR / mag) / main.k; g.clearRect(0, 0, cw2, cw2);
+        g.drawImage(AF.bmp, AF.w / 2 - side2 / 2, AF.h / 2 - side2 / 2, side2, side2, 0, 0, cw2, cw2); grab = C;
+      } else grab = lensGrab(ctx, L, o, ll, p, 2 * BR, 2 * BR, mag, dx, dy);
       const R = BR * grow;
       if (R > 1) {
         ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();

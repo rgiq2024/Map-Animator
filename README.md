@@ -416,3 +416,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - New 'Ship sinking' element (flare, MAYDAY, list, sinking, foam, debris, life rafts, storm + horn sound).
 - Panning/zooming the map in a scene with a moving camera now moves the whole camera path (sticks when played). 3D 'Sink' motion for ship models + 3D ship sinking buttons; Ship sinking 2D follows map rotation and can hide its flat ship.
 - GEO·BRIEF: dot-matrix globe (default; 'Globe look' setting) and new MOFA layout (full map, magnifier lens with connector, BEFORE inset, AFTER label, info bar).
+- GEO·BRIEF: dot-matrix only on the intro globe; MOFA layout fills the frame with your AFTER picture (lens magnifies it) — 'Main picture' setting.
