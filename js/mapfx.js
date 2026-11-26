@@ -16,6 +16,7 @@ export const MX_KINDS = {
   dofblur: { name: 'Depth of field', icon: '◎', geom: null, desc: 'A camera focus band across the map — everything above and below goes soft, like a tilted lens; the focus can rack from near to far, labels can blur with it. Pair it with “Make the camera drift” for a continuous pan' },
   inkreveal: { name: 'Ink-spread reveal', icon: '🩸', geom: 'polygon', desc: 'An area fills like ink spreading on paper from a starting point, with smoky edges that settle into a clean shape' },
   flickerzones: { name: 'Flickering districts', icon: '▦', geom: null, desc: 'Districts, regions or countries flash bright and dark like a failing light, then settle into an outlined map' },
+  shipsink: { name: 'Ship sinking', icon: '🚢', geom: 'point', desc: 'A ship seen from above in rough sea: distress flare and MAYDAY rings, it lists over and goes down, leaving foam, bubbles, debris and life rafts — with storm and horn sounds' },
   layerswipe: { name: 'Layer swipe (compare two layers)', icon: '◧', geom: null, desc: 'Compare any two layers you added — two road networks (GeoJSON, shapefile, KML), two GeoTIFF / raster images, or any elements — with a divider that slides across the map: one dataset on each side, labelled' },
   softlabel: { name: 'Soft map label', icon: 'Aa', geom: 'point', desc: 'A soft white label on the map — “Track Point 1” — that fades and drifts in, and blurs with the depth of field' },
 };
@@ -23,6 +24,7 @@ export const MX_ANIMS = {
   dofblur: { rack: 'Focus racks from one place to another', breathe: 'Focus drifts back and forth', fade: 'Blur fades in', none: 'Fixed focus' },
   inkreveal: { spread: 'Ink spreads from the start point', fade: 'Fade in', none: 'Shown' },
   flickerzones: { flicker: 'Flicker, then settle', strobe: 'Keep flickering', fade: 'Fade in', none: 'Shown' },
+  shipsink: { sink: 'Lists over, then sinks', list: 'Lists over (stays afloat)', afloat: 'Afloat in rough sea', gone: 'After the sinking (foam, debris, rafts)' },
   layerswipe: { sweep: 'Swipe across and back', once: 'Swipe once (A → B)', hold: 'Fixed divider (no movement)', blink: 'Cross-fade A ↔ B (no divider)' },
   softlabel: { rise: 'Fade in and drift up', fade: 'Fade in', type: 'Type on', none: 'Shown' },
 };
@@ -30,10 +32,11 @@ export const MX_DEFAULTS = {
   dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient-2' },
   inkreveal: { snd: 'inkbleed', sndDur: 2, color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
   flickerzones: { from: 'countries', layerId: '', countries: 'France, Germany, Italy, Spain, Poland, Belgium, Netherlands, Switzerland, Austria, Czechia', data: '', sample: '', color: '#ffffff', fill: 0.18, stroke: '#ffffff', strokeWidth: 1.2, rate: 12, flickerFor: 2.2, maxA: 0.9, sound: true, soundVol: 1 },
+  shipsink: { type: 'tanker', name: 'MED EMRE', size: 1, heading: 35, listSide: 1, maxList: 90, storm: 1, flare: true, mayday: true, maydayText: 'MAYDAY', rafts: 3, sheen: false, nameTag: true, sound: true, soundVol: 0.7 },
   layerswipe: { layerA: '', layerB: '', dir: 'lr', split: 0.5, cycles: 1, hold: 0.12, labels: true, labelA: 'Dataset A', labelB: 'Dataset B', labelPos: 'top', textSize: 1, lineColor: '#ffffff', lineWidth: 3, knob: true, chips: true },
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
 };
-const DUR = { layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
+const DUR = { shipsink: 12, layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
 export const MX_LAYER_DEFAULTS = Object.fromEntries(Object.keys(MX_KINDS).map((k) => [k, { anim: Object.keys(MX_ANIMS[k])[0], duration: DUR[k], style: MX_DEFAULTS[k] }]));
 export const MX_FORMS = {
   dofblur: [
@@ -75,6 +78,130 @@ export const MX_FORMS = {
 };
 export const MX_SET = new Set(Object.keys(MX_KINDS));
 export const mxPhases = (k) => (k === 'inkreveal' || k === 'flickerzones' ? ['below'] : ['captions']);
+
+// ---------------------------------------------------------------- ship sinking
+function drawShipSink(ctx, L, tm, o) {
+  if (L.geom?.type !== 'Point') return;
+  const s = L.style, u0 = o.unit, A = tm.alpha ?? 1; if (A <= 0) return;
+  const [x, y] = o.proj(L.geom.coordinates);
+  const D = Math.max(1, +L.duration || 12), tau = o.time == null ? D * 0.42 : o.time - (+L.start || 0);
+  const k = clamp(tau / D, 0, 1), t = o.time ?? 0;
+  const an = L.anim || 'sink';
+  const listU = an === 'afloat' ? 0 : an === 'gone' ? 1 : ease(seg(k, 0.18, an === 'list' ? 0.7 : 0.52));
+  const sinkU = an === 'sink' ? ease(seg(k, 0.52, 0.82)) : an === 'gone' ? 1 : 0;
+  const afterU = an === 'sink' ? seg(k, 0.6, 1) : an === 'gone' ? 1 : 0;
+  const S = u0 * clamp(+s.size || 1, 0.3, 5), Lp = 120 * S, Wp = Lp * (s.type === 'boat' || s.type === 'fishing' ? 0.3 : 0.15);
+  const ang = (+s.heading || 0) * D2R, side = +s.listSide < 0 ? -1 : 1;
+  const lst = listU * clamp(+s.maxList || 90, 10, 90) * D2R;
+  const r = (i) => { const v = Math.sin(i * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  ctx.save(); ctx.globalAlpha *= A;
+  // rough sea: whitecaps drifting around the ship
+  const storm = clamp(+(s.storm ?? 1), 0, 3);
+  if (storm > 0) {
+    const R = Lp * 4.5, n = Math.round(70 * storm);
+    ctx.strokeStyle = 'rgba(235,245,255,0.55)'; ctx.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const ph = (t * 0.25 + r(i)) % 1, a = r(i + 50) * 6.283, d = Math.sqrt(r(i + 90)) * R;
+      const px = x + Math.cos(a) * d + ph * 30 * S, py = y + Math.sin(a) * d * 0.8 + ph * 12 * S;
+      const al = Math.sin(ph * Math.PI) * 0.6 * Math.min(1, storm);
+      ctx.globalAlpha = A * al; ctx.lineWidth = (1 + r(i + 7) * 1.5) * S; const w = (6 + r(i + 3) * 12) * S;
+      ctx.beginPath(); ctx.moveTo(px - w / 2, py); ctx.quadraticCurveTo(px, py - 2 * S, px + w / 2, py); ctx.stroke();
+    }
+    ctx.globalAlpha = A;
+  }
+  // fuel sheen after the sinking
+  if (s.sheen && afterU > 0) {
+    ctx.save(); ctx.translate(x + 30 * S * afterU, y + 10 * S * afterU); ctx.rotate(0.4); ctx.scale(1, 0.55);
+    const R = Lp * (0.6 + afterU * 1.6); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+    g.addColorStop(0, `rgba(40,30,60,${0.35 * afterU})`); g.addColorStop(0.5, `rgba(120,60,140,${0.18 * afterU})`); g.addColorStop(0.75, `rgba(60,140,120,${0.12 * afterU})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill(); ctx.restore();
+  }
+  // MAYDAY pulse rings
+  if (s.mayday !== false && an !== 'afloat' && an !== 'gone' && k < 0.58) {
+    for (let i = 0; i < 3; i++) { const ph = ((tau * 0.6 + i / 3) % 1); const R = Lp * (0.6 + ph * 2.6); ctx.strokeStyle = `rgba(255,60,60,${0.7 * (1 - ph)})`; ctx.lineWidth = 2.5 * S; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.stroke(); }
+  }
+  // foam ring + wake around the hull
+  const foamA = 0.35 + 0.4 * listU + 0.3 * sinkU - 0.6 * afterU;
+  if (foamA > 0.02) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    for (let i = 0; i < 40; i++) { const a = r(i + 200) * 6.283, ph = (t * 0.7 + r(i + 300)) % 1; const ex = Math.cos(a) * (Lp * 0.55 + ph * 14 * S), ey = Math.sin(a) * (Wp * 0.9 + 6 * S + ph * 10 * S + Wp * listU * 0.8);
+      ctx.fillStyle = `rgba(245,250,255,${clamp(foamA * (1 - ph), 0, 1) * 0.8})`; ctx.beginPath(); ctx.ellipse(ex, ey, (4 + r(i) * 6) * S, (2 + r(i + 1) * 3) * S, 0, 0, 7); ctx.fill(); }
+    ctx.restore();
+  }
+  // the ship (hidden progressively as it goes under, stern last)
+  if (sinkU < 1) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+    const bob = Math.sin(t * 1.7) * 1.5 * S * (1 - listU);
+    ctx.translate(0, bob);
+    const vis = 1 - sinkU; // fraction of length still above water (bow goes first)
+    ctx.beginPath(); ctx.rect(-Lp, -Lp, Lp * 2, Lp * 2); ctx.clip();
+    ctx.save(); ctx.beginPath(); ctx.rect(-Lp / 2 - 2, -Lp, Lp * vis + 4, Lp * 2); ctx.clip();
+    ctx.globalAlpha *= 1 - sinkU * 0.5;
+    const cw = Wp * Math.cos(lst), sh = Wp * 0.9 * Math.sin(lst); // deck width seen from above, hull side seen
+    const hull = (w) => { ctx.beginPath(); ctx.moveTo(-Lp / 2, -w / 2); ctx.lineTo(Lp * 0.36, -w / 2); ctx.quadraticCurveTo(Lp / 2, -w * 0.2, Lp / 2 + 2 * S, 0); ctx.quadraticCurveTo(Lp / 2, w * 0.2, Lp * 0.36, w / 2); ctx.lineTo(-Lp / 2, w / 2); ctx.closePath(); };
+    // shadow / underwater dark hull
+    ctx.save(); ctx.translate(0, side * (cw / 2 + sh / 2)); ctx.fillStyle = 'rgba(0,10,20,0.35)'; hull(Math.max(cw, 2) + sh + 6 * S); ctx.fill(); ctx.restore();
+    // hull side (black topsides, red bottom) as the ship rolls
+    if (sh > 0.5) { ctx.save(); ctx.translate(0, side * (cw / 2 + sh / 2)); hull(sh);
+      const g = ctx.createLinearGradient(0, -side * sh / 2, 0, side * sh / 2); g.addColorStop(0, '#1c1f24'); g.addColorStop(0.55, '#24272c'); g.addColorStop(0.56, '#8f2a20'); g.addColorStop(1, '#6e1d16'); ctx.fillStyle = g; ctx.fill(); ctx.restore(); }
+    // deck
+    if (cw > 0.6) {
+      ctx.save(); hull(cw);
+      const deck = s.type === 'tanker' ? '#9b3a2c' : s.type === 'cargo' ? '#3b4148' : s.type === 'ferry' ? '#e9ecef' : s.type === 'fishing' ? '#2f6f9a' : '#e6e6e6';
+      ctx.fillStyle = deck; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 0.8 * S; ctx.stroke(); ctx.clip();
+      ctx.scale(1, Math.max(0.05, cw / Wp));
+      if (s.type === 'tanker') { ctx.strokeStyle = '#d9d3c4'; ctx.lineWidth = 1.2 * S; ctx.beginPath(); ctx.moveTo(-Lp * 0.28, 0); ctx.lineTo(Lp * 0.42, 0); ctx.stroke(); for (let i = 0; i < 6; i++) { const px = -Lp * 0.2 + i * Lp * 0.1; ctx.beginPath(); ctx.moveTo(px, -Wp * 0.3); ctx.lineTo(px, Wp * 0.3); ctx.stroke(); } }
+      if (s.type === 'cargo') { const cols = ['#c0392b', '#2471a3', '#d4ac0d', '#7d3c98', '#1e8449']; for (let i = 0; i < 12; i++) for (let j = 0; j < 3; j++) { ctx.fillStyle = cols[(i * 3 + j) % 5]; ctx.fillRect(-Lp * 0.25 + i * Lp * 0.055, -Wp * 0.4 + j * Wp * 0.27, Lp * 0.05, Wp * 0.24); } }
+      // superstructure at the stern
+      ctx.fillStyle = s.type === 'ferry' ? '#ffffff' : '#f1f1ec'; const bw = s.type === 'ferry' ? Lp * 0.7 : Lp * 0.12;
+      ctx.fillRect(-Lp * 0.47, -Wp * 0.4, bw, Wp * 0.8);
+      ctx.fillStyle = '#2b2f36'; ctx.fillRect(-Lp * 0.43, -Wp * 0.08, Lp * 0.04, Wp * 0.16);
+      ctx.restore();
+    }
+    ctx.restore();
+    // water washing over the sinking part
+    if (sinkU > 0 && sinkU < 1) { const wx = -Lp / 2 + Lp * vis, R = Wp * 1.6 + 8 * S; for (let i = 0; i < 12; i++) { const a = r(i + 700) * 6.283, d = r(i + 710) * R, ph = (t * 1.3 + r(i + 720)) % 1; ctx.fillStyle = `rgba(240,248,255,${0.55 * (1 - ph)})`; ctx.beginPath(); ctx.ellipse(wx + Math.cos(a) * d * 0.5, Math.sin(a) * d, (4 + ph * 7) * S, (2.5 + ph * 4) * S, 0, 0, 7); ctx.fill(); } }
+    ctx.restore();
+  }
+  // bubbles, debris and life rafts after it goes down
+  if (afterU > 0 || sinkU > 0.6) {
+    const ba = Math.max(sinkU > 0.6 ? (sinkU - 0.6) / 0.4 : 0, 1 - afterU * 0.8);
+    for (let i = 0; i < 26; i++) { const ph = (t * 0.9 + r(i + 400)) % 1, a = r(i + 410) * 6.283, d = r(i + 420) * Lp * 0.5;
+      ctx.strokeStyle = `rgba(240,250,255,${0.7 * ba * (1 - ph)})`; ctx.lineWidth = 1 * S; ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6, (1 + ph * 5) * S, 0, 7); ctx.stroke(); }
+    const R = Lp * (0.4 + afterU * 0.9);
+    for (let i = 0; i < 14; i++) { const a = r(i + 500) * 6.283, d = Math.sqrt(r(i + 510)) * R; ctx.fillStyle = `rgba(${i % 3 ? '90,70,50' : '200,200,190'},${0.8 * afterU})`; ctx.fillRect(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, (2 + r(i) * 4) * S, (1.5 + r(i + 1) * 2) * S); }
+    const nr = Math.round(clamp(+(s.rafts ?? 3), 0, 8));
+    for (let i = 0; i < nr; i++) { const a = r(i + 600) * 6.283, d = Lp * (0.5 + r(i + 610) * 0.5) * (0.6 + afterU * 0.6), px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.7, rr = 5 * S;
+      ctx.globalAlpha = A * clamp(afterU * 3, 0, 1); ctx.fillStyle = '#ff7a00'; ctx.beginPath(); ctx.arc(px, py, rr, 0, 7); ctx.fill(); ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(px - rr * 0.25, py - rr * 0.25, rr * 0.55, 0, 7); ctx.fill(); }
+    ctx.globalAlpha = A;
+  }
+  // red distress flare: rises, hangs and drifts down glowing
+  if (s.flare !== false && an !== 'afloat' && an !== 'gone') {
+    const ft = tau - D * 0.05, FL = D * 0.45;
+    if (ft > 0 && ft < FL) {
+      const f = ft / FL, up = ft < 0.8 ? ease(ft / 0.8) : 1 - (f - 0.8 / FL) * 0.5;
+      const fx = x + Lp * 0.2 + f * 30 * S, fy = y - up * 150 * S;
+      ctx.strokeStyle = 'rgba(220,220,220,0.35)'; ctx.lineWidth = 2 * S; ctx.beginPath(); ctx.moveTo(x + Lp * 0.2, y); ctx.quadraticCurveTo(fx - 8 * S, (y + fy) / 2, fx, fy); ctx.stroke();
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; const fl = 0.85 + 0.15 * Math.sin(t * 31);
+      const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, 70 * S); g.addColorStop(0, `rgba(255,220,210,${fl})`); g.addColorStop(0.12, `rgba(255,60,40,${0.8 * fl})`); g.addColorStop(1, 'rgba(255,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(fx, fy, 70 * S, 0, 7); ctx.fill();
+      const gg = ctx.createRadialGradient(x, y, 0, x, y, Lp * 1.6); gg.addColorStop(0, `rgba(255,40,30,${0.18 * fl})`); gg.addColorStop(1, 'rgba(255,0,0,0)'); ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, Lp * 1.6, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+  }
+  // labels
+  const fs = 12 * u0;
+  ctx.font = `700 ${fs}px Inter, system-ui, sans-serif`; ctx.textBaseline = 'middle';
+  if (s.mayday !== false && an !== 'afloat' && an !== 'gone' && k < 0.6 && s.maydayText) {
+    const on = Math.floor(tau * 2.4) % 2 === 0; if (on) { const tw = ctx.measureText(s.maydayText).width + fs; ctx.fillStyle = 'rgba(200,20,20,0.9)'; ctx.beginPath(); ctx.roundRect(x - tw / 2, y - Lp * 0.75 - fs, tw, fs * 1.8, 3 * u0); ctx.fill(); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(s.maydayText, x, y - Lp * 0.75 - fs * 0.1); }
+  }
+  if (s.nameTag !== false && s.name) {
+    const tx = x + Lp * 0.75, ty = y + Lp * 0.35, tw = ctx.measureText(s.name).width + fs;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1 * u0; ctx.beginPath(); ctx.moveTo(x + Lp * 0.25, y + Wp * 0.4); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.fillStyle = 'rgba(8,14,22,0.85)'; ctx.beginPath(); ctx.roundRect(tx, ty - fs * 0.9, tw, fs * 1.8, 3 * u0); ctx.fill(); ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(s.name, tx + fs / 2, ty);
+  }
+  ctx.restore();
+}
 
 // ---------------------------------------------------------------- layer swipe
 /** divider position 0..1 (fraction of the frame showing A) for a swipe layer at time t (null = editing) */
@@ -322,9 +449,11 @@ export function drawMapFx(ctx, L, tm, o, phase) {
   if (L.kind === 'flickerzones' && phase === 'below') return drawFlicker(ctx, L, tm, o);
   if (L.kind === 'softlabel' && phase === 'captions') return drawSoft(ctx, L, tm, o);
   if (L.kind === 'layerswipe' && phase === 'captions') return drawSwipe(ctx, L, tm, o);
+  if (L.kind === 'shipsink' && phase === 'captions') return drawShipSink(ctx, L, tm, o);
   return undefined;
 }
 export function mxSoundEvents(L) {
+  if (L.kind === 'shipsink') { const st = L.style || {}; if (st.sound === false) return []; const t0 = +L.start || 0, D = Math.max(1, +L.duration || 12), v = st.soundVol ?? 0.7; return [{ t: t0, type: 'storm', p: { dur: D + (+L.hold || 0), vol: v * 0.7 } }, { t: t0 + D * 0.05, type: 'horn', p: { vol: v } }, { t: t0 + D * 0.15, type: 'horn', p: { vol: v * 0.8 } }]; }
   const s = L.style || {}; if (s.sound === false) return [];
   const t0 = +L.start || 0, D = Math.max(0.3, +L.duration || 2), v = s.soundVol ?? 1;
   if (L.kind === 'dofblur') return [{ t: t0, type: 'clip', p: { clip: 'dof-ambient-2', dur: D, vol: v, fadeIn: 0.8, fadeOut: 1.2 } }];
