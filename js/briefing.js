@@ -9,6 +9,7 @@ import { H, allCountries, countriesByName, countryAt } from './cartofx.js';
 import { imageFor } from './geoimage.js';
 import { newScene } from './scene.js';
 import { brandSafeArea } from './branding.js';
+import { unwrapRing } from './antimeridian.js';
 
 const { clamp, easeOut, D2R, rr, merc, drawTiles, bboxOf, labelPoint } = H;
 let DISP = '"Archivo", Inter, system-ui, sans-serif';
@@ -40,14 +41,19 @@ export const BR_DEFAULTS = {
     theme: 'navy', logo: '', logo2: '', logoSize: 1, logo2Size: 1, logoPlace: 'top', slides: [], slideSec: 3, slideTitle: 'Photos from the site', slideFx: 'scan',
     header: false, headerText: true, headerOrg: true, headerBrand: true, headerRight: true, org: 'Your organization', unit: 'Geospatial unit', brand: 'GEO·BRIEF', tickerOn: false, ticker: '', tickerLabel: 'Breaking', north: true, sync: true,
     dateLabel: 'Incident date', placeLabel: 'Location', eventLabel: 'Event', assessLabel: 'Assessment', locatorTitle: 'Location', sideTitle: 'Site analysis (before / after)',
+    globeLook: 'dots', lensMag: 3, lensSize: 1, lensRing: true, lensMarker: true, cells: '',
   } },
 };
-const LAYOUTS = { intro: 'Intro — title over a globe', zoom: 'Zoom to location — from space down to the place', A: 'Analysis — globe + title left, before / after under the map', B: 'Dashboard — title, map, regional context, before / after, field strip', full: 'Full view — map full frame, title block, mini globe', photos: 'Photos — photo slideshow with captions and a map inset', end: 'Closing card' };
+const LAYOUTS = { intro: 'Intro — title over a globe', zoom: 'Zoom to location — from space down to the place', A: 'Analysis — globe + title left, before / after under the map', B: 'Dashboard — title, map, regional context, before / after, field strip', full: 'Full view — map full frame, title block, mini globe', mofa: 'MOFA — full map, magnifier lens, before inset, info bar', photos: 'Photos — photo slideshow with captions and a map inset', end: 'Closing card' };
 const ICONS = { alert: 'Alert', train: 'Train', flood: 'Flood', fire: 'Fire', quake: 'Earthquake', storm: 'Storm', plane: 'Plane', ship: 'Ship', car: 'Car', pin: 'Place', migration: 'People / migration', forest: 'Forest' };
 export const BR_FORMS = {
   briefmark: [['style.text', 'Label', 'text'], ['style.sub', 'Second line', 'text'], ['style.dx', 'Label offset ←→', 'range', [-500, 500, 1]], ['style.dy', 'Label offset ↑↓', 'range', [-400, 400, 1]], ['style.accent', 'Colour', 'color'], ['style.ring', 'Pulsing ring', 'switch'], ['style.size', 'Size', 'range', [0.5, 2.5, 0.05]]],
   briefing: [
     ['style.layout', 'Layout', 'select', LAYOUTS],
+    ['style.globeLook', 'Globe look', 'select', { dots: 'Dot matrix (dotted land)', theme: 'From the theme', land: 'Solid land', grid: 'Grid lines' }],
+    ['style.lensMag', 'Lens zoom (×)', 'range', [1.5, 10, 0.1], (L) => L.style.layout === 'mofa'], ['style.lensSize', 'Lens size', 'range', [0.4, 2, 0.05], (L) => L.style.layout === 'mofa'],
+    ['style.lensRing', 'Lens tick ring', 'switch', null, (L) => L.style.layout === 'mofa'], ['style.lensMarker', 'Pulsing marker in the lens', 'switch', null, (L) => L.style.layout === 'mofa'],
+    ['style.cells', 'Info bar — one “Label | Value” per line (empty = date, place, event, assessment)', 'textarea', null, (L) => L.style.layout === 'mofa'],
     ['style.theme', 'Theme', 'select', Object.fromEntries(Object.entries(BR_THEMES).map(([k, t]) => [k, t.name]))],
     ['style._parts', 'Parts — untick to remove one', 'brparts', null, (L) => !L.style.only],
     ['style._split', 'Make every part its own layer', 'brsplit', null, (L) => !L.style.only],
@@ -102,6 +108,7 @@ export const BR_PARTS = {
   B: [['heading', 'Title'], ['locator', 'Locator map'], ['side', 'Before / after panel'], ['strip', 'Field strip'], ['tag', 'Place label'], ['scale', 'Scale bar'], ['north', 'North arrow']],
   zoom: [['tag', 'Place label'], ['globe', 'Mini globe'], ['titleBlock', 'Title block']],
   full: [['titleBlock', 'Title block'], ['globe', 'Mini globe'], ['side', 'Before / after'], ['tag', 'Place label']],
+  mofa: [['titleBlock', 'Title block'], ['globe', 'Globe'], ['before', 'Before inset'], ['afterTag', 'After label'], ['lens', 'Magnifier lens'], ['bar', 'Info bar']],
   photos: [['slide', 'Photo'], ['strip', 'Thumbnails'], ['caption', 'Caption panel'], ['tag', 'Place label']],
   end: [['endTitle', 'Title'], ['endFields', 'Fields'], ['endSources', 'Sources']],
 };
@@ -122,6 +129,7 @@ export function layoutBoxes(layout, aspect, hasThumbs = true, opt = {}) {
   if (layout === 'B') return { top, bot, header: R(0.03, 0, 0.64, 0.12), win: R(0.03, 0.15, 0.64, 0.68), locator: R(0.69, 0, 0.28, 0.4), side: R(0.69, 0.43, 0.28, 0.4), strip: R(0.03, 0.865, 0.94, 0.135) };
   if (layout === 'photos') return { photos: true, top, bot, slide: R(0.03, 0, 0.64, 0.82), strip: R(0.03, 0.85, 0.64, 0.15), win: R(0.69, 0, 0.28, 0.42), cap: R(0.69, 0.45, 0.28, 0.55) };
   if (layout === 'zoom') return { full: true, zoom: true, top, bot, win: R(0.02, 0, 0.96, 1), mini: [0.895, top + 0.17 * H, 0.062], titleBlock: R(0.05, 0.62, 0.55, 0.34), thumbs: null };
+  if (layout === 'mofa') return { mofa: true, top, bot, win: R(0.02, 0, 0.96, 1), titleBlock: R(0.03, 0.02, 0.44, 0.25), mini: [0.098, top + 0.47 * H, 0.058], before: R(0.03, 0.66, 0.215, 0.32), bar: R(0.3, 0.83, 0.66, 0.15), lens: [0.68, top + 0.47 * H, 0.118], thumbs: null };
   if (layout === 'full') return { full: true, top, bot, win: R(0.02, 0, 0.96, 1), mini: [0.895, top + 0.17 * H, 0.062], titleBlock: R(0.05, 0.62, 0.55, 0.34), thumbs: hasThumbs ? [R(0.66, 0.66, 0.15, 0.28), R(0.82, 0.66, 0.15, 0.28)] : null };
   return { top, bot, left: R(0.03, 0, 0.265, 1), globe: [0.1625, top + 0.24 * H, 0.095], title: R(0.03, 0.5, 0.265, 0.2), info: R(0.03, 0.73, 0.265, 0.27), win: R(0.315, 0, 0.66, hasThumbs ? 0.6 : 1), thumbs: hasThumbs ? [R(0.315, 0.64, 0.31, 0.36), R(0.665, 0.64, 0.31, 0.36)] : null };
 }
@@ -194,9 +202,62 @@ function icon(ctx, name, x, y, s, col) {
 
 // ---------------------------------------------------------------- globe (orthographic, cached)
 const globes = new Map();
+// land masks (equirectangular, 4 px per degree) for the dot-matrix globe
+const MASKS = new Map();
+function landMask(name = '') {
+  if (MASKS.has(name)) return MASKS.get(name);
+  const C = name ? (countriesByName(name) || []) : allCountries();
+  if (!C || (!name && !C.length)) return null;
+  const W = 1440, Hh = 720;
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, Hh) : Object.assign(document.createElement('canvas'), { width: W, height: Hh });
+  const g = cv.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#fff';
+  for (const c of C) for (const p of c.polys) {
+    for (const ring0 of p) {
+      const ring = unwrapRing(ring0).ring;
+      for (const sh of [-360, 0, 360]) { g.beginPath(); ring.forEach(([lo, la], i) => { const x = (lo + sh + 180) * 4, y = (90 - la) * 4; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill(); }
+    }
+  }
+  const d = g.getImageData(0, 0, W, Hh).data;
+  const m = { at: (lo, la) => { const x = Math.floor((((lo + 180) % 360) + 360) % 360 * 4), y = Math.floor((90 - la) * 4); return y >= 0 && y < Hh && d[(y * W + x) * 4 + 3] > 127; } };
+  MASKS.set(name, m); return m;
+}
+function dotGlobe(lon0, lat0, R, hiName, acc) {
+  const land = landMask(''); if (!land) return null;
+  const hi = hiName ? landMask(hiName) : null;
+  const S = Math.ceil(R * 2 + 4);
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(S, S) : Object.assign(document.createElement('canvas'), { width: S, height: S });
+  const g = cv.getContext('2d'); const cx = S / 2, cy = S / 2;
+  const l0 = lon0 * D2R, p0 = lat0 * D2R, sp0 = Math.sin(p0), cp0 = Math.cos(p0);
+  const proj = ([lon, lat]) => {
+    const l = lon * D2R - l0, p = lat * D2R, cp = Math.cos(p), sp = Math.sin(p);
+    const x = cp * Math.sin(l), y = cp0 * sp - sp0 * cp * Math.cos(l), c = sp0 * sp + cp0 * cp * Math.cos(l);
+    if (c >= 0) return [cx + x * R, cy - y * R, true, c];
+    const n = Math.hypot(x, y) || 1;
+    return [cx + (x / n) * R, cy - (y / n) * R, false, c];
+  };
+  const oc = g.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
+  oc.addColorStop(0, '#0a2444'); oc.addColorStop(0.75, '#061733'); oc.addColorStop(1, '#030b1a');
+  g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fillStyle = oc; g.fill();
+  // dots on a lat / lon lattice (spaced evenly on the sphere), sized and faded towards the edge
+  const sp = Math.max(2.2, R / 62), stepDeg = (sp / R) / D2R, rgb = hexA(acc, 1).match(/\d+/g).slice(0, 3).join(',');
+  for (let la = -88; la <= 88; la += stepDeg) {
+    const dl = stepDeg / Math.max(0.08, Math.cos(la * D2R));
+    for (let lo = -180; lo < 180; lo += dl) {
+      const q = proj([lo, la]); if (!q[2] || q[3] < 0.02) continue;
+      if (!land.at(lo, la)) continue;
+      const isHi = hi && hi.at(lo, la), f = 0.35 + 0.65 * q[3];
+      g.fillStyle = isHi ? `rgba(255,255,255,${0.95 * f})` : `rgba(${rgb},${(0.4 + 0.5 * q[3])})`;
+      g.beginPath(); g.arc(q[0], q[1], sp * (isHi ? 0.36 : 0.3) * (0.6 + 0.4 * q[3]), 0, Math.PI * 2); g.fill();
+    }
+  }
+  const sh = g.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 1.02); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, hexA(acc, 0.22));
+  g.fillStyle = sh; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
+  return { cv, proj: (ll) => proj(ll), S };
+}
 function globeImage(lon0, lat0, R, hiName, acc) {
   const key = `${lon0.toFixed(0)}|${lat0.toFixed(0)}|${Math.round(R)}|${hiName}|${acc}|${GLOBE_LOOK}`;
   if (globes.has(key)) return globes.get(key);
+  if (GLOBE_LOOK === 'dots') { const out = dotGlobe(lon0, lat0, R, hiName, acc); if (out) { globes.set(key, out); if (globes.size > 60) globes.delete(globes.keys().next().value); } return out; }
   const C = GLOBE_LOOK === 'grid' ? [] : allCountries();
   if (!C) return null;
   const S = Math.ceil(R * 2 + 4);
@@ -572,7 +633,7 @@ function drawMark(ctx, L, tm, o) {
 }
 
 // ---------------------------------------------------------------- build-in effects (corner marks + scan line), drawn on top of the parts
-const PART_DELAY = { background: 0, frame: 0.1, win: 0.25, header: 0, logos: 0, ticker: 0.2, introGlobe: 0, introTitle: 0.5, globe: 0.15, title: 0.35, heading: 0.15, info: 0.55, locator: 0.35, side: 0.6, before: 0.7, after: 0.95, strip: 0.85, tag: 1.05, scale: 1.1, north: 1.1, titleBlock: 0.45, slide: 0.2, caption: 0.5, endTitle: 0.1, endFields: 0.5, endSources: 0.8 };
+const PART_DELAY = { background: 0, frame: 0.1, win: 0.25, header: 0, logos: 0, ticker: 0.2, introGlobe: 0, introTitle: 0.5, globe: 0.15, title: 0.35, heading: 0.15, info: 0.55, locator: 0.35, side: 0.6, before: 0.7, after: 0.95, strip: 0.85, tag: 1.05, scale: 1.1, north: 1.1, titleBlock: 0.45, slide: 0.2, caption: 0.5, endTitle: 0.1, endFields: 0.5, endSources: 0.8, afterTag: 0.6, lens: 0.9, bar: 0.75 };
 let FX = [];
 function drawFx(ctx) {
   for (const f of FX) {
@@ -611,7 +672,7 @@ export function drawBriefing(ctx, L, tm, o) {
   const TH = BR_THEMES[L.style.theme] || BR_THEMES.navy;
   if (TH.font && !fontsAsked.has(TH.font) && typeof document !== 'undefined' && document.fonts?.load) { fontsAsked.add(TH.font); Promise.all([500, 600, 700].map((w) => document.fonts.load(`${w} 20px "${TH.font}"`))).then(() => lastMapRepaint()).catch(() => {}); }
   const keep = [DISP, SANS, MONO, GLOBE_LOOK];
-  DISP = TH.disp; SANS = TH.sans; MONO = TH.mono; GLOBE_LOOK = TH.globe;
+  DISP = TH.disp; SANS = TH.sans; MONO = TH.mono; GLOBE_LOOK = L.style.globeLook === 'theme' ? TH.globe : L.style.globeLook || 'dots';
   FX = [];
   try { drawFrameBody(ctx, L, tm, o); } finally { [DISP, SANS, MONO, GLOBE_LOOK] = keep; }
   drawFx(ctx);
@@ -624,6 +685,29 @@ export function drawBriefing(ctx, L, tm, o) {
   if ((s.logo || s.logo2) && partOn(s, 'logos')) { ctx.save(); ctx.globalAlpha *= tm.alpha * k; drawLogos(ctx, L, fr, u); ctx.restore(); }
   ctx.restore();
   [DISP, SANS, MONO, GLOBE_LOOK] = keep;
+}
+/** what is on screen around point p (map underneath + overlay drawn so far), enlarged mag× into a W×H canvas */
+const LENS_CV = new Map();
+function lensGrab(ctx, L, o, ll, p, W, Hh, mag) {
+  const T = ctx.getTransform(), S = Math.abs(T.a) || 1;
+  const key = L.id + ':lens';
+  let C = LENS_CV.get(key);
+  const cw = Math.max(2, Math.round(W * S)), ch = Math.max(2, Math.round(Hh * S));
+  if (!C || C.width !== cw || C.height !== ch) { C = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(cw, ch) : Object.assign(document.createElement('canvas'), { width: cw, height: ch }); LENS_CV.set(key, C); }
+  const g = C.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cw, ch); g.fillStyle = '#05080d'; g.fillRect(0, 0, cw, ch);
+  const hw = W / 2 / mag, hh = Hh / 2 / mag;
+  const m = o.map, mc = m?.getCanvas?.();
+  if (mc && mc.width && mc !== ctx.canvas) {
+    try {
+      const a = m.project(ll), q = m.unproject([a.x + 100, a.y]), pq = o.proj([q.lng, q.lat]);
+      const k = Math.hypot(pq[0] - p[0], pq[1] - p[1]) / 100 || 1;
+      const pr = mc.width / (mc.clientWidth || m.transform?.width || mc.width);
+      const sw = (2 * hw / k) * pr, sh = (2 * hh / k) * pr;
+      g.drawImage(mc, a.x * pr - sw / 2, a.y * pr - sh / 2, sw, sh, 0, 0, cw, ch);
+    } catch { /* not ready */ }
+  }
+  try { const sx = T.a * (p[0] - hw) + T.e, sy = T.d * (p[1] - hh) + T.f; g.drawImage(ctx.canvas, sx, sy, 2 * hw * T.a, 2 * hh * T.d, 0, 0, cw, ch); } catch { /* */ }
+  return C;
 }
 function drawFrameBody(ctx, L, tm, o) {
   const fr = o.frame;
@@ -841,6 +925,114 @@ function drawFrameBody(ctx, L, tm, o) {
       yy += 36 * u;
     }
     ctx.restore();
+    ctx.restore();
+    return;
+  }
+  if (Bx.mofa) {
+    // ---- MOFA: map fills the frame; title top-left, dotted globe, before inset, AFTER label, magnifier lens, info bar
+    const [wx, wy, ww, wh] = win;
+    ctx.save(); rr(ctx, wx, wy, ww, wh, 6 * u); ctx.clip(); if (!partOn(s, 'titleBlock')) ctx.globalAlpha = 0;
+    const lf = ctx.createLinearGradient(wx, 0, wx + ww * 0.45, 0); lf.addColorStop(0, 'rgba(3,9,18,0.72)'); lf.addColorStop(1, 'rgba(3,9,18,0)'); ctx.fillStyle = lf; ctx.fillRect(wx, wy, ww * 0.45, wh);
+    const bf = ctx.createLinearGradient(0, wy + wh * 0.7, 0, wy + wh); bf.addColorStop(0, 'rgba(3,9,18,0)'); bf.addColorStop(1, 'rgba(3,9,18,0.6)'); ctx.fillStyle = bf; ctx.fillRect(wx, wy + wh * 0.7, ww, wh * 0.3);
+    ctx.restore();
+    // title block
+    { const tb = P(Bx.titleBlock); ctx.save(); ctx.globalAlpha *= stage(1); at('titleBlock', tb);
+      const tx = tb[0] + 6 * u; let y = tb[1] + 14 * u;
+      if (s.kicker) { caps(ctx, s.kicker, tx, y, 11 * u, acc, 700, 0.2); y += 12 * u; }
+      let fs = 40 * u, lines = [];
+      for (;;) { ctx.font = `800 ${fs}px ${DISP}`; lines = wrap(ctx, title.toUpperCase(), tb[2] - 12 * u, 9); if (lines.length <= 2 || fs < 20 * u) break; fs *= 0.93; }
+      if (lines.length > 2) lines = wrap(ctx, title.toUpperCase(), tb[2] - 12 * u, 2);
+      ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 8 * u;
+      for (const l of lines) { y += fs * 1.02; ctx.fillText(l, tx, y); }
+      ctx.shadowBlur = 0;
+      const meta = [s.brand || 'GEO-BRIEF', [s.place, s.country].filter(Boolean).join(', ')].filter(Boolean).join('  ·  ');
+      ctx.font = `500 ${12 * u}px ${SANS}`; ctx.fillStyle = 'rgba(220,232,248,0.8)'; ctx.fillText(meta, tx, y + 22 * u);
+      ctx.fillStyle = acc; ctx.fillRect(tx, y + 34 * u, 60 * u, 2.5 * u);
+      ctx.restore(); }
+    // dotted globe with the country label
+    if (s.globe !== false && ll) {
+      const gx = fr.x + Bx.mini[0] * fr.w, gy = fr.y + Bx.mini[1] * fr.h, R = Bx.mini[2] * fr.w;
+      ctx.save(); ctx.globalAlpha *= stage(0); at('globe', [gx - R, gy - R, 2 * R, 2 * R]);
+      const c = countryAt(ll) || (s.country ? (countriesByName(s.country) || [])[0] : null);
+      const glow = ctx.createRadialGradient(gx, gy, R * 0.9, gx, gy, R * 1.25); glow.addColorStop(0, hexA(acc, 0.3)); glow.addColorStop(1, hexA(acc, 0)); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(gx, gy, R * 1.25, 0, Math.PI * 2); ctx.fill();
+      const G = globeImage(ll[0], clamp(ll[1] * 0.8, -60, 60), R, c?.name || '', acc);
+      if (G) { ctx.drawImage(G.cv, gx - G.S / 2, gy - G.S / 2); const q = G.proj(ll); if (q[2]) { const px = gx - G.S / 2 + q[0], py = gy - G.S / 2 + q[1]; ctx.fillStyle = '#ffd25a'; ctx.beginPath(); ctx.arc(px, py, 3 * u, 0, Math.PI * 2); ctx.fill(); } }
+      ctx.strokeStyle = hexA(acc, 0.85); ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(gx, gy, R, 0, Math.PI * 2); ctx.stroke();
+      const name = String(s.country || c?.name || '').toUpperCase();
+      if (name && s.globeLabel !== 'none') {
+        const fs = 8.5 * u * clamp(+s.globeLabelSize || 1, 0.5, 2.5), pad = fs * 0.7, bh = fs * 1.9, tw = capsW(ctx, name, fs, 800, 0.06) + 2 * pad;
+        let lx = gx - tw / 2 + (+s.globeLabelDx || 0) * u, ly = gy - bh / 2 + R * 0.12 + (+s.globeLabelDy || 0) * u;
+        lx = clamp(lx, fr.x + 4 * u, fr.x + fr.w - tw - 4 * u);
+        ctx.fillStyle = 'rgba(4,10,18,0.92)'; rr(ctx, lx, ly, tw, bh, 2 * u); ctx.fill(); ctx.strokeStyle = s.globeLabelColor || 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1 * u; ctx.stroke();
+        caps(ctx, name, lx + tw / 2 + fs * 0.03, ly + bh / 2 + fs * 0.04, fs, '#fff', 800, 0.06, 'center', 'middle');
+      }
+      ctx.restore();
+    }
+    // before inset (bottom-left) with corner brackets
+    if (partOn(s, 'before')) {
+      const b = P(Bx.before); ctx.save(); ctx.globalAlpha *= stage(3); at('before', b, true);
+      thumb(ctx, BA[0], ll, ...b, u, acc, BAL[0], o, s.thumbZoom);
+      brackets(ctx, b[0] - 4 * u, b[1] - 4 * u, b[2] + 8 * u, b[3] + 8 * u, u, acc, 16);
+      ctx.restore();
+    }
+    // AFTER label (top-right of the map)
+    if (partOn(s, 'afterTag')) {
+      const t = [BAL[1], BA[1]?.date || s.afterDate || s.date].filter(Boolean).join(' · ').toUpperCase();
+      const fs = 10.5 * u, pad = 10 * u, tw = capsW(ctx, t, fs, 800, 0.14) + 2 * pad, bh = 24 * u, x = wx + ww - tw - 18 * u, y = wy + 16 * u;
+      ctx.save(); ctx.globalAlpha *= stage(2); at('afterTag', [x, y, tw, bh]);
+      ctx.fillStyle = 'rgba(4,10,18,0.85)'; rr(ctx, x, y, tw, bh, 2 * u); ctx.fill(); ctx.strokeStyle = acc; ctx.lineWidth = 1.2 * u; ctx.stroke();
+      caps(ctx, t, x + pad, y + bh / 2 + fs * 0.05, fs, '#fff', 800, 0.14, 'left', 'middle');
+      ctx.restore();
+    }
+    // magnifier lens: a small ring on the site, a line, and a big lens showing it enlarged
+    if (partOn(s, 'lens') && ll) {
+      const p = o.proj(ll), mag = clamp(+s.lensMag || 3, 1.2, 12);
+      const BR = Bx.lens[2] * fr.w * clamp(+s.lensSize || 1, 0.3, 2.5), sr = BR / mag;
+      const grow = easeOut(reveal('lens'));
+      ctx.save(); ctx.globalAlpha *= stage(3);
+      const cx = fr.x + Bx.lens[0] * fr.w, cy = fr.y + Bx.lens[1] * fr.h;
+      const [dx, dy] = at('lens', [cx - BR, cy - BR, 2 * BR, 2 * BR]);
+      // the enlarged view (grabbed before anything is drawn on top of it)
+      const grab = lensGrab(ctx, L, o, ll, p, 2 * BR, 2 * BR, mag, dx, dy);
+      const R = BR * grow;
+      if (R > 1) {
+        ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+        if (grab) ctx.drawImage(grab, cx - BR, cy - BR, 2 * BR, 2 * BR); else { ctx.fillStyle = '#0b1522'; ctx.fill(); }
+        const vg = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,10,25,0.35)'); ctx.fillStyle = vg; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+        if (s.lensMarker !== false) { const t = ((o.time || 0) * 0.8) % 1; for (const k2 of [0, 0.5]) { const ph = (t + k2) % 1; ctx.strokeStyle = `rgba(255,70,70,${0.8 * (1 - ph)})`; ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(cx, cy, (10 + ph * 40) * u, 0, Math.PI * 2); ctx.stroke(); }
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, 9 * u, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#e0302f'; ctx.lineWidth = 2.2 * u; ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.restore();
+        // rim, ticks
+        ctx.strokeStyle = hexA(acc, 0.95); ctx.lineWidth = 3 * u; ctx.shadowColor = hexA(acc, 0.6); ctx.shadowBlur = 10 * u; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0;
+        if (s.lensRing !== false) { ctx.lineWidth = 1.2 * u; for (let i = 0; i < 36; i++) { const a = (i / 36) * Math.PI * 2, l = i % 3 ? 5 * u : 9 * u; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * (R - l), cy + Math.sin(a) * (R - l)); ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R); ctx.stroke(); } }
+      }
+      // the small ring on the site and the connecting line (drawn in un-moved coordinates)
+      ctx.save(); ctx.translate(-dx, -dy);
+      const scx = cx + dx, scy = cy + dy, ang = Math.atan2(scy - p[1], scx - p[0]), dist = Math.hypot(scx - p[0], scy - p[1]);
+      ctx.strokeStyle = hexA(acc, 0.95); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(p[0], p[1], sr, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = hexA(acc, 0.12); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(p[0], p[1], 3 * u, 0, Math.PI * 2); ctx.fill();
+      if (dist > sr + R) { ctx.strokeStyle = hexA(acc, 0.8); ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(p[0] + Math.cos(ang) * sr, p[1] + Math.sin(ang) * sr); ctx.lineTo(scx - Math.cos(ang) * R, scy - Math.sin(ang) * R); ctx.stroke(); }
+      ctx.restore();
+      ctx.restore();
+    }
+    // info bar
+    if (partOn(s, 'bar')) {
+      const b = P(Bx.bar); ctx.save(); ctx.globalAlpha *= stage(2); at('bar', b, true);
+      let cells = String(s.cells || '').split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((c) => c[0] && c[1]);
+      if (!cells.length) cells = [[s.coords ? 'Site' : '', s.coords], [s.dateLabel || 'Date', s.date], [s.eventLabel || 'Event', s.event], [s.assessLabel || 'Assessment', s.assessment]].filter((c) => c[0] && c[1]);
+      ctx.fillStyle = 'rgba(4,12,24,0.88)'; rr(ctx, b[0], b[1], b[2], b[3], 3 * u); ctx.fill(); ctx.strokeStyle = hexA(acc, 0.5); ctx.lineWidth = 1 * u; ctx.stroke();
+      brackets(ctx, b[0] - 3 * u, b[1] - 3 * u, b[2] + 6 * u, b[3] + 6 * u, u, acc, 14);
+      const n = Math.max(1, cells.length), cw = b[2] / n;
+      cells.forEach(([lab, val], i) => {
+        const x = b[0] + i * cw + 16 * u;
+        if (i) { ctx.strokeStyle = hexA(acc, 0.3); ctx.beginPath(); ctx.moveTo(b[0] + i * cw, b[1] + 10 * u); ctx.lineTo(b[0] + i * cw, b[1] + b[3] - 10 * u); ctx.stroke(); }
+        caps(ctx, lab, x, b[1] + b[3] * 0.36, 9 * u, 'rgba(200,215,235,0.75)', 700, 0.16);
+        const [t1, sz] = fitFont(ctx, String(val).toUpperCase(), cw - 28 * u, 15 * u, 700, DISP);
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(t1, x, b[1] + b[3] * 0.36 + 10 * u + sz);
+      });
+      ctx.restore();
+    }
     ctx.restore();
     return;
   }
