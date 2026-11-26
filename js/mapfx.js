@@ -91,7 +91,10 @@ function drawShipSink(ctx, L, tm, o) {
   const sinkU = an === 'sink' ? ease(seg(k, 0.52, 0.82)) : an === 'gone' ? 1 : 0;
   const afterU = an === 'sink' ? seg(k, 0.6, 1) : an === 'gone' ? 1 : 0;
   const S = u0 * clamp(+s.size || 1, 0.3, 5), Lp = 120 * S, Wp = Lp * (s.type === 'boat' || s.type === 'fishing' ? 0.3 : 0.15);
-  const ang = (+s.heading || 0) * D2R, side = +s.listSide < 0 ? -1 : 1;
+  // heading is a compass bearing on the map: find its direction on screen (follows map rotation and tilt)
+  const hd = (+s.heading || 0) * D2R, c0 = L.geom.coordinates, e = 2e-4;
+  const q1 = o.proj([c0[0] + (Math.sin(hd) * e) / Math.max(0.2, Math.cos(c0[1] * D2R)), c0[1] + Math.cos(hd) * e]);
+  const ang = q1 && Number.isFinite(q1[0]) ? Math.atan2(q1[1] - y, q1[0] - x) : hd - Math.PI / 2, side = +s.listSide < 0 ? -1 : 1;
   const lst = listU * clamp(+s.maxList || 90, 10, 90) * D2R;
   const r = (i) => { const v = Math.sin(i * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
   ctx.save(); ctx.globalAlpha *= A;
@@ -129,7 +132,7 @@ function drawShipSink(ctx, L, tm, o) {
     ctx.restore();
   }
   // the ship (hidden progressively as it goes under, stern last)
-  if (sinkU < 1) {
+  if (sinkU < 1 && s.hull !== false) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
     const bob = Math.sin(t * 1.7) * 1.5 * S * (1 - listU);
     ctx.translate(0, bob);

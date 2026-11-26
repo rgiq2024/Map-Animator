@@ -414,3 +414,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Roads: networks drawn without arrows/white casing by default; new 'road network grows / draws in left→right / grows from centre' animations; Layer swipe: add GeoTIFF imagery under both sides or as side A/B.
 - Fire & smoke: 'Explosion, then burns' animation (flash, fireball, shock wave, debris, explosion sound) + preset button.
 - New 'Ship sinking' element (flare, MAYDAY, list, sinking, foam, debris, life rafts, storm + horn sound).
+- Panning/zooming the map in a scene with a moving camera now moves the whole camera path (sticks when played). 3D 'Sink' motion for ship models + 3D ship sinking buttons; Ship sinking 2D follows map rotation and can hide its flat ship.

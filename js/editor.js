@@ -158,6 +158,7 @@ export function createEditor() {
     map.on('error', (e) => console.warn('map:', e?.error?.message || e));
     map.on('movestart', (e) => {
       if (e.originalEvent && viewMode === 'play' && !exporting) setViewMode('edit');
+      if ((e.originalEvent || userIntent) && !exporting && !viewBefore) viewBefore = currentView();
     });
     map.on('moveend', (e) => {
       if (exporting) return;
@@ -227,14 +228,30 @@ export function createEditor() {
   });
   const camOf = (v) => ({ center: v.center, zoom: zoomFor(v.zoomRef, frame.w), bearing: v.bearing || 0, pitch: +scene().camera.tilt || 0 });
 
+  let viewBefore = null;
   function onUserView() {
+    const was = viewBefore; viewBefore = null;
     if (!project || viewMode !== 'edit') return;
     const cam = scene().camera;
     if (cam.mode === 'fixed') {
       cam.fixed = currentView();
       rebuild();
       save();
+      return;
     }
+    // a moving camera: pan / zoom / rotate moves the WHOLE camera path by the same amount, so it sticks when played
+    if (!was || project.panMovesPath === false) return;
+    const now = currentView();
+    const d = { x: now.center[0] - was.center[0], y: now.center[1] - was.center[1], z: now.zoomRef - was.zoomRef, b: now.bearing - was.bearing };
+    if (Math.abs(d.x) < 1e-7 && Math.abs(d.y) < 1e-7 && Math.abs(d.z) < 1e-4 && Math.abs(d.b) < 0.01) return;
+    const shift = (v) => { if (!v?.center) return; v.center = [+(v.center[0] + d.x).toFixed(6), +Math.max(-85, Math.min(85, v.center[1] + d.y)).toFixed(6)]; if (Number.isFinite(v.zoomRef)) v.zoomRef = +(v.zoomRef + d.z).toFixed(4); if (Number.isFinite(v.bearing)) v.bearing = +(v.bearing + d.b).toFixed(2); };
+    let moved = 0;
+    if (cam.mode === 'keyframes' && cam.keys?.length) { pushUndo(); cam.keys.forEach((k) => shift(k.view)); if (cam.movingKeys) cam.movingKeys.forEach((k) => shift(k.view)); moved = cam.keys.length; }
+    else if (cam.mode === 'startEnd' && (cam.start || cam.end)) { pushUndo(); shift(cam.start); shift(cam.end); moved = 2; }
+    if (cam.fixed) shift(cam.fixed);
+    if (!moved) return;
+    rebuild(); save();
+    toast(`Camera path moved with your ${Math.abs(d.z) > 1e-3 ? 'zoom' : 'pan'} — all ${moved} keyframes follow (Ctrl+Z to undo)`, 3500);
   }
 
   /** Put the map where the scene's edit view should be. */
@@ -1560,6 +1577,7 @@ export function createEditor() {
     if (/train|ship|tanker|truck|car/.test(b.dataset.source || '') && b.dataset.source !== 'builtin:hst') st.size = 1.6;
     if (/hst/.test(`${st.modelA}${st.source}`) && map.getZoom() < 14.5) toast('Real-size trains: zoom in close (street level) and tilt the camera to see them', 4600);
     if (b.dataset.source === 'builtin:bomber' || b.dataset.source === 'builtin:nasa_globalhawk') st.altitude = 60;
+    if (b.dataset.preset) { try { Object.assign(st, JSON.parse(b.dataset.preset)); } catch { /* */ } }
     pendingStyle = Object.keys(st).length ? st : null;
     startAdd(b.dataset.add);
     if (map.getPitch() < 25) toast('Tip: tilt the camera (Camera step) to see the 3D models from the side', 3600);

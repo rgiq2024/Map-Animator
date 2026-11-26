@@ -784,6 +784,19 @@ export class ModelLayer {
           roll += (+s.capsizeRoll || 80) * kk + jolt;
           altitude -= (+s.capsizeSink || 4) * kk;
         }
+        if (s.motion === 'sink') {
+          // rough-sea rocking, then it lists onto its side, then goes down bow first and disappears
+          const at0 = s.capsizeAt == null || s.capsizeAt === '' ? 1.5 : +s.capsizeAt, dur = +s.capsizeDur || 4;
+          const k = tm.edit ? 0.35 : clamp((tt - at0) / dur, 0, 1), kk = k * k * (3 - 2 * k);
+          const rock = s.rock === false ? 0 : 1;
+          roll += (+s.capsizeRoll || 85) * kk + rock * (Math.sin(tt * 1.5) * 4 + Math.sin(tt * 2.7) * 1.5) * (1 - kk * 0.7);
+          pitch += rock * Math.sin(tt * 1.1 + 1) * 2.5 * (1 - kk);
+          const s0 = s.sinkAt == null || s.sinkAt === '' ? at0 + dur * 0.85 : +s.sinkAt, sd = +s.sinkDur || 5;
+          const q = tm.edit ? 0 : clamp((tt - s0) / sd, 0, 1);
+          altitude -= (+s.capsizeSink || 4) * kk + (+s.sinkDepth || 60) * q * q;
+          pitch += (s.sinkPitch == null || s.sinkPitch === '' ? -20 : +s.sinkPitch) * (q * q * (3 - 2 * q));
+          alpha *= 1 - clamp((q - 0.5) / 0.5, 0, 1);
+        }
         if (air && L.geom.type === 'LineString') {
           const climb = s.motion === 'takeoff' ? clamp((u - 0.4) / 0.6, 0, 1) : clamp((0.6 - u) / 0.6, 0, 1);
           const top = Math.max(50, +s.climb || (real ? 250 : 120));
