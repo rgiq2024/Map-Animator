@@ -132,7 +132,7 @@ export function createHome({ open }) {
           if (lay === 'zoom') { Object.assign(sc.camera, zoomCamera([20, 25], sec, 13, { globe: false })); sc.briefZoom = true; sc.stillEnd = 0.5; Object.assign(sc.look, { globe: false, theme: 'satellite', placeNames: false }); }
           return sc;
         });
-      } else { p.scenes[0].layers.push(...briefingLayers(layout, common)); p.scenes[0].stillStart = 0; p.scenes[0].stillEnd = 7; }
+      } else { if (layout === 'mofa') { Object.assign(p.scenes[0].look, { theme: 'satellite', placeNames: false }); common.kicker = 'Geospatial analysis'; } p.scenes[0].layers.push(...briefingLayers(layout, common)); p.scenes[0].stillStart = 0; p.scenes[0].stillEnd = 7; }
     }
     await saveProject(p);
     $('#create-name').value = '';
