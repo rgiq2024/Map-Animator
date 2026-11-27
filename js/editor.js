@@ -2270,6 +2270,7 @@ export function createEditor() {
               <label class="row"><span>Camera move</span><select data-act-input="bzMove">${Object.entries(ZOOM_MOVES).map(([k, t]) => `<option value="${k}"${(z.move || 'zoom') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
               ${['orbit', 'spiral', 'flyorbit'].includes(z.move) ? `${rng('turns', 'Turns', 0.25, 4, 0.25, ' ×')}<label class="row"><span>Direction</span><select data-act-input="bzDir"><option value="1"${+z.dir >= 0 ? ' selected' : ''}>Clockwise</option><option value="-1"${+z.dir < 0 ? ' selected' : ''}>Anticlockwise</option></select></label>` : ''}
               ${z.move === 'spiral' ? rng('height', 'Start this many zoom levels higher', 1, 10, 0.5) : ''}
+              ${z.move && z.move !== 'zoom' ? `${rng('speed', 'Zoom speed (faster = arrives sooner)', 0.3, 3, 0.05, ' ×')}${rng('rotSpeed', z.move === 'orbit' || z.move === 'spiral' || z.move === 'flyorbit' ? 'Rotate speed (0 = use turns)' : 'Rotate speed after arriving', 0, 60, 1, ' °/s')}${rng('delay', 'Wait at the start', 0, 5, 0.1, ' s')}${rng('hold', 'Hold still at the end', 0, 5, 0.1, ' s')}<label class="row"><span>Flight curve</span><select data-act-input="bzCurve"><option value="fly"${(z.curve || 'fly') === 'fly' ? ' selected' : ''}>Smooth flight (zooms out a little on long trips)</option><option value="ease"${z.curve === 'ease' ? ' selected' : ''}>Ease in and out</option><option value="even"${z.curve === 'even' ? ' selected' : ''}>Even speed</option></select></label>` : ''}
               ${z.move === 'p2p' ? `<div class="field"><span>Fly in from (place or “lat, lon”; empty = a spot just north-west)</span><div class="btn-row"><input data-act-input="bzFrom" value="${esc(z.fromPlace || '')}" placeholder="e.g. Cairo Tower — or 30.0459, 31.2243"><button class="btn sm" data-act="bzFromGo">Set</button></div></div>` : ''}
               <label class="row"><span>Map while zooming</span><select data-act-input="bzGlobe"><option value="flat"${z.globe ? '' : ' selected'}>2D map — steady (recommended)</option><option value="globe"${z.globe ? ' selected' : ''}>3D globe</option></select></label>
               ${rng('end', 'Zoom at the end', 3, 18, 0.25)}${rng('sec', 'Length', 3, 20, 0.5, ' s')}${rng('tilt', 'Tilt at the end', 0, 75, 1, '°')}${rng('rotate', 'Rotate (compass) at the end', -180, 180, 5, '°')}${z.globe ? rng('spin', 'Globe spins first', 0, 3, 0.25, ' turns') : ''}${rng('startZoom', 'Start height (zoom)', 0, 6, 0.1)}
@@ -2925,11 +2926,12 @@ export function createEditor() {
     if (!L) return;
     if (k === 'bz') {
       const sc = scene(), key = e.target.dataset.k, v = +e.target.value;
-      const out = e.target.nextElementSibling; if (out) out.textContent = `${v}${key === 'sec' ? ' s' : key === 'tilt' || key === 'rotate' ? '°' : key === 'spin' ? ' turns' : key === 'turns' ? ' ×' : ''}`;
+      const out = e.target.nextElementSibling; if (out) out.textContent = `${v}${key === 'sec' ? ' s' : key === 'tilt' || key === 'rotate' ? '°' : key === 'spin' ? ' turns' : key === 'turns' || key === 'speed' ? ' ×' : key === 'rotSpeed' ? ' °/s' : key === 'delay' || key === 'hold' ? ' s' : ''}`;
       applyZoom(sc, { [key]: v, own: true }); rebuild(); repaint(); save();
       return;
     }
     if (k === 'bzMove') { pushUndo(); applyZoom(scene(), { move: e.target.value, own: true }); rebuild(); renderLayerEditor(); repaint(); save(); toast('Camera move changed — press ▶ Preview the zoom'); return; }
+    if (k === 'bzCurve') { pushUndo(); applyZoom(scene(), { curve: e.target.value, own: true }); rebuild(); repaint(); save(); return; }
     if (k === 'bzDir') { pushUndo(); applyZoom(scene(), { dir: +e.target.value, own: true }); rebuild(); repaint(); save(); return; }
     if (k === 'bzFrom') { if (e.type === 'change') setZoomFrom(e.target.value); return; }
     if (k === 'bzGlobe') { pushUndo(); applyZoom(scene(), { globe: e.target.value === 'globe', startZoom: undefined, own: true }); applyLook(scene()); rebuild(); renderLayerEditor(); repaint(); save(); return; }

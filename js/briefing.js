@@ -1447,7 +1447,7 @@ export function zoomCamera(ll, seconds = 8, endZoom = 13, o = {}) {
   }
   return { mode: 'keyframes', keys };
 }
-export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '', globe: false, move: 'zoomto', turns: 1, dir: 1, height: 5, fromPlace: '', fromLL: null };
+export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '', globe: false, move: 'zoomto', turns: 1, dir: 1, height: 5, fromPlace: '', fromLL: null, speed: 1, rotSpeed: 0, delay: 0, hold: 0, curve: 'fly' };
 export const ZOOM_MOVES = { zoomto: 'Zoom-To — smooth dive down to the place', orbit: 'Orbit — circle around the place', p2p: 'Point-to-Point — fly in from a nearby place', spiral: 'Spiral — circle down from high above', flyorbit: 'Fly-To and Orbit — fly down, then circle', zoom: 'Classic zoom (turn, then dive)' };
 /** smooth camera moves for “Zoom to location” scenes (few keys with eased / fly interpolation — no judder) */
 function cameraMove(ll, seconds, endZoom, o) {
@@ -1457,21 +1457,45 @@ function cameraMove(ll, seconds, endZoom, o) {
   const K = (t, view, ease = 'linear') => ({ t: +t.toFixed(3), view, ease });
   const flat = o.globe === false, z0 = clamp(+o.startZoom || (flat ? 1.8 : 0.7), 0, 6);
   const start = V([ll[0] + (flat ? 10 : 28), clamp(ll[1] * 0.55, -40, 45)], z0, 0, 0);
-  const orbit = (t0, dur, zz, b0 = 0, skip = false) => { const deg = 360 * clamp(+o.turns || 1, 0.1, 4), n = Math.max(4, Math.ceil(deg / 15)), out = []; for (let i = skip ? 1 : 0; i <= n; i++) out.push(K(t0 + (i / n) * dur, V(ll, zz, b0 + dir * (i / n) * deg, orbTilt))); return out; };
+  // timing: wait at the start, hold still at the end, how fast the camera arrives, how fast it turns
+  const delay = clamp(+o.delay || 0, 0, D * 0.6), hold = clamp(+o.hold || 0, 0, D * 0.6), t1 = D - hold, run = Math.max(0.5, t1 - delay);
+  const speed = clamp(+o.speed || 1, 0.2, 4), arrive = delay + run * clamp(0.82 / speed, 0.12, 1);
+  const rs = +o.rotSpeed; // degrees per second (0 = use turns)
+  const curve = o.curve === 'even' ? 'linear' : o.curve === 'ease' ? 'ease' : 'fly';
+  const pre = (view) => (delay > 0 ? [K(0, view), K(delay, view, curve)] : [K(0, view, curve)]);
+  const post = (view) => (hold > 0 ? [K(D, view)] : []);
+  const orbit = (t0, dur, zz, b0 = 0, skip = false) => { const deg = rs > 0 ? rs * dur : 360 * clamp(+o.turns || 1, 0.1, 6), n = Math.max(4, Math.ceil(deg / 15)), out = []; for (let i = skip ? 1 : 0; i <= n; i++) out.push(K(t0 + (i / n) * dur, V(ll, zz, b0 + dir * (i / n) * deg, orbTilt))); return out; };
+  const drift = (t0, b0, zz, p0) => { // after arriving: slow turn and push-in until the hold
+    if (t1 - t0 < 0.05) return [];
+    const r2 = (rs > 0 ? rs : 4) * (t1 - t0) * dir;
+    return [K(t1, V(ll, zz + 0.12 * (t1 - t0) / Math.max(1, D) * 2, b0 + r2, p0))];
+  };
   const keys = [];
-  if (o.move === 'zoomto') keys.push(K(0, start, 'fly'), K(D * 0.82, V(ll, z, rot, tilt)), K(D, V(ll, z + 0.2, rot + 8 * dir, tilt)));
-  else if (o.move === 'orbit') keys.push(...orbit(0, D, z, rot));
-  else if (o.move === 'spiral') {
-    const deg = 360 * clamp(+o.turns || 1.5, 0.25, 4), n = Math.max(8, Math.ceil(deg / 15)), zTop = z - clamp(+o.height || 5, 1, 10);
-    for (let i = 0; i <= n; i++) { const u = i / n, zu = 1 - (1 - u) ** 2; keys.push(K(u * D, V(ll, zTop + (z - zTop) * zu, rot + dir * deg * u, 20 + (orbTilt - 20) * u))); }
+  if (o.move === 'zoomto') {
+    const endV = V(ll, z, rot, tilt);
+    keys.push(...pre(start), K(arrive, endV), ...drift(arrive, rot, z, tilt));
+    keys.push(...post(keys.at(-1).view));
+  } else if (o.move === 'orbit') {
+    if (delay > 0) keys.push(K(0, V(ll, z, rot, orbTilt)));
+    keys.push(...orbit(delay, run, z, rot)); keys.push(...post(keys.at(-1).view));
+  } else if (o.move === 'spiral') {
+    const deg = rs > 0 ? rs * run : 360 * clamp(+o.turns || 1.5, 0.25, 6), n = Math.max(8, Math.ceil(deg / 15)), zTop = z - clamp(+o.height || 5, 1, 10);
+    if (delay > 0) keys.push(K(0, V(ll, zTop, rot, 20)));
+    for (let i = 0; i <= n; i++) { const u = i / n, zu = 1 - (1 - u) ** (1 + speed); keys.push(K(delay + u * run, V(ll, zTop + (z - zTop) * zu, rot + dir * deg * u, 20 + (orbTilt - 20) * u))); }
+    keys.push(...post(keys.at(-1).view));
   } else if (o.move === 'flyorbit') {
-    const fly = D * 0.42;
-    keys.push(K(0, start, 'fly'), ...orbit(fly, D - fly, z, rot));
+    keys.push(...pre(start));
+    const fly = Math.min(arrive, delay + run * 0.85);
+    keys.push(...orbit(fly, Math.max(0.5, t1 - fly), z, rot)); keys.push(...post(keys.at(-1).view));
   } else if (o.move === 'p2p') {
     const from = Array.isArray(o.fromLL) ? o.fromLL : [ll[0] - 0.12, ll[1] + 0.08];
     const k2 = Math.cos(((from[1] + ll[1]) / 2) * D2R), hd = (Math.atan2((ll[0] - from[0]) * k2, ll[1] - from[1]) / D2R + 360) % 360;
-    keys.push(K(0, V(from, z - 0.3, hd, tilt), 'linear'), K(D * 0.18, V(from, z - 0.2, hd, tilt), 'fly'), K(D * 0.8, V(ll, z, hd, tilt)), K(D, V(ll, z + 0.2, hd + 10 * dir, tilt)));
+    const v0 = V(from, z - 0.3, hd, tilt);
+    keys.push(K(0, v0), K(delay + Math.min(1.5, run * 0.18), V(from, z - 0.2, hd, tilt), curve === 'linear' ? 'linear' : 'fly'), K(arrive, V(ll, z, hd, tilt)), ...drift(arrive, hd, z, tilt));
+    keys.push(...post(keys.at(-1).view));
   }
+  // keep times increasing
+  for (let i = 1; i < keys.length; i++) if (keys[i].t <= keys[i - 1].t) keys[i].t = +(keys[i - 1].t + 0.01).toFixed(3);
   return { mode: 'keyframes', keys };
 }
 /** middle of a country by name (null while the outlines load) */
