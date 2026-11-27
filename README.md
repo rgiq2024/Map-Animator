@@ -431,3 +431,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - New 'Satellite imagery · Visual investigations' section: investigation frame (intro / before / after / side by side / photo cards / swipe, 'make the full set'), image tiles on the map with Area markers, box callouts, site outlines, black place labels.
 - Visual investigations: Fly-over element (city label → pan at a steady height → zoom in with outline reveal and boxed site label), sets the scene camera.
 - Fly-over: start and site can each be typed or picked with 📍 Click on map; slower default pan (12 s, higher up, eased start/stop, 1–60 s range).
+- Visual investigations: Example “China’s dual-use border villages” (CSIS ChinaPower, May 2024) — 9 ready scenes (intro, fly-over, map of the four sites, Esri Wayback years, Sentinel-2 before/after and swipe, key numbers), added after the current scene.

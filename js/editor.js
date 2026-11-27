@@ -1980,7 +1980,7 @@ export function createEditor() {
   })();
   const cartoAdd = (e) => {
     const b = e.target.closest('button');
-    if (!b) return;
+    if (!b || !b.dataset.add) return;
     const k = b.dataset.add;
     let st = null;
     try { st = b.dataset.preset ? JSON.parse(b.dataset.preset) : null; } catch { st = null; }
@@ -2041,6 +2041,22 @@ export function createEditor() {
   $('#add-poster')?.addEventListener('click', cartoAdd);
   $('#add-msg')?.addEventListener('click', cartoAdd);
   $('#add-vi')?.addEventListener('click', cartoAdd);
+  // ready-made investigations (scenes + their images) added after the current scene
+  $('#add-vi')?.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-example]'); if (!b) return;
+    try {
+      toast('Loading the example…');
+      const { importProjectMedia, normalizeProject } = await import('./store.js');
+      const j = await (await fetch(b.dataset.example)).json();
+      await importProjectMedia(j);
+      const rid = () => Math.random().toString(36).slice(2, 9);
+      const add = normalizeProject(j).scenes.map((c) => ({ ...c, id: `scene_${rid()}`, layers: (c.layers || []).map((l) => ({ ...l, id: `${l.kind}_${rid()}` })) }));
+      const i0 = project.scenes.indexOf(scene());
+      project.scenes.splice(i0 + 1, 0, ...add);
+      save(); renderScenes(); selectScene(i0 + 1, true);
+      toast(`Added ${add.length} scenes after this one — ${b.dataset.note || 'swap in your own images and text in each'}`, 6500);
+    } catch (err) { toast(`Could not load the example: ${err.message || err}`, 5000); }
+  });
   $('#add-milgfx-type')?.addEventListener('click', cartoAdd);
   $('#add-docu')?.addEventListener('click', cartoAdd);
   $('#add-earth')?.addEventListener('click', cartoAdd);
