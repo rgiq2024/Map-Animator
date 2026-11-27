@@ -5,9 +5,11 @@ import { H, countriesByName } from './cartofx.js';
 import { placeAt } from './place.js';
 import { parseTable, dataOf, SAMPLE_NAMES } from './geodata.js';
 import { zoomRefFor } from './scene.js';
+import { THEMES } from './themes.js';
 
 const { clamp, ease, UI, polysOf, pathPolys, labelPoint, hashStr, off } = H;
 const D2R = Math.PI / 180;
+const hexA = (h, a) => { const m = String(h || '#ffffff').replace('#', ''); const v = m.length === 3 ? m.split('').map((x) => x + x).join('') : m.slice(0, 6); return `rgba(${parseInt(v.slice(0, 2), 16) || 0},${parseInt(v.slice(2, 4), 16) || 0},${parseInt(v.slice(4, 6), 16) || 0},${a})`; };
 const seg = (t, a, b) => clamp((t - a) / Math.max(1e-6, b - a), 0, 1);
 const rgbOf = (c) => { const m = /^#?([0-9a-f]{6})$/i.exec(c || ''); if (!m) return [200, 20, 30]; const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
 const SND = [['style.sound', 'Sound', 'switch'], ['style.soundVol', 'Sound volume', 'range', [0, 2, 0.05], (L) => L.style.sound !== false]];
@@ -16,6 +18,7 @@ export const MX_KINDS = {
   dofblur: { name: 'Depth of field', icon: '◎', geom: null, desc: 'A camera focus band across the map — everything above and below goes soft, like a tilted lens; the focus can rack from near to far, labels can blur with it. Pair it with “Make the camera drift” for a continuous pan' },
   inkreveal: { name: 'Ink-spread reveal', icon: '🩸', geom: 'polygon', desc: 'An area fills like ink spreading on paper from a starting point, with smoky edges that settle into a clean shape' },
   flickerzones: { name: 'Flickering districts', icon: '▦', geom: null, desc: 'Districts, regions or countries flash bright and dark like a failing light, then settle into an outlined map' },
+  mapposter: { name: 'Map poster', icon: '🖼', geom: 'point', desc: 'Map-art print: find your place, name it, pick a colour — full, circle or circle-focus poster with spaced-out title, country and coordinates; it builds, prints and frames itself' },
   shipsink: { name: 'Ship sinking', icon: '🚢', geom: 'point', desc: 'A ship seen from above in rough sea: distress flare and MAYDAY rings, it lists over and goes down, leaving foam, bubbles, debris and life rafts — with storm and horn sounds' },
   layerswipe: { name: 'Layer swipe (compare two layers)', icon: '◧', geom: null, desc: 'Compare any two layers you added — two road networks (GeoJSON, shapefile, KML), two GeoTIFF / raster images, or any elements — with a divider that slides across the map: one dataset on each side, labelled' },
   softlabel: { name: 'Soft map label', icon: 'Aa', geom: 'point', desc: 'A soft white label on the map — “Track Point 1” — that fades and drifts in, and blurs with the depth of field' },
@@ -24,6 +27,7 @@ export const MX_ANIMS = {
   dofblur: { rack: 'Focus racks from one place to another', breathe: 'Focus drifts back and forth', fade: 'Blur fades in', none: 'Fixed focus' },
   inkreveal: { spread: 'Ink spreads from the start point', fade: 'Fade in', none: 'Shown' },
   flickerzones: { flicker: 'Flicker, then settle', strobe: 'Keep flickering', fade: 'Fade in', none: 'Shown' },
+  mapposter: { build: 'Builds: map opens, title spaces in', print: 'Prints and frames: page slides in, frame closes', still: 'Still' },
   shipsink: { sink: 'Lists over, then sinks', list: 'Lists over (stays afloat)', afloat: 'Afloat in rough sea', gone: 'After the sinking (foam, debris, rafts)' },
   layerswipe: { sweep: 'Swipe across and back', once: 'Swipe once (A → B)', hold: 'Fixed divider (no movement)', blink: 'Cross-fade A ↔ B (no divider)' },
   softlabel: { rise: 'Fade in and drift up', fade: 'Fade in', type: 'Type on', none: 'Shown' },
@@ -32,11 +36,12 @@ export const MX_DEFAULTS = {
   dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient-2' },
   inkreveal: { snd: 'inkbleed', sndDur: 2, color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
   flickerzones: { from: 'countries', layerId: '', countries: 'France, Germany, Italy, Spain, Poland, Belgium, Netherlands, Switzerland, Austria, Czechia', data: '', sample: '', color: '#ffffff', fill: 0.18, stroke: '#ffffff', strokeWidth: 1.2, rate: 12, flickerFor: 2.2, maxA: 0.9, sound: true, soundVol: 1 },
+  mapposter: { query: '', title: 'YOUR CITY', sub: 'COUNTRY', coords: '', color: '#5f8a48', paper: '#ffffff', shape: 'full', circle: 0.86, veil: 0.75, fade: 0.38, page: 'portrait', ratio: '4:5', wall: '#e9e5df', frame: 'none', font: 'Jost', titleSize: 1, spacing: 0.28, grain: true, syncMap: true, autoTheme: true },
   shipsink: { type: 'tanker', name: 'MED EMRE', size: 1, heading: 35, listSide: 1, maxList: 90, storm: 1, flare: true, mayday: true, maydayText: 'MAYDAY', rafts: 3, sheen: false, nameTag: true, sound: true, soundVol: 0.7 },
   layerswipe: { layerA: '', layerB: '', dir: 'lr', split: 0.5, cycles: 1, hold: 0.12, labels: true, labelA: 'Dataset A', labelB: 'Dataset B', labelPos: 'top', textSize: 1, lineColor: '#ffffff', lineWidth: 3, knob: true, chips: true },
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
 };
-const DUR = { shipsink: 12, layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
+const DUR = { mapposter: 4, shipsink: 12, layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
 export const MX_LAYER_DEFAULTS = Object.fromEntries(Object.keys(MX_KINDS).map((k) => [k, { anim: Object.keys(MX_ANIMS[k])[0], duration: DUR[k], style: MX_DEFAULTS[k] }]));
 export const MX_FORMS = {
   dofblur: [
@@ -78,6 +83,96 @@ export const MX_FORMS = {
 };
 export const MX_SET = new Set(Object.keys(MX_KINDS));
 export const mxPhases = (k) => (k === 'inkreveal' || k === 'flickerzones' ? ['below'] : ['captions']);
+
+// ---------------------------------------------------------------- map poster
+const dms = (v, pos, neg) => { const a = Math.abs(v), d = Math.floor(a), m = Math.floor((a - d) * 60), sec = Math.round(((a - d) * 60 - m) * 60); return `${d}°${m}'${sec}"${v >= 0 ? pos : neg}`; };
+const FRAMES = { black: ['#1b1b1b', '#3a3a3a'], white: ['#f4f2ee', '#d9d5cf'], oak: ['#b98a55', '#8a6136'], walnut: ['#5a3a24', '#3b2516'], gold: ['#d4af5a', '#9b7a2c'] };
+let GRAIN = null;
+function grainPattern(ctx) {
+  if (!GRAIN) { const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(128, 128) : Object.assign(document.createElement('canvas'), { width: 128, height: 128 }); const g = c.getContext('2d'); const d = g.createImageData(128, 128); for (let i = 0; i < d.data.length; i += 4) { const v = 120 + Math.random() * 135; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 14; } g.putImageData(d, 0, 0); GRAIN = c; }
+  return ctx.createPattern(GRAIN, 'repeat');
+}
+function heartPath(ctx, cx, cy, r) { ctx.moveTo(cx, cy + r * 0.85); ctx.bezierCurveTo(cx - r * 1.35, cy + r * 0.05, cx - r * 0.95, cy - r * 1.05, cx, cy - r * 0.45); ctx.bezierCurveTo(cx + r * 0.95, cy - r * 1.05, cx + r * 1.35, cy + r * 0.05, cx, cy + r * 0.85); ctx.closePath(); }
+function drawPoster(ctx, L, tm, o) {
+  const s = L.style, fr = o.frame; if (!fr) return;
+  const A = tm.alpha ?? 1; if (A <= 0) return;
+  // keep the map in the poster's colour (editing only, not while exporting)
+  const sc = o.scene;
+  if (sc && globalThis.__lookChanged && !globalThis.__exportingNow) {
+    if (s.autoTheme !== false && !THEMES[sc.look.theme]?.poster) { s.autoTheme = false; sc.look.theme = 'postersage'; sc.look.posterColor = s.color; queueMicrotask(() => globalThis.__lookChanged?.()); }
+    else if (s.syncMap !== false && THEMES[sc.look.theme]?.poster && s.color && sc.look.posterColor !== s.color) { sc.look.posterColor = s.color; queueMicrotask(() => globalThis.__lookChanged?.()); }
+  }
+  const D = Math.max(0.5, +L.duration || 4), tau = o.time == null || tm.edit ? 99 : o.time - (+L.start || 0), k = clamp(tau / D, 0, 1);
+  const an = L.anim || 'build', u = fr.w / 1920;
+  const paper = s.paper || '#ffffff', col = s.color || '#5f8a48';
+  // the page
+  let pg;
+  if (s.page === 'fill') pg = { x: fr.x, y: fr.y, w: fr.w, h: fr.h };
+  else {
+    const R = { '4:5': 0.8, '3:4': 0.75, '2:3': 2 / 3, A: 1 / 1.4142, '1:1': 1 }[s.ratio] || 0.8;
+    const h = fr.h * (s.frame && s.frame !== 'none' ? 0.8 : 0.88), w = h * R;
+    pg = { x: fr.x + (fr.w - w) / 2, y: fr.y + (fr.h - h) / 2, w, h };
+  }
+  const slide = an === 'print' ? 1 - ease(seg(k, 0, 0.45)) : 0;
+  const pgY = pg.y + slide * fr.h * 0.9;
+  ctx.save(); ctx.globalAlpha *= A;
+  const cx = pg.x + pg.w / 2;
+  if (s.page !== 'fill') {
+    // wall around the page (hides the map outside it) and the page's shadow
+    ctx.save(); ctx.beginPath(); ctx.rect(fr.x, fr.y, fr.w, fr.h); ctx.rect(pg.x, pgY, pg.w, pg.h); ctx.fillStyle = s.wall || '#e9e5df'; ctx.fill('evenodd'); ctx.restore();
+    if (slide > 0) { ctx.save(); ctx.beginPath(); ctx.rect(pg.x, pg.y, pg.w, pgY - pg.y); ctx.fillStyle = s.wall || '#e9e5df'; ctx.fill(); ctx.restore(); }
+  }
+  // the map shows through the page, cut to the chosen shape
+  ctx.save(); ctx.beginPath(); ctx.rect(pg.x, pgY, pg.w, pg.h); ctx.clip();
+  ctx.translate(0, pgY - pg.y);
+  const shape = s.shape || 'full';
+  const grow = an === 'still' ? 1 : ease(seg(k, an === 'print' ? 0.35 : 0.02, an === 'print' ? 0.75 : 0.55));
+  const ccy = pg.y + pg.h * (shape === 'circle' ? 0.4 : 0.43), cr = pg.w / 2 * clamp(+s.circle || 0.86, 0.3, 1.3);
+  const cut = (r) => { if (shape === 'rounded') { ctx.roundRect(cx - r, ccy - r, 2 * r, 2 * r, r * 0.18); } else if (shape === 'heart') heartPath(ctx, cx, ccy, r * 0.95); else { ctx.moveTo(cx + r, ccy); ctx.arc(cx, ccy, r, 0, Math.PI * 2); } };
+  if (shape === 'full') {
+    if (grow < 1) { const R = Math.hypot(pg.w, pg.h) * grow; ctx.beginPath(); ctx.rect(pg.x, pg.y, pg.w, pg.h); ctx.arc(cx, ccy, Math.max(0.1, R), 0, Math.PI * 2); ctx.fillStyle = paper; ctx.fill('evenodd'); }
+  } else {
+    ctx.save(); ctx.beginPath(); ctx.rect(pg.x, pg.y, pg.w, pg.h); cut(Math.max(0.1, cr * grow)); ctx.clip('evenodd');
+    ctx.fillStyle = paper; ctx.globalAlpha *= shape === 'circlefade' ? clamp(+(s.veil ?? 0.75), 0, 1) * (0.4 + 0.6 * grow) + (1 - grow) * 0.6 : 1; ctx.fillRect(pg.x, pg.y, pg.w, pg.h); ctx.restore();
+  }
+  // white fade at the bottom, under the title
+  const fd = clamp(+(s.fade ?? 0.38), 0, 0.8);
+  if (fd > 0) { const y0 = pg.y + pg.h * (1 - fd - 0.12), y1 = pg.y + pg.h * 0.9; const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, hexA(paper, 0)); g.addColorStop(1, hexA(paper, 1)); ctx.fillStyle = g; ctx.fillRect(pg.x, y0, pg.w, pg.y + pg.h - y0); }
+  if (s.grain !== false) { ctx.fillStyle = grainPattern(ctx); ctx.fillRect(pg.x, pg.y, pg.w, pg.h); }
+  // title, second line, coordinates
+  const ta = an === 'still' ? 1 : ease(seg(k, an === 'print' ? 0.55 : 0.35, an === 'print' ? 0.9 : 0.8));
+  const ts = pg.w * 0.085 * clamp(+s.titleSize || 1, 0.3, 3), font = s.font || 'Jost', sp = clamp(+(s.spacing ?? 0.28), 0, 1);
+  const ty = pg.y + pg.h * (shape === 'circle' ? 0.87 : 0.83);
+  ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  const spaced = (txt, size, weight, y, spacing, a) => {
+    if (!txt || a <= 0) return; ctx.save(); ctx.globalAlpha *= a; ctx.font = `${weight} ${size}px "${font}", Jost, Montserrat, sans-serif`;
+    try { ctx.letterSpacing = `${size * spacing}px`; } catch { /* */ }
+    ctx.fillText(txt, cx + size * spacing / 2, y); ctx.restore();
+  };
+  spaced(String(s.title || ''), ts, 600, ty, sp + (1 - ta) * 0.5, ta);
+  const ta2 = an === 'still' ? 1 : ease(seg(k, an === 'print' ? 0.7 : 0.55, 1));
+  const sub = String(s.sub || '');
+  if (sub) { const ss = ts * 0.3; spaced(`—  ${sub}  —`, ss, 500, ty + ts * 0.62, 0.3, ta2); }
+  const c0 = L.geom?.coordinates;
+  const coords = s.coords || (c0 ? `${dms(c0[0], 'E', 'W')}  ${dms(c0[1], 'N', 'S')}` : '');
+  spaced(coords, ts * 0.28, 500, ty + ts * (sub ? 1.12 : 0.62), 0.36, ta2);
+  ctx.restore();
+  // the frame (and how it closes in when printing)
+  if (s.page !== 'fill' && s.frame && s.frame !== 'none') {
+    const fa = an === 'print' ? ease(seg(k, 0.4, 0.75)) : an === 'still' ? 1 : ease(seg(k, 0, 0.3));
+    const [c1, c2] = FRAMES[s.frame] || FRAMES.black, fw = pg.w * 0.055, gap = (1 - fa) * fr.h * 0.08;
+    const x = pg.x - fw - gap, y = pgY - fw - gap, w = pg.w + 2 * (fw + gap), h = pg.h + 2 * (fw + gap);
+    ctx.save(); ctx.globalAlpha *= fa;
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 30 * u; ctx.shadowOffsetY = 12 * u;
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.rect(x + fw, y + fw, w - 2 * fw, h - 2 * fw);
+    const g = ctx.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, c1); g.addColorStop(1, c2); ctx.fillStyle = g; ctx.fill('evenodd');
+    ctx.shadowColor = 'transparent'; ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1.5 * u; ctx.strokeRect(x + fw, y + fw, w - 2 * fw, h - 2 * fw);
+    ctx.restore();
+  } else if (s.page !== 'fill') {
+    ctx.save(); ctx.globalAlpha *= 0.35; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 24 * u; ctx.shadowOffsetY = 10 * u; ctx.strokeStyle = 'rgba(0,0,0,0.05)'; ctx.strokeRect(pg.x, pgY, pg.w, pg.h); ctx.restore();
+  }
+  ctx.restore();
+}
 
 // ---------------------------------------------------------------- ship sinking
 function drawShipSink(ctx, L, tm, o) {
@@ -453,6 +548,7 @@ export function drawMapFx(ctx, L, tm, o, phase) {
   if (L.kind === 'softlabel' && phase === 'captions') return drawSoft(ctx, L, tm, o);
   if (L.kind === 'layerswipe' && phase === 'captions') return drawSwipe(ctx, L, tm, o);
   if (L.kind === 'shipsink' && phase === 'captions') return drawShipSink(ctx, L, tm, o);
+  if (L.kind === 'mapposter' && phase === 'captions') return drawPoster(ctx, L, tm, o);
   return undefined;
 }
 export function mxSoundEvents(L) {
@@ -491,6 +587,29 @@ export const MX_ACTIONS = {
     const view = JSON.parse(JSON.stringify(pick.view));
     sc.camera.keys = [{ t: 0, ease: 'linear', view }, { t: keys.at(-1).t || 5, ease: 'linear', view: JSON.parse(JSON.stringify(view)) }];
     return 'Map is now still for this scene — press “Bring back the map movement” to undo';
+  },
+  async posterFind(L, { scene }) {
+    const q = String(L.style.query || L.style.title || '').trim(); if (!q) return 'Type a place first';
+    let r;
+    try { r = (await (await fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&accept-language=en&q=' + encodeURIComponent(q))).json())[0]; } catch { return 'Could not reach the place search — check your connection'; }
+    if (!r) return `“${q}” was not found — try adding the country`;
+    const lon = +r.lon, lat = +r.lat, a = r.address || {};
+    L.geom = { type: 'Point', coordinates: [lon, lat] };
+    const city = a.city || a.town || a.village || a.municipality || a.county || r.name || q.split(',')[0];
+    L.style.title = String(city).toUpperCase();
+    L.style.sub = String((a.country_code === 'us' && a.state) ? a.state : (a.country || '')).toUpperCase();
+    L.style.coords = '';
+    if (scene) { // camera on the place, slowly drifting in
+      const len = Math.max(4, +scene.sceneLength || +scene.lineSeconds || 8), bb = (r.boundingbox || []).map(Number);
+      const span = bb.length === 4 ? Math.max(bb[1] - bb[0], (bb[3] - bb[2]) * Math.cos(lat * D2R)) : 0.2;
+      const z = clamp(Math.log2(360 / Math.max(0.02, span * 1.25)) - 0.4, 9.5, 14.5);
+      scene.camera.mode = 'keyframes';
+      scene.camera.keys = [{ t: 0, ease: 'linear', view: { center: [lon, lat], zoomRef: +(z - 0.25).toFixed(2), bearing: 0, pitch: 0 } }, { t: len, ease: 'linear', view: { center: [lon, lat], zoomRef: +z.toFixed(2), bearing: 0, pitch: 0 } }];
+      if (!THEMES[scene.look.theme]?.poster) scene.look.theme = 'postersage';
+      scene.look.posterColor = L.style.color;
+      globalThis.__lookChanged?.();
+    }
+    return `${city} found — the map, title and coordinates are set`;
   },
   swipeImagery(L) { globalThis.__swipeGeoImage?.(L.id, 'under'); return ''; },
   swipeTifA(L) { globalThis.__swipeGeoImage?.(L.id, 'A'); return ''; },

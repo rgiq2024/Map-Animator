@@ -41,6 +41,14 @@ export const THEMES = {
     pal: P({ land: '#ead9b0', water: '#c9d6c2', waterLine: '#9fb39a', wood: '#d9c993', grass: '#e2d3a3', park: '#dccc96', urban: '#dfcca0', sand: '#efdfb5', ice: '#f3ead2', building: '#cfb98a', motorway: '#8a5a32', roadMajor: '#9c6d43', roadMid: '#b08458', roadMinor: '#c6a274', casing: '#ead9b0', rail: '#8a6a45', border: '#7a4a2a', stateBorder: '#a6805c', label: '#4a2e17', halo: '#efe2bf', waterLabel: '#55714f' }),
     shade: { shadow: '#6e5530', highlight: '#fff5dc', accent: '#9c7f4c', strength: 0.4 }, swatch: ['#ead9b0', '#c9d6c2', '#b3261e'],
   },
+  // ---- poster themes: one colour on white paper (colour can be changed with look.posterColor) ----
+  postersage: { more: true, poster: '#5f8a48', name: 'Poster · Sage', desc: 'Map-art print: green streets, water and parks on white', line: '#5f8a48', swatch: ['#ffffff', '#5f8a48', '#a9c49a'] },
+  postergold: { more: true, poster: '#c4921c', name: 'Poster · Gold', desc: 'Map-art print: gold streets and buildings on white', line: '#c4921c', swatch: ['#ffffff', '#c4921c', '#e2c98c'] },
+  posterterra: { more: true, poster: '#c8602f', name: 'Poster · Terracotta', desc: 'Map-art print: terracotta streets on white', line: '#c8602f', swatch: ['#ffffff', '#c8602f', '#e8b399'] },
+  posterblue: { more: true, poster: '#4a72b0', name: 'Poster · Blue', desc: 'Map-art print: blue streets on white', line: '#4a72b0', swatch: ['#ffffff', '#4a72b0', '#a9bede'] },
+  posterink: { more: true, poster: '#2f3a44', name: 'Poster · Ink', desc: 'Map-art print: charcoal streets on white', line: '#2f3a44', swatch: ['#ffffff', '#2f3a44', '#9aa3ab'] },
+  posterrose: { more: true, poster: '#d98a96', name: 'Poster · Rose', desc: 'Map-art print: rose streets on white', line: '#d98a96', swatch: ['#ffffff', '#d98a96', '#efc4ca'] },
+  posternight: { more: true, poster: '#e8c36a', posterBg: '#10161f', dark: true, name: 'Poster · Night', desc: 'Map-art print: gold streets on midnight', line: '#e8c36a', swatch: ['#10161f', '#e8c36a', '#6b5c36'] },
   // ---- "More" themes ----
   oldatlas: { more: true, name: 'Old Atlas', desc: 'Engraved coasts and red roads, like a 19th-century atlas', line: '#b8322a',
     pal: P({ land: '#f1e6c8', water: '#cfe0df', waterLine: '#8fb1b4', wood: '#e6dcb8', grass: '#ece2c0', park: '#e4dab4', urban: '#eadbb8', sand: '#f3e8cb', ice: '#f8f2e2', building: '#ddcca5', motorway: '#c0392b', roadMajor: '#cc5a46', roadMid: '#d98a74', roadMinor: '#e3b49e', casing: '#f1e6c8', rail: '#6d5a44', border: '#7d5f8a', stateBorder: '#b29abd', label: '#3b2e22', halo: '#f4ead0', waterLabel: '#3f6b72' }), swatch: ['#f1e6c8', '#cfe0df', '#c0392b'] },
@@ -144,6 +152,15 @@ export function loadBaseStyle() {
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
+/** one-colour print palette: everything is the ink colour, mixed into the paper for the lighter parts */
+export function posterPal(ink, paper = '#ffffff') {
+  const h = (c) => { const m = String(c).replace('#', ''); const v = m.length === 3 ? m.split('').map((x) => x + x).join('') : m; return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16) || 0); };
+  const a = h(ink), b = h(paper);
+  const mix = (t) => '#' + a.map((v, i) => Math.round(b[i] + (v - b[i]) * t).toString(16).padStart(2, '0')).join('');
+  return { land: paper, water: mix(0.85), waterLine: mix(0.85), wood: mix(0.1), grass: mix(0.08), park: mix(0.12), urban: paper, sand: paper, ice: paper,
+    building: mix(0.45), motorway: mix(1), roadMajor: mix(0.95), roadMid: mix(0.85), roadMinor: mix(0.62), casing: paper, rail: mix(0.5), border: paper, stateBorder: paper,
+    label: mix(1), halo: paper, waterLabel: mix(1) };
+}
 function colorFor(layer, pal) {
   const id = layer.id;
   if (id === 'background') return pal.land;
@@ -183,7 +200,8 @@ function nameField(lang) {
  * look: { theme, placeNames, lang, states, terrain, terrainExaggeration }
  */
 export async function buildStyle(look) {
-  const theme = THEMES[look.theme] || THEMES.classic;
+  const theme0 = THEMES[look.theme] || THEMES.classic;
+  const theme = theme0.poster ? { ...theme0, pal: posterPal(look.posterColor || theme0.poster, theme0.posterBg || '#ffffff') } : theme0;
   const base = await loadBaseStyle();
   const st = clone(base);
   // never let a style move the camera
@@ -278,6 +296,7 @@ export async function buildStyle(look) {
           c.paint['line-blur'] = 1.2;
         }
       }
+      if (theme.poster && (c.type === 'symbol' || c.id.startsWith('boundary') || c.id.endsWith('_casing') || c.type === 'fill-extrusion')) continue; // a print: no labels, borders, casings or 3D
       // Toggles shared by all vector themes
       if (c.type === 'symbol' && PLACE_LAYERS.test(c.id) && field) {
         c.layout = { ...(c.layout || {}), 'text-field': field };

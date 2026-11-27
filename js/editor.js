@@ -118,7 +118,7 @@ export function createEditor() {
   let tool = 'draw';
   let activeLeg = 0, selPoint = null, hoverPoint = null, selSign = null;
   let placing = null;
-  let exporting = false;
+  let exporting = false; globalThis.__exportingNow = false;
   let frame = { x: 0, y: 0, w: 800, h: 450 };
   let hits = { signBoxes: [], legBadges: [], handles: [] };
   let undoStack = [];
@@ -173,8 +173,8 @@ export function createEditor() {
   }
 
   function lookKey(look) {
-    const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d, rasterLabels, rasterRoads, globe, atmosphere } = look;
-    return JSON.stringify({ theme, placeNames, lang, states, terrain, globe: !!globe, atmosphere: !!atmosphere, buildings3d: !!buildings3d, rasterLabels: rasterLabels !== false, rasterRoads: !!rasterRoads, terrainExaggeration: terrain ? terrainExaggeration : 0 });
+    const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d, rasterLabels, rasterRoads, globe, atmosphere, posterColor } = look;
+    return JSON.stringify({ theme, posterColor: THEMES[theme]?.poster ? posterColor : '', placeNames, lang, states, terrain, globe: !!globe, atmosphere: !!atmosphere, buildings3d: !!buildings3d, rasterLabels: rasterLabels !== false, rasterRoads: !!rasterRoads, terrainExaggeration: terrain ? terrainExaggeration : 0 });
   }
   function applyLook(sc) {
     const key = lookKey(sc.look);
@@ -3367,7 +3367,7 @@ export function createEditor() {
     if (a === 'sarFit') fitSar(L);
     if (a === 'gvAction') {
       btn.disabled = true;
-      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const { MX_ACTIONS } = await import('./mapfx.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn] || MX_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (['dofDrift', 'mapStill', 'mapMove'].includes(btn.dataset.fn)) { save?.(); rebuild?.(); renderScenes?.(); repaint(); } if (msg) toast(msg, 4200); } }
+      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const { MX_ACTIONS } = await import('./mapfx.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn] || MX_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (['dofDrift', 'mapStill', 'mapMove', 'posterFind'].includes(btn.dataset.fn)) { save?.(); rebuild?.(); renderScenes?.(); repaint(); } if (msg) toast(msg, 4200); } }
       catch (err) { toast(err.message || 'Request failed', 5000); }
       btn.disabled = false;
     }
@@ -3922,7 +3922,9 @@ export function createEditor() {
     const th = THEMES[look.theme] || {};
     $('#rlabels-row').hidden = !(th.tiles && !th.labels);
     $('#rroads-row').hidden = !(th.tiles && th.satellite);
+    { const pr = $('#poster-row'); if (pr) { pr.hidden = !th.poster; const pc = $('#poster-color'); if (pc && th.poster) pc.value = scene().look.posterColor || th.poster; } }
   }
+  globalThis.__lookChanged = () => { if (exporting) return; renderThemes(); renderLookControls(); applyLook(scene()); save(); };
   function setTheme(k) {
     const look = scene().look;
     const prevDefault = THEMES[look.theme]?.line;
@@ -5223,7 +5225,7 @@ export function createEditor() {
     const { width, height } = videoSize(project.aspect, project.resolution);
     setPlaying(false);
     closePops();
-    exporting = true;
+    exporting = true; globalThis.__exportingNow = true;
     toast('Rendering the frame…', 10000);
     const mapEl = $('#map');
     stage.classList.add('exporting');
@@ -5263,7 +5265,7 @@ export function createEditor() {
       console.error(err);
       toast(`Could not render the frame: ${err.message || err}`);
     } finally {
-      exporting = false;
+      exporting = false; globalThis.__exportingNow = false;
       stage.classList.remove('exporting');
       Object.assign(mapEl.style, { left: '', top: '', width: '', height: '' });
       mapEl.style.filter = gradeFilter(scene().look.grade);
@@ -5282,7 +5284,7 @@ export function createEditor() {
     setPlaying(false);
     closePops();
     viewMode = 'play';
-    exporting = true;
+    exporting = true; globalThis.__exportingNow = true;
     const dlg = $('#render-modal');
     if (exportUrl) { URL.revokeObjectURL(exportUrl); exportUrl = null; }
     const prev = $('#render-preview');
@@ -5387,7 +5389,7 @@ export function createEditor() {
         $('#render-cancel').textContent = 'Close';
       }
     } finally {
-      exporting = false;
+      exporting = false; globalThis.__exportingNow = false;
       exportAbort = null;
       stage.classList.remove('exporting');
       Object.assign(mapEl.style, { left: '', top: '', width: '', height: '' });
