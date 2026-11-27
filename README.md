@@ -428,3 +428,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Zoom to location camera moves: zoom speed, rotate speed (°/s), wait at start, hold at end, flight curve.
 - New Messages section: chat bubbles element (glass, iMessage, WhatsApp, pill, thread, dark, holographic, notification looks; names, times, profile pictures, typing dots, send/receive sounds).
 - News desk: free-text news search, 11 incident categories (refinery/industrial fire, explosion, building fire, war/airstrike, train, plane, road, collapse, ship, mine, stampede), death/injury counts from headlines weigh the ranking, card grid on the right, All/None/Nature/Incidents filters.
+- New 'Satellite imagery · Visual investigations' section: investigation frame (intro / before / after / side by side / photo cards / swipe, 'make the full set'), image tiles on the map with Area markers, box callouts, site outlines, black place labels.

@@ -6,6 +6,7 @@ import { placeAt } from './place.js';
 import { parseTable, dataOf, SAMPLE_NAMES } from './geodata.js';
 import { zoomRefFor } from './scene.js';
 import { THEMES } from './themes.js';
+import { VI_KINDS, VI_ANIMS, VI_DUR, VI_DEFAULTS, VI_FORMS, VI_SET, VI_ACTIONS, drawVI } from './vinvest.js';
 import { imageFor as msgImage } from './geoimage.js';
 
 
@@ -47,6 +48,7 @@ export const MX_DEFAULTS = {
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
 };
 const DUR = { msgchat: 8, mapposter: 4, shipsink: 12, layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
+Object.assign(MX_KINDS, VI_KINDS); Object.assign(MX_ANIMS, VI_ANIMS); Object.assign(DUR, VI_DUR); Object.assign(MX_DEFAULTS, VI_DEFAULTS);
 export const MX_LAYER_DEFAULTS = Object.fromEntries(Object.keys(MX_KINDS).map((k) => [k, { anim: Object.keys(MX_ANIMS[k])[0], duration: DUR[k], style: MX_DEFAULTS[k] }]));
 export const MX_FORMS = {
   dofblur: [
@@ -141,6 +143,7 @@ export const MX_FORMS = {
   ],
   softlabel: [['style.text', 'Text', 'text'], ['style.size', 'Size', 'range', [0.4, 4, 0.05]], ['style.color', 'Colour', 'color'], ['style.weight', 'Weight', 'select', { 300: 'Light', 500: 'Medium', 700: 'Bold' }], ['style.shadow', 'Soft shadow', 'range', [0, 1, 0.01]], ['style.dot', 'Dot at the place', 'switch'], ...SND],
 };
+Object.assign(MX_FORMS, VI_FORMS);
 export const MX_SET = new Set(Object.keys(MX_KINDS));
 export const mxPhases = (k) => (k === 'inkreveal' || k === 'flickerzones' ? ['below'] : ['captions']);
 
@@ -768,6 +771,7 @@ function drawSoft(ctx, L, tm, o) {
 }
 
 export function drawMapFx(ctx, L, tm, o, phase) {
+  if (VI_SET.has(L.kind)) return drawVI(ctx, L, tm, o, phase);
   if (!o.frame) return;
   if (L.kind === 'dofblur' && phase === 'captions') return drawDof(ctx, L, tm, o);
   if (L.kind === 'inkreveal' && phase === 'below') return drawInk(ctx, L, tm, o);
@@ -850,5 +854,6 @@ export const MX_ACTIONS = {
     sc.camera.keys = sc.camera.movingKeys; delete sc.camera.movingKeys; sc.camera.mode = 'keyframes';
     return 'Map movement is back';
   },
+  ...VI_ACTIONS,
 };
 void SAMPLE_NAMES;

@@ -2028,6 +2028,7 @@ export function createEditor() {
   $('#add-milgfx')?.addEventListener('click', cartoAdd);
   $('#add-poster')?.addEventListener('click', cartoAdd);
   $('#add-msg')?.addEventListener('click', cartoAdd);
+  $('#add-vi')?.addEventListener('click', cartoAdd);
   $('#add-milgfx-type')?.addEventListener('click', cartoAdd);
   $('#add-docu')?.addEventListener('click', cartoAdd);
   $('#add-earth')?.addEventListener('click', cartoAdd);
@@ -3387,7 +3388,7 @@ export function createEditor() {
     if (a === 'sarFit') fitSar(L);
     if (a === 'gvAction') {
       btn.disabled = true;
-      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const { MX_ACTIONS } = await import('./mapfx.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn] || MX_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (['dofDrift', 'mapStill', 'mapMove', 'posterFind'].includes(btn.dataset.fn)) { save?.(); rebuild?.(); renderScenes?.(); repaint(); } if (msg) toast(msg, 4200); } }
+      try { const { GV_ACTIONS } = await import('./geoviz.js'); const { CS_ACTIONS } = await import('./cartostyle.js'); const { MX_ACTIONS } = await import('./mapfx.js'); const fn = GV_ACTIONS[btn.dataset.fn] || CS_ACTIONS[btn.dataset.fn] || MX_ACTIONS[btn.dataset.fn]; if (fn) { pushUndo(); const msg = await fn(L, { map, toast, scene: scene() }); renderLayerEditor(); commitLayers(); if (['dofDrift', 'mapStill', 'mapMove', 'posterFind', 'viMakeSet'].includes(btn.dataset.fn)) { save?.(); rebuild?.(); renderScenes?.(); repaint(); } if (msg) toast(msg, 4200); } }
       catch (err) { toast(err.message || 'Request failed', 5000); }
       btn.disabled = false;
     }
@@ -5141,6 +5142,21 @@ export function createEditor() {
   function previewSound() { try { return localStorage.getItem('ma.previewSound') === '1'; } catch { return false; } }
   { const b = $('#tl-sound'); if (b) { b.setAttribute('aria-pressed', String(previewSound()));
     b.addEventListener('click', () => { const on = !previewSound(); try { localStorage.setItem('ma.previewSound', on ? '1' : '0'); } catch { /* */ } b.setAttribute('aria-pressed', String(on)); if (!on) stopPlayback(); else if (viewMode === 'play') { stopPlayback(); playFrom(project, sceneOffset() + outOf(time), tl?.state.rate || 1, soundEvents(), sceneOffset() + model.duration).catch(() => {}); } toast(on ? 'Preview sound on' : 'Preview sound off — exports are silent unless you switch sound on in Export', 3200); }); } }
+  // Visual investigation: this scene becomes the intro, and Before / After / Side-by-side copies follow it
+  globalThis.__viMakeSet = (layerId) => {
+    const sc0 = scene(), i0 = project.scenes.indexOf(sc0), L0 = sc0.layers.find((l) => l.id === layerId); if (!L0) return '';
+    L0.style.layout = 'intro'; L0.anim = 'fade';
+    const out = [];
+    for (const [lay, anim, name] of [['before', 'push', 'Before'], ['after', 'push', 'After'], ['side', 'cards', 'Side by side']]) {
+      const c = JSON.parse(JSON.stringify(sc0)); c.id = `scene_${Math.random().toString(36).slice(2, 9)}`; c.name = name;
+      c.layers.forEach((l) => { l.id = `${l.kind}_${Math.random().toString(36).slice(2, 9)}`; });
+      const f = c.layers.find((l) => l.kind === 'viframe'); if (f) { f.style.layout = lay; f.anim = anim; }
+      out.push(c);
+    }
+    project.scenes.splice(i0 + 1, 0, ...out);
+    save(); renderScenes(); rebuild();
+    return 'Added 3 scenes: Before, After and Side by side — choose the BEFORE and AFTER images in each';
+  };
   function addScene(briefLayout = null) {
     const last = project.scenes.at(-1);
     const sc = newScene(`Scene ${project.scenes.length + 1}`, last.look);
