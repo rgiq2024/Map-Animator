@@ -307,7 +307,7 @@ function localBearing(route, ll, fallback) {
   return bd < 30000 ? bearingTo(a, b) : fallback;
 }
 function darkLook(sc) {
-  Object.assign(sc.look, { theme: 'relief', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
+  Object.assign(sc.look, { theme: 'relief', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
   sc.look.grade = { ...presetGrade('night'), preset: 'custom', brightness: 0.5, contrast: 1.25, saturation: 0.35, warmth: -0.55, fade: 0 };
 }
 function L(kind, geom, start, extra = {}) {
@@ -348,7 +348,7 @@ function buildSiteStory(plan, g, opts) {
   {
     const D = 12.5 * k;
     const sc = newScene('Region');
-    Object.assign(sc.look, { theme: 'nightroads', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
+    Object.assign(sc.look, { theme: 'nightroads', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
     sc.camera.mode = 'keyframes'; sc.camera.tilt = 48;
     sc.camera.keys = [K(0, V(fit.center, zR - 0.25, -10, 48), 'linear'), K(D, V(fit.center, zR + 0.15, 4, 50), 'linear')];
     sc.stillStart = 0; sc.stillEnd = 0.3;
@@ -366,7 +366,7 @@ function buildSiteStory(plan, g, opts) {
   {
     const D = 10 * k;
     const sc = newScene('Drive times');
-    Object.assign(sc.look, { theme: 'nightroads', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false });
+    Object.assign(sc.look, { theme: 'nightroads', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false });
     const near = sites.filter((d) => Math.hypot(d[0] - best[0], d[1] - best[1]) < span * 0.18);
     const c = [near.reduce((a, d) => a + d[0], 0) / near.length, near.reduce((a, d) => a + d[1], 0) / near.length];
     sc.camera.mode = 'keyframes'; sc.camera.tilt = 50;
@@ -384,7 +384,7 @@ function buildSiteStory(plan, g, opts) {
   {
     const D = 8 * k;
     const sc = newScene('Selected store');
-    Object.assign(sc.look, { theme: 'nightroads', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false });
+    Object.assign(sc.look, { theme: 'nightroads', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false });
     sc.camera.mode = 'keyframes'; sc.camera.tilt = 58;
     sc.camera.keys = [K(0, V(best, 12.6, 14, 56), 'linear'), K(D, V(best, 13.1, 22, 58), 'linear')];
     sc.camera.lens = { ...sc.camera.lens, vignette: 0.5, dof: true, blur: 6, focus: 0.55, band: 0.4 };
@@ -421,7 +421,7 @@ export function buildStory(plan, g, opts = {}) {
   if (B.opening) {
     const D = 7 * k;
     const sc = newScene('Opening');
-    Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, globe: true, atmosphere: true, clouds: true, cloudMode: 'zoom', cloudAmount: 0.7 });
+    Object.assign(sc.look, { theme: 'satellite', placeNames: true, lang: 'en', rasterLabels: false, globe: true, atmosphere: true, clouds: true, cloudMode: 'zoom', cloudAmount: 0.7 });
     sc.camera.mode = 'keyframes';
     const cz = g.country?.bbox ? fitCamera(g.country.bbox, REF_W, vh, 0.08).zoom : 4.6;
     // one smooth, eased move from space straight down to the place (the end view is matched to the next scene below)
@@ -474,7 +474,7 @@ export function buildStory(plan, g, opts = {}) {
   if (closeUp) {
     const D = 13 * k;
     const sc = newScene('Event');
-    Object.assign(sc.look, { theme: opts.baseClose || 'satellite', placeNames: false, rasterLabels: false, buildings3d: plan.event !== 'traincrash', terrain: false, globe: false, clouds: false });
+    Object.assign(sc.look, { theme: opts.baseClose || 'satellite', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: plan.event !== 'traincrash', terrain: false, globe: false, clouds: false });
     sc.camera.mode = 'keyframes';
     sc.stillStart = 0; sc.stillEnd = 0.3;
     // train crash: move the event onto the real railway and follow its direction
@@ -564,7 +564,7 @@ export function buildStory(plan, g, opts = {}) {
   if (B.compare && B.beforeId && B.afterId) {
     const D = 8 * Math.min(k, 1.5);
     const sc = newScene('Before / after');
-    Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
+    Object.assign(sc.look, { theme: 'satellite', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
     const half = Math.max(0.1, +B.compareKm || 2) * 500;
     const n = dest(focus, 0, half)[1], so = dest(focus, 180, half)[1], e = dest(focus, 90, half)[0], w2 = dest(focus, 270, half)[0];
     const quad = [[r6(w2), r6(n)], [r6(e), r6(n)], [r6(e), r6(so)], [r6(w2), r6(so)]];

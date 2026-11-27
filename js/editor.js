@@ -1610,7 +1610,7 @@ export function createEditor() {
     if (k === 'nightroads') {
       pushUndo();
       const sc = scene();
-      Object.assign(sc.look, { theme: 'nightroads', placeNames: false, buildings3d: false, terrain: false, shading: true });
+      Object.assign(sc.look, { theme: 'nightroads', placeNames: true, lang: 'en', buildings3d: false, terrain: false, shading: true });
       sc.camera.tilt = Math.max(+sc.camera.tilt || 0, 45);
       applyLook(sc); renderLookControls(); save();
       toast('Night roads map with a 45° tilt — glowing roads on dark relief', 3600);
@@ -1655,7 +1655,7 @@ export function createEditor() {
       const sc = scene();
       if (!['dark', 'fiord', 'neon', 'synthwave', 'deepocean', 'blueprint'].includes(sc.look.theme)) {
         pushUndo();
-        Object.assign(sc.look, { theme: 'dark', placeNames: false, buildings3d: false });
+        Object.assign(sc.look, { theme: 'dark', placeNames: true, lang: 'en', buildings3d: false });
         applyLook(sc);
         toast('Map switched to Dark for the digital-twin look — change it in Look. Click the centre of the city.', 5200);
       }
@@ -5147,7 +5147,7 @@ export function createEditor() {
       if (!ll && fr?.style.country) ll = countryLabelPoint(fr.style.country);
       if (!ll) { const c = map.getCenter(); ll = [c.lng, c.lat]; }
       sc.briefZoom = { ...ZOOM_DEFAULTS, ll }; Object.assign(sc.camera, zoomCamera(ll, 8, 13, sc.briefZoom));
-      Object.assign(sc.look, { globe: false, theme: sc.look.theme === 'classic' ? 'satellite' : sc.look.theme, placeNames: false });
+      Object.assign(sc.look, { globe: false, theme: sc.look.theme === 'classic' ? 'satellite' : sc.look.theme, placeNames: true, lang: 'en' });
       sc.stillStart = 0; sc.stillEnd = 0.5;
       sc.legs = [{ ...sc.legs[0], points: [] }];
       // right after the intro (or after the scene you are on)

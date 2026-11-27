@@ -419,3 +419,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - GEO·BRIEF: dot-matrix only on the intro globe; MOFA layout fills the frame with your AFTER picture (lens magnifies it) — 'Main picture' setting.
 - Home page: layout row wraps, MOFA option added (also in '+ Briefing scene').
 - Sound off by default: preview has a 🔇/🔊 sound button (off unless switched on); exports silent unless switched on (old saved export choices reset).
+- Map theme defaults: place names on, names in English (new scenes and auto-built scenes).

@@ -440,7 +440,7 @@ export function newScene(name = 'Scene 1', look) {
 export const legId = () => `lg_${Math.random().toString(36).slice(2, 9)}`;
 export function defaultLook() {
   return {
-    theme: 'classic', placeNames: true, lang: 'default', states: false, terrain: false, terrainExaggeration: 1.4,
+    theme: 'classic', placeNames: true, lang: 'en', states: false, terrain: false, terrainExaggeration: 1.4,
     lineColor: '#ff4a2b', lineWidth: 5, outline: true, symbol: 'auto', symbolSize: 1, symbol3d: true, compass: false, buildings3d: false, buildingsRise: false,
   };
 }

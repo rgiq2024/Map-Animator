@@ -163,7 +163,7 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
     try { res = await satPair(focus, inc.time, Math.min(zoneKm * 1.25, 12), inc.cat, onStatus); } catch (e) { res = { error: e.message }; }
     sat = res;
     const sc = newScene('Pre & post satellite');
-    Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
+    Object.assign(sc.look, { theme: 'satellite', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
     const D = 9;
     const z = Math.max(zClose, res?.frames?.[0]?.minzoom || 0);
     sc.camera.mode = 'keyframes';
@@ -209,7 +209,7 @@ export async function buildNewsStory(inc, text, parts, media = [], opts = {}, on
     if (opts.commons) { onStatus('Looking for photos of the area…'); try { for (const p of await commonsPhotos(focus, Math.max(0, 3 - items.filter((m) => m.kind === 'image').length))) { items.push({ id: p.id, kind: 'image', name: p.title, credit: p.credit }); credits.push(`Photo: ${p.credit} (Wikimedia Commons)`); } } catch { /* none */ } }
     if (items.length) {
       const sc = newScene('Photos & videos');
-      Object.assign(sc.look, { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
+      Object.assign(sc.look, { theme: 'satellite', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false, globe: false, clouds: false });
       const imgs = items.filter((m) => m.kind === 'image').slice(0, 4), vids = items.filter((m) => m.kind === 'video').slice(0, 2);
       const D = Math.max(7, 3 + imgs.length * 2 + vids.length * 4);
       sc.camera.mode = 'keyframes';
@@ -316,7 +316,7 @@ export async function buildDisasterBrief(inc, text, media = [], opts = {}, onSta
     before: spec(fr.length > 1 ? fr[0] : null), after: spec(fr.length > 1 ? fr.at(-1) : fr[0]), thumbZoom: Math.max(fr[0]?.minzoom || 0, Math.min(16, zClose - 0.4)),
     geobrief: true, ticker: [text.subtitle, ...facts.map((f) => f.replace(' | ', ': '))].filter(Boolean).join('\n'), accent: FIRE(inc.cat) ? '#ff8a2a' : '#35c8ff',
   };
-  const sat0 = { theme: 'satellite', placeNames: false, rasterLabels: false, buildings3d: false, terrain: false, clouds: false };
+  const sat0 = { theme: 'satellite', placeNames: true, lang: 'en', rasterLabels: false, buildings3d: false, terrain: false, clouds: false };
   const frameOf = (layout, extra = {}) => splitBriefing(briefFrame(info, layout, extra));
   const boxesOf = (layout) => layoutBoxes(layout, aspect, !!(info.before || info.after), { header: true, ticker: false });
   const inWindow = (sc, layout) => { const b = boxesOf(layout); if (b.win && sc.camera.keys?.length) sc.camera.keys = sc.camera.keys.map((k) => ({ ...k, view: viewIntoWindow(k.view, b.win, aspect) })); };
