@@ -24,13 +24,13 @@ export const VI_ANIMS = {
   vijourney: { journey: 'City → pan → zoom and reveal' },
   vilabel: { pop: 'Pops in', fade: 'Fade in', type: 'Types in' },
 };
-export const VI_DUR = { vijourney: 13, viframe: 6, vitile: 1, vibox: 1.2, vioutline: 2.2, vilabel: 0.8 };
+export const VI_DUR = { vijourney: 19, viframe: 6, vitile: 1, vibox: 1.2, vioutline: 2.2, vilabel: 0.8 };
 export const VI_DEFAULTS = {
   viframe: { layout: 'side', kicker: 'VISUAL INVESTIGATION', title: 'What satellite images show', sub: '', date: '', credit: 'Satellite images: Maxar Technologies', beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', labelStyle: 'box', gap: 6, bg: '#e8e8e6', titleFont: 'Georgia', titleColor: '#ffffff', shade: 0.55, push: 0.06, focusX: 0, focusY: 0, split: 0.5, cardsBg: true, accent: '#f05a28' },
   vitile: { media: '', label: 'Area 1', widthKm: 1.2, rotate: 0, border: '#ffffff', borderW: 2, shadow: true, marker: true, markerColor: '#f05a28', leader: 34, labelSide: 'below', date: '', opacity: 1 },
   vibox: { label: 'Bridge', sizeM: 120, color: '#ffffff', width: 2.5, labelPos: 'above', fontSize: 1 },
   vioutline: { label: 'Site name', color: '#111111', width: 2.5, dash: false, fill: '', labelPos: 'corner', mono: true },
-  vijourney: { fromPlace: 'Tehran', fromLL: null, fromLabel: 'TEHRAN', siteQuery: '', siteLabel: 'Site name', cityZoom: 10.5, panZoom: 12, endZoom: 14.6, holdCity: 2, panSec: 6, zoomSec: 3, holdEnd: 2, bearing: 0, shape: 'octagon', sizeM: 900, lineColor: '#111111', lineWidth: 2.5, labelSize: 1, mono: true },
+  vijourney: { fromPlace: 'Tehran', fromLL: null, fromLabel: 'TEHRAN', siteQuery: '', siteLabel: 'Site name', cityZoom: 10.5, panZoom: 10.5, endZoom: 14.6, holdCity: 2, panSec: 12, zoomSec: 3, holdEnd: 2, bearing: 0, shape: 'octagon', sizeM: 900, lineColor: '#111111', lineWidth: 2.5, labelSize: 1, mono: true },
   vilabel: { text: 'TEHRAN', size: 1, bg: '#111111', color: '#ffffff', pointer: true },
 };
 const LBL = { box: 'White box, dark text', plain: 'White text (no box)', dark: 'Dark box, white text' };
@@ -61,12 +61,12 @@ export const VI_FORMS = {
   vibox: [['style.label', 'Label', 'text'], ['style.sizeM', 'Box size on the ground (m)', 'range', [5, 3000, 5]], ['style.color', 'Colour', 'color'], ['style.width', 'Line width', 'range', [0.5, 8, 0.5]], ['style.labelPos', 'Label', 'select', { above: 'Above', below: 'Below', inside: 'Inside, top' }], ['style.fontSize', 'Label size', 'range', [0.5, 2.5, 0.05]]],
   vioutline: [['style.label', 'Label', 'text'], ['style.color', 'Line colour', 'color'], ['style.width', 'Line width', 'range', [0.5, 8, 0.5]], ['style.dash', 'Dashed', 'switch'], ['style.fill', 'Fill (empty = none)', 'color'], ['style.labelPos', 'Label at', 'select', { corner: 'Top-left of the frame', site: 'Top-left of the outline', none: 'No label' }], ['style.mono', 'Typewriter (mono) label', 'switch']],
   vijourney: [
-    ['', 'Click the site on the map (or type it below), type the city to start from, then press the button.', 'note'],
-    ['style.fromPlace', 'Start from (city, or “lat, lon”)', 'text'], ['style.fromLabel', 'City label', 'text'],
-    ['style.siteQuery', 'Site (empty = where you clicked; or a name / “lat, lon”)', 'text'], ['style.siteLabel', 'Site label (boxed, top-left)', 'text'],
+    ['', 'Choose where it starts and the site — type them, or press 📍 and click on the map — then press 🎬.', 'note'],
+    ['style.fromPlace', 'Start from (city)', 'llpick'], ['style.fromLabel', 'City label', 'text'],
+    ['geom', 'Site to reveal', 'llpick'], ['style.siteLabel', 'Site label (boxed, top-left)', 'text'],
     ['', '🎬 Set up the camera (city → pan → zoom)', 'gvaction', 'viJourney'],
-    ['style.holdCity', 'Stay on the city (s)', 'range', [0, 6, 0.1]], ['style.panSec', 'Pan takes (s)', 'range', [1, 20, 0.1]], ['style.zoomSec', 'Zoom in takes (s)', 'range', [0.5, 10, 0.1]], ['style.holdEnd', 'Stay on the site (s)', 'range', [0, 8, 0.1]],
-    ['style.cityZoom', 'City zoom', 'range', [5, 16, 0.1]], ['style.panZoom', 'Pan height (zoom — higher = lower and faster)', 'range', [6, 16, 0.1]], ['style.endZoom', 'Final zoom on the site', 'range', [10, 19, 0.1]], ['style.bearing', 'Map rotation (°)', 'range', [-180, 180, 1]],
+    ['style.holdCity', 'Stay on the city (s)', 'range', [0, 6, 0.1]], ['style.panSec', 'Pan takes (s) — more = slower', 'range', [1, 60, 0.5]], ['style.zoomSec', 'Zoom in takes (s)', 'range', [0.5, 10, 0.1]], ['style.holdEnd', 'Stay on the site (s)', 'range', [0, 8, 0.1]],
+    ['style.cityZoom', 'City zoom', 'range', [5, 16, 0.1]], ['style.panZoom', 'Pan height (zoom) — lower number = higher up, pan looks slower', 'range', [6, 16, 0.1]], ['style.endZoom', 'Final zoom on the site', 'range', [10, 19, 0.1]], ['style.bearing', 'Map rotation (°)', 'range', [-180, 180, 1]],
     ['', 'After changing these, press the button again.', 'note'],
     ['style.shape', 'Reveal outline', 'select', { octagon: 'Octagon', square: 'Square', circle: 'Circle', none: 'No outline' }], ['style.sizeM', 'Outline size (m)', 'range', [50, 10000, 10], (L) => L.style.shape !== 'none'],
     ['style.lineColor', 'Outline colour', 'color', null, (L) => L.style.shape !== 'none'], ['style.lineWidth', 'Outline width', 'range', [0.5, 8, 0.5], (L) => L.style.shape !== 'none'],
@@ -264,7 +264,7 @@ function drawPlaceLabel(ctx, L, tm, o) {
 }
 
 // ---------------------------------------------------------------- fly-over: city → pan → reveal
-const jTimes = (s) => { const h = Math.max(0, +s.holdCity || 0), p = Math.max(0.5, +s.panSec || 6), z = Math.max(0.3, +s.zoomSec || 3), e = Math.max(0, +s.holdEnd || 0); return { h, p, z, e, arrive: h + p, done: h + p + z, total: h + p + z + e }; };
+const jTimes = (s) => { const h = Math.max(0, +s.holdCity || 0), p = Math.max(0.5, +s.panSec || 12), z = Math.max(0.3, +s.zoomSec || 3), e = Math.max(0, +s.holdEnd || 0); return { h, p, z, e, arrive: h + p, done: h + p + z, total: h + p + z + e }; };
 function drawJourney(ctx, L, tm, o) {
   const s = L.style; if (L.geom?.type !== 'Point') return;
   const A = tm.alpha ?? 1; if (A <= 0) return;
@@ -330,12 +330,13 @@ export const VI_ACTIONS = {
     const to = L.geom.coordinates, T = jTimes(s), b = +s.bearing || 0;
     const V = (c, z) => ({ center: [+c[0].toFixed(6), +c[1].toFixed(6)], zoomRef: +(+z).toFixed(3), bearing: b, pitch: 0 });
     const lerp = (u) => [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
-    const cz = +s.cityZoom || 10.5, pz = +s.panZoom || 12, ez = +s.endZoom || 14.6;
+    const cz = +s.cityZoom || 10.5, pz = +s.panZoom || 10.5, ez = +s.endZoom || 14.6;
     const keys = [{ t: 0, ease: 'linear', view: V(from, cz) }];
     if (T.h > 0) keys.push({ t: T.h, ease: 'ease', view: V(from, cz) });
     // ease into the pan height near the city, constant speed across, then arrive
-    const n = 6; for (let i = 1; i <= n; i++) { const u = i / n; keys.push({ t: +(T.h + T.p * u).toFixed(3), ease: i === n ? 'ease' : 'linear', view: V(lerp(u), i === n ? pz : pz) }); }
-    keys[keys.length - (n)].ease = 'linear';
+    // gentle start and stop, steady glide in the middle
+    const n = 16, sm = (u) => u * u * (3 - 2 * u);
+    for (let i = 1; i <= n; i++) { const u = i / n, k = 0.55 * sm(u) + 0.45 * u; keys.push({ t: +(T.h + T.p * u).toFixed(3), ease: 'linear', view: V(lerp(k), cz + (pz - cz) * Math.min(1, u * 4)) }); }
     keys.push({ t: +(T.done).toFixed(3), ease: 'linear', view: V(to, ez) });
     if (T.e > 0) keys.push({ t: +(T.total).toFixed(3), ease: 'linear', view: V(to, ez + 0.15) });
     if (scene) { scene.camera.mode = 'keyframes'; scene.camera.keys = keys; scene.sceneLength = Math.max(+scene.sceneLength || 0, T.total); }

@@ -827,9 +827,21 @@ export function createEditor() {
     stage.classList.toggle('on-line', onLine);
   }
 
+  let mapPick = null;
+  function setPickedLL(pk, ll) {
+    const Lr = scene().layers.find((l) => l.id === pk.id); if (!mapPick || (mapPick.id === pk.id && mapPick.path === pk.path)) { mapPick = null; stage.classList.remove('picking-ll'); }
+    if (!Lr) return;
+    pushUndo();
+    const txt = `${ll[1].toFixed(5)}, ${ll[0].toFixed(5)}`;
+    if (pk.path === 'geom') { Lr.geom = { type: 'Point', coordinates: [+ll[0].toFixed(6), +ll[1].toFixed(6)] }; if (Lr.style && 'siteQuery' in Lr.style) Lr.style.siteQuery = ''; }
+    else setPath(Lr, pk.path, txt);
+    renderLayerEditor(); repaint(); save();
+    toast(`Set to ${txt}${Lr.kind === 'vijourney' ? ' — press 🎬 Set up the camera' : ''}`);
+  }
   function onClick(e) {
     if (suppressClick || exporting || viewMode !== 'edit') return;
     const p = toCanvas(e.point);
+    if (mapPick) { setPickedLL(mapPick, [e.lngLat.lng, e.lngLat.lat]); return; }
     if (placing) { addSign(e.lngLat); return; }
     if (step === 'layers') { onLayerClick(e, p); return; }
     if (step === 'route') {
@@ -2306,6 +2318,11 @@ export function createEditor() {
           const c = L.geom?.coordinates;
           h += `<div class="field"><span>${label}</span><div class="btn-row"><input data-act-input="brAt" value="${c ? `${c[1].toFixed(5)}, ${c[0].toFixed(5)}` : ''}" placeholder="lat, lon — e.g. 39.4134, -3.7151"><button class="btn sm" data-act="brHere" title="Use the middle of the map">◎ Map centre</button></div><small class="muted">${c ? 'Set — the globe and locator point here.' : 'Not set — the globe and locator follow the country, or the middle of the map.'}</small></div>`;
         }
+        else if (type === 'llpick') {
+          const on = mapPick && mapPick.id === L.id && mapPick.path === path;
+          const v = path === 'geom' ? (L.geom?.coordinates ? `${L.geom.coordinates[1].toFixed(5)}, ${L.geom.coordinates[0].toFixed(5)}` : '') : (getPath(L, path) ?? '');
+          h += `<div class="field"><span>${label}</span><div class="btn-row"><input data-act-input="llType" data-path="${esc(path)}" value="${esc(String(v))}" placeholder="${path === 'geom' ? 'lat, lon — or click on the map' : 'City name, “lat, lon”, or click on the map'}"><button class="btn sm${on ? ' primary' : ''}" data-act="llPick" data-path="${esc(path)}" title="Then click the map">${on ? '… click the map' : '📍 Click on map'}</button><button class="btn sm ghost" data-act="llCentre" data-path="${esc(path)}" title="Use the middle of the map">◎</button></div></div>`;
+        }
         else if (type === 'gvaction') {
           h += `<div class="btn-row"><button class="btn sm primary" data-act="gvAction" data-fn="${esc(o)}">${label}</button></div>`;
         }
@@ -2946,6 +2963,15 @@ export function createEditor() {
       repaint(); save();
       return;
     }
+    if (k === 'llType') {
+      if (e.type !== 'change') return;
+      const pth = e.target.dataset.path, v = e.target.value.trim();
+      if (pth !== 'geom') { pushUndo(); setPath(L, pth, v); save(); return; }
+      const m = v.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+      if (m) { setPickedLL({ id: L.id, path: 'geom' }, [+m[2], +m[1]]); return; }
+      if (v) fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=en&q=' + encodeURIComponent(v)).then((r) => r.json()).then((j) => j[0] ? setPickedLL({ id: L.id, path: 'geom' }, [+j[0].lon, +j[0].lat]) : toast(`“${v}” was not found`)).catch(() => toast('Search failed — click on the map instead'));
+      return;
+    }
     if (k === 'brAt') {
       const m = String(e.target.value).match(/(-?\d+(?:\.\d+)?)\s*[°]?\s*([NS])?\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*[°]?\s*([EW])?/i);
       if (!e.target.value.trim()) { setBriefPoint(L, null); return; }
@@ -3415,6 +3441,8 @@ export function createEditor() {
       ls.splice(i, 1, ...parts);
       selectLayer(null); commitLayers(); toast(`${parts.length} separate layers — select, hide or delete any of them in the layer list`);
     }
+    if (a === 'llPick') { const pth = btn.dataset.path; mapPick = (mapPick && mapPick.id === L.id && mapPick.path === pth) ? null : { id: L.id, path: pth }; stage.classList.toggle('picking-ll', !!mapPick); renderLayerEditor(); if (mapPick) toast('Click the place on the map'); }
+    if (a === 'llCentre') { const c = map.getCenter(); setPickedLL({ id: L.id, path: btn.dataset.path }, [c.lng, c.lat]); }
     if (a === 'brHere') { const c = map.getCenter(); setBriefPoint(L, [c.lng, c.lat]); toast('Location set to the middle of the map'); }
     if (a === 'resetPos') { pushUndo(); for (const k of Object.keys(L.style)) if (k.startsWith('pos_') || k.startsWith('size_')) delete L.style[k]; renderLayerEditor(); repaint(); save(); toast('Panels back in their places'); }
     if (a === 'lsAdd') { geoPick = { mode: 'stack', id: L.id }; $('#file-geoimg').click(); }
