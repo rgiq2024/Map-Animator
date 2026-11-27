@@ -1425,6 +1425,7 @@ export const briefingLayers = (layout = 'A', style = {}, ll = null) => splitBrie
  * ll [lng, lat]; returns { mode: 'keyframes', keys }.
  */
 export function zoomCamera(ll, seconds = 8, endZoom = 13, o = {}) {
+  if (o.move && o.move !== 'zoom') return cameraMove(ll, seconds, endZoom, o);
   // one continuous flight sampled into many linear keys, so the speed never stops and restarts between keys
   const tilt = clamp(+o.tilt || 0, 0, 75), rot = clamp(+o.rotate || 0, -180, 180), spin = clamp(+o.spin || 0, 0, 3);
   const k = (t, c, z, bearing = 0, pitch = 0, ease = 'linear') => ({ t: +t.toFixed(3), view: { center: [r6(c[0]), r6(c[1])], zoomRef: +z.toFixed(3), bearing: +bearing.toFixed(2), pitch: +pitch.toFixed(2) }, ease });
@@ -1446,7 +1447,33 @@ export function zoomCamera(ll, seconds = 8, endZoom = 13, o = {}) {
   }
   return { mode: 'keyframes', keys };
 }
-export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '', globe: false };
+export const ZOOM_DEFAULTS = { sec: 8, end: 13, tilt: 25, rotate: 0, spin: 0, place: '', globe: false, move: 'zoomto', turns: 1, dir: 1, height: 5, fromPlace: '', fromLL: null };
+export const ZOOM_MOVES = { zoomto: 'Zoom-To — smooth dive down to the place', orbit: 'Orbit — circle around the place', p2p: 'Point-to-Point — fly in from a nearby place', spiral: 'Spiral — circle down from high above', flyorbit: 'Fly-To and Orbit — fly down, then circle', zoom: 'Classic zoom (turn, then dive)' };
+/** smooth camera moves for “Zoom to location” scenes (few keys with eased / fly interpolation — no judder) */
+function cameraMove(ll, seconds, endZoom, o) {
+  const D = Math.max(3, +seconds || 8), z = endZoom, dir = +o.dir < 0 ? -1 : 1, rot = clamp(+o.rotate || 0, -180, 180);
+  const tilt = clamp(+o.tilt || 0, 0, 72), orbTilt = Math.max(tilt, 50);
+  const V = (c, zz, b = 0, p = 0) => ({ center: [r6(c[0]), r6(c[1])], zoomRef: +zz.toFixed(3), bearing: +((((b % 360) + 540) % 360) - 180).toFixed(2), pitch: +clamp(p, 0, 72).toFixed(1) });
+  const K = (t, view, ease = 'linear') => ({ t: +t.toFixed(3), view, ease });
+  const flat = o.globe === false, z0 = clamp(+o.startZoom || (flat ? 1.8 : 0.7), 0, 6);
+  const start = V([ll[0] + (flat ? 10 : 28), clamp(ll[1] * 0.55, -40, 45)], z0, 0, 0);
+  const orbit = (t0, dur, zz, b0 = 0, skip = false) => { const deg = 360 * clamp(+o.turns || 1, 0.1, 4), n = Math.max(4, Math.ceil(deg / 15)), out = []; for (let i = skip ? 1 : 0; i <= n; i++) out.push(K(t0 + (i / n) * dur, V(ll, zz, b0 + dir * (i / n) * deg, orbTilt))); return out; };
+  const keys = [];
+  if (o.move === 'zoomto') keys.push(K(0, start, 'fly'), K(D * 0.82, V(ll, z, rot, tilt)), K(D, V(ll, z + 0.2, rot + 8 * dir, tilt)));
+  else if (o.move === 'orbit') keys.push(...orbit(0, D, z, rot));
+  else if (o.move === 'spiral') {
+    const deg = 360 * clamp(+o.turns || 1.5, 0.25, 4), n = Math.max(8, Math.ceil(deg / 15)), zTop = z - clamp(+o.height || 5, 1, 10);
+    for (let i = 0; i <= n; i++) { const u = i / n, zu = 1 - (1 - u) ** 2; keys.push(K(u * D, V(ll, zTop + (z - zTop) * zu, rot + dir * deg * u, 20 + (orbTilt - 20) * u))); }
+  } else if (o.move === 'flyorbit') {
+    const fly = D * 0.42;
+    keys.push(K(0, start, 'fly'), ...orbit(fly, D - fly, z, rot));
+  } else if (o.move === 'p2p') {
+    const from = Array.isArray(o.fromLL) ? o.fromLL : [ll[0] - 0.12, ll[1] + 0.08];
+    const k2 = Math.cos(((from[1] + ll[1]) / 2) * D2R), hd = (Math.atan2((ll[0] - from[0]) * k2, ll[1] - from[1]) / D2R + 360) % 360;
+    keys.push(K(0, V(from, z - 0.3, hd, tilt), 'linear'), K(D * 0.18, V(from, z - 0.2, hd, tilt), 'fly'), K(D * 0.8, V(ll, z, hd, tilt)), K(D, V(ll, z + 0.2, hd + 10 * dir, tilt)));
+  }
+  return { mode: 'keyframes', keys };
+}
 /** middle of a country by name (null while the outlines load) */
 export function countryPoint(name) { const c = (countriesByName(name) || [])[0]; return c ? labelPoint(c.polys) : null; }
 export { CUSTOM_POS };

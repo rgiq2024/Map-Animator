@@ -62,7 +62,7 @@ import { NET_SET, NET_MODES, netNeedsCompute, netSig, computeNet, defaultFencePa
 import { simplify, formatDistance, bounds } from './geo.js';
 import { openSarLibrary, sarStyleOf, quadOf as sarQuad } from './sar.js';
 import { firmsKey, setFirmsKey, fetchFirms, bboxAround, packHotspots, parseLatLon } from './firms.js';
-import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers, zoomCamera, ZOOM_DEFAULTS, countryPoint as countryLabelPoint } from './briefing.js';
+import { BR_SHARED, BR_PARTS, newBriefingLayer, splitBriefing, briefingLayers, zoomCamera, ZOOM_DEFAULTS, ZOOM_MOVES, countryPoint as countryLabelPoint } from './briefing.js';
 import { findPlace } from './autostory.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -2267,6 +2267,10 @@ export function createEditor() {
             h += `<h5>${label}</h5>
               <div class="field"><span>Place or coordinates</span><div class="btn-row"><input data-act-input="bzPlace" value="${esc(z.place || (z.ll ? `${z.ll[1].toFixed(5)}, ${z.ll[0].toFixed(5)}` : ''))}" placeholder="e.g. Boca Raton, Florida — or 26.6328, -80.1131"><button class="btn sm primary" data-act="bzGo">Fly there</button></div>
               <div class="btn-row"><button class="btn sm" data-act="bzHere">◎ Use the map centre</button><button class="btn sm" data-act="bzIncident">⌖ Use the incident location</button></div></div>
+              <label class="row"><span>Camera move</span><select data-act-input="bzMove">${Object.entries(ZOOM_MOVES).map(([k, t]) => `<option value="${k}"${(z.move || 'zoom') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+              ${['orbit', 'spiral', 'flyorbit'].includes(z.move) ? `${rng('turns', 'Turns', 0.25, 4, 0.25, ' ×')}<label class="row"><span>Direction</span><select data-act-input="bzDir"><option value="1"${+z.dir >= 0 ? ' selected' : ''}>Clockwise</option><option value="-1"${+z.dir < 0 ? ' selected' : ''}>Anticlockwise</option></select></label>` : ''}
+              ${z.move === 'spiral' ? rng('height', 'Start this many zoom levels higher', 1, 10, 0.5) : ''}
+              ${z.move === 'p2p' ? `<div class="field"><span>Fly in from (place or “lat, lon”; empty = a spot just north-west)</span><div class="btn-row"><input data-act-input="bzFrom" value="${esc(z.fromPlace || '')}" placeholder="e.g. Cairo Tower — or 30.0459, 31.2243"><button class="btn sm" data-act="bzFromGo">Set</button></div></div>` : ''}
               <label class="row"><span>Map while zooming</span><select data-act-input="bzGlobe"><option value="flat"${z.globe ? '' : ' selected'}>2D map — steady (recommended)</option><option value="globe"${z.globe ? ' selected' : ''}>3D globe</option></select></label>
               ${rng('end', 'Zoom at the end', 3, 18, 0.25)}${rng('sec', 'Length', 3, 20, 0.5, ' s')}${rng('tilt', 'Tilt at the end', 0, 75, 1, '°')}${rng('rotate', 'Rotate (compass) at the end', -180, 180, 5, '°')}${z.globe ? rng('spin', 'Globe spins first', 0, 3, 0.25, ' turns') : ''}${rng('startZoom', 'Start height (zoom)', 0, 6, 0.1)}
               <div class="btn-row"><button class="btn sm" data-act="bzPreview">▶ Preview the zoom</button></div>`;
@@ -2826,6 +2830,15 @@ export function createEditor() {
     pushUndo(); applyZoom(scene(), { ll, place: name, own: true });
     renderLayerEditor(); commitLayers(); toast(`The zoom flies to ${name}`);
   }
+  async function setZoomFrom(q) {
+    q = String(q || '').trim();
+    if (!q) { pushUndo(); applyZoom(scene(), { fromPlace: '', fromLL: null, own: true }); rebuild(); repaint(); save(); return; }
+    const m = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    let ll = m ? [+m[2], +m[1]] : null, name = q;
+    if (!ll) { toast('Searching…'); const r = await findPlace(q).catch(() => null); if (r) { ll = r.ll; name = r.name; } }
+    if (!ll) { toast('Place not found — try another name or type “lat, lon”'); return; }
+    pushUndo(); applyZoom(scene(), { fromPlace: name, fromLL: ll, own: true }); rebuild(); repaint(); save(); toast(`The camera flies in from ${name}`);
+  }
   /** Incident point of a briefing frame (and of every synced frame). */
   function setBriefPoint(L, ll) {
     pushUndo();
@@ -2912,10 +2925,13 @@ export function createEditor() {
     if (!L) return;
     if (k === 'bz') {
       const sc = scene(), key = e.target.dataset.k, v = +e.target.value;
-      const out = e.target.nextElementSibling; if (out) out.textContent = `${v}${key === 'sec' ? ' s' : key === 'tilt' || key === 'rotate' ? '°' : key === 'spin' ? ' turns' : ''}`;
+      const out = e.target.nextElementSibling; if (out) out.textContent = `${v}${key === 'sec' ? ' s' : key === 'tilt' || key === 'rotate' ? '°' : key === 'spin' ? ' turns' : key === 'turns' ? ' ×' : ''}`;
       applyZoom(sc, { [key]: v, own: true }); rebuild(); repaint(); save();
       return;
     }
+    if (k === 'bzMove') { pushUndo(); applyZoom(scene(), { move: e.target.value, own: true }); rebuild(); renderLayerEditor(); repaint(); save(); toast('Camera move changed — press ▶ Preview the zoom'); return; }
+    if (k === 'bzDir') { pushUndo(); applyZoom(scene(), { dir: +e.target.value, own: true }); rebuild(); repaint(); save(); return; }
+    if (k === 'bzFrom') { if (e.type === 'change') setZoomFrom(e.target.value); return; }
     if (k === 'bzGlobe') { pushUndo(); applyZoom(scene(), { globe: e.target.value === 'globe', startZoom: undefined, own: true }); applyLook(scene()); rebuild(); renderLayerEditor(); repaint(); save(); return; }
     if (k === 'bzPlace') { if (e.type === 'change') flyZoomTo(e.target.value); return; }
     if (k === 'firmsKey') { setFirmsKey(e.target.value); toast(e.target.value.trim() ? 'FIRMS key saved in this browser' : 'FIRMS key removed'); return; }
@@ -3383,6 +3399,7 @@ export function createEditor() {
       } catch (err) { toast(err.message || 'FIRMS request failed', 5000); }
       btn.disabled = false;
     }
+    if (a === 'bzFromGo') setZoomFrom($('#layer-editor [data-act-input="bzFrom"]')?.value || '');
     if (a === 'bzGo') flyZoomTo($('#layer-editor [data-act-input="bzPlace"]')?.value || '');
     if (a === 'bzHere') { const c = map.getCenter(); pushUndo(); applyZoom(scene(), { ll: [c.lng, c.lat], place: '', own: true }); renderLayerEditor(); commitLayers(); toast('The zoom now ends at the middle of the map'); }
     if (a === 'bzIncident') { const g = scene().layers.find((l) => l.kind === 'briefing' && l.geom)?.geom?.coordinates; if (!g) toast('Set the Incident location first'); else { pushUndo(); applyZoom(scene(), { ll: g, place: '', own: false }); renderLayerEditor(); commitLayers(); } }

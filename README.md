@@ -424,3 +424,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Tutorials: Map poster card.
 - Fix: Map poster buttons did nothing (grid not wired).
 - Map poster: full settings (title / second line / coordinates colours, sizes, weight, show/hide, position, band; streets / main roads / water / parks / buildings colours and visibility, road thickness, small streets, paper). Fix: Ship sinking settings panel was missing.
+- Zoom to location scenes: Camera move choice — Zoom-To (smooth, new default), Orbit, Point-to-Point (fly in from a place), Spiral, Fly-To and Orbit, Classic zoom; turns, direction, height.
