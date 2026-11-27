@@ -373,6 +373,24 @@ export function createEditor() {
   const repaint = () => map?.triggerRepaint();
 
   // ---------------------------------------------------------------- saving & undo
+  /** a small JPEG of a canvas (centre-cropped to 16:9) for the home page cards */
+  function thumbOf(src, sx = 0, sy = 0, sw = src.width, sh = src.height) {
+    try {
+      const W = 400, H = 225, c = document.createElement('canvas'); c.width = W; c.height = H;
+      const k = Math.max(W / sw, H / sh), dw = sw * k, dh = sh * k;
+      c.getContext('2d').drawImage(src, sx, sy, sw, sh, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      const u = c.toDataURL('image/jpeg', 0.72); return u.length > 1000 ? u : null;
+    } catch { return null; }
+  }
+  /** the editor view (map + overlay, inside the video frame) */
+  function editorThumb() {
+    if (!map || !overlay || !frame) return null;
+    try {
+      const mc = map.getCanvas(), c = document.createElement('canvas'); c.width = overlay.width; c.height = overlay.height;
+      const g = c.getContext('2d'); g.drawImage(mc, 0, 0, c.width, c.height); g.drawImage(overlay, 0, 0);
+      return thumbOf(c, frame.x + 2, frame.y + 2, frame.w - 4, frame.h - 4);
+    } catch { return null; }
+  }
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => saveProject(project).catch((e) => console.warn(e)), 500);
@@ -5391,6 +5409,7 @@ export function createEditor() {
     let lastPrev = 0;
     const origIdx = sceneIdx;
     try {
+      let expThumb = null;
       const result = await exportVideo({
         scenes: project.scenes, map, width, height, fps, join: project.join === 'fade' ? 'fadeBlack' : project.join,
         signal: exportAbort.signal,
@@ -5446,10 +5465,15 @@ export function createEditor() {
           $('#render-bar').style.width = `${(f * 100).toFixed(1)}%`;
           $('#render-status').textContent = `${info.scenes > 1 ? `Scene ${info.scene} of ${info.scenes} · ` : ''}Frame ${info.frame} of ${info.frames}${eta != null ? ` · about ${fmtShort(eta)} left` : ''}`;
           if (performance.now() - lastPrev > 200) { lastPrev = performance.now(); pctx.drawImage(canvas, 0, 0, prev.width, prev.height); }
+          if (!expThumb && f > 0.3) expThumb = thumbOf(canvas);
         },
       });
       const { blob, ext, codec } = result;
       exportUrl = URL.createObjectURL(blob);
+      // for the home page dashboard: how many videos were made, and a clean frame as the card picture
+      project.stats = { ...(project.stats || {}), exports: (+project.stats?.exports || 0) + 1, lastExport: Date.now(), seconds: (+project.stats?.seconds || 0) + Math.round(project.scenes.reduce((a2, sc2) => { try { return a2 + (buildScene(sc2, frame.w, frame.h).duration || 0); } catch { return a2; } }, 0)), mb: +(((+project.stats?.mb || 0) + blob.size / 1e6).toFixed(1)) };
+      if (expThumb) { project.thumb = expThumb; project.thumbFromExport = true; }
+      saveProject(project).catch(() => {});
       const name = `${slug(project.name)}-${width}x${height}.${ext}`;
       const a = $('#render-download');
       a.href = exportUrl;
@@ -5550,7 +5574,7 @@ export function createEditor() {
     close() {
       setPlaying(false);
       cancelAnimationFrame(rafId);
-      if (project) saveProject(project).catch(() => {});
+      if (project) { if (!project.thumbFromExport) { const t = editorThumb(); if (t) project.thumb = t; } saveProject(project).catch(() => {}); }
       project = null;
     },
     get project() { return project; },
