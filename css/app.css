@@ -1428,3 +1428,4 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 :root[data-theme="light"] .dash-tile i, :root[data-theme="light"] .pchip, :root[data-theme="light"] .proj-tools input, :root[data-theme="light"] .proj-tools select { background: rgba(15,23,42,.04); border-color: rgba(15,23,42,.1); }
 :root[data-theme="light"] .dc-bar, :root[data-theme="light"] .dc-row:hover { background: rgba(15,23,42,.06); }
 .pc-body { text-align: left; }
+.project-card.pc-v2 { align-items: stretch; } .pc-v2 .pc-thumb, .pc-v2 .pc-body { width: 100%; box-sizing: border-box; } .pc-v2 .pc-body h3 { text-align: left; -webkit-box-pack: start; }

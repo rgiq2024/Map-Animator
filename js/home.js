@@ -70,23 +70,23 @@ export const PROJECT_CATS = {
 };
 export function projectCategory(p) {
   const kinds = new Set(), nm = String(p.name || '').toLowerCase();
-  for (const sc of p.scenes || []) for (const L of sc.layers || []) kinds.add(L.kind);
+  for (const sc of p.scenes || []) for (const L of sc?.layers || []) if (L && typeof L.kind === 'string') kinds.add(L.kind);
   const has = (...k) => k.some((x) => kinds.has(x));
-  if ([...kinds].some((k) => k.startsWith('vi')) || /investigat/.test(nm)) return 'investigation';
+  if (has('viframe', 'vitile', 'vibox', 'vioutline', 'vijourney', 'vilabel') || /investigat/.test(nm)) return 'investigation';
   if (has('sitewatch')) return 'sitewatch';
   if (has('mapposter')) return 'poster';
   if (has('msgchat')) return 'messages';
   if (has('fireplume', 'blastzone', 'firms', 'flood', 'quakes', 'shipsink') || /fire|flood|quake|explosion|blast|sinking|landslide|storm|cyclone|wildfire/.test(nm)) return 'disaster';
   if (has('briefing') || /brief|news|killed|injured/.test(nm)) return 'news';
   if (has('transit') || /rail|metro|train|transit/.test(nm)) return 'transit';
-  if ((p.scenes || []).some((sc) => (sc.legs || []).some((l) => (l.track?.length || l.points?.length || 0) >= 2))) return 'travel';
+  if ((p.scenes || []).some((sc) => (sc?.legs || []).some((l) => (l?.track?.length || l?.points?.length || 0) >= 2))) return 'travel';
   return 'other';
 }
 function projectView(p) {
   const sc = p.scenes?.[0]; if (!sc) return null;
   const v = sc.camera?.mode === 'keyframes' ? sc.camera.keys?.[0]?.view : sc.camera?.fixed || sc.camera?.start;
-  const pts = (sc.legs || []).flatMap((l) => (l.track ? l.track : (l.points || []).map((q) => [q.lng, q.lat])));
-  if (v?.center) return { center: v.center, zoom: +v.zoomRef || 4, pts, look: sc.look || {} };
+  const pts = (sc.legs || []).flatMap((l) => (Array.isArray(l?.track) ? l.track : (l?.points || []).map((q) => [q.lng, q.lat]))).filter((q) => Array.isArray(q) && Number.isFinite(+q[0]) && Number.isFinite(+q[1]));
+  if (Array.isArray(v?.center) && Number.isFinite(+v.center[0]) && Number.isFinite(+v.center[1])) return { center: v.center, zoom: +v.zoomRef || 4, pts, look: sc.look || {} };
   if (pts.length) { const b = bounds(pts); return { center: [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2], zoom: 6, pts, fit: b, look: sc.look || {} }; }
   for (const L of sc.layers || []) { const c = L.geom?.type === 'Point' ? L.geom.coordinates : L.geom?.coordinates?.[0]?.[0] || L.geom?.coordinates?.[0]; if (Array.isArray(c) && typeof c[0] === 'number') return { center: c, zoom: 10, pts, look: sc.look || {} }; }
   return null;
@@ -131,9 +131,19 @@ export function createHome({ open }) {
   // ---------------- projects
   let projFilter = 'all';
   async function renderProjects() {
-    const all = await listProjects();
-    const cats = new Map(all.map((p) => [p.id, projectCategory(p)]));
-    renderDashboard(all, cats);
+    try { await renderProjectsInner(); } catch (err) {
+      console.error('project list', err);
+      // fall back to a plain list, so projects are never hidden
+      const all = await listProjects().catch(() => []);
+      $('#project-grid').innerHTML = all.map((p) => `<div class="project-card pc-v2" data-id="${p.id}" style="--c:#94a3b8"><div class="pc-thumb">${p.thumb ? `<img src="${p.thumb}" alt="">` : ''}</div><div class="pc-body"><h3>${esc(p.name)}</h3><p>${(p.scenes || []).length} scenes · edited ${ago(p.updatedAt)}</p></div></div>`).join('');
+      $('#project-grid').onclick = (e) => { const c = e.target.closest('.project-card'); if (c) open(c.dataset.id); };
+    }
+  }
+  async function renderProjectsInner() {
+    const all = (await listProjects()).filter((p) => p && p.id);
+    for (const p of all) { if (!Array.isArray(p.scenes)) p.scenes = []; p.updatedAt = +p.updatedAt || 0; }
+    const cats = new Map(all.map((p) => { let c = 'other'; try { c = projectCategory(p); } catch { c = 'other'; } return [p.id, c]; }));
+    try { renderDashboard(all, cats); } catch (err) { console.warn('dashboard', err); }
     $('#projects-count').textContent = all.length ? `${all.length} project${all.length === 1 ? '' : 's'}, saved in this browser` : '';
     const grid = $('#project-grid');
     // filter chips
@@ -165,7 +175,7 @@ export function createHome({ open }) {
         </div>
         <div class="pc-body"><h3 title="${esc(p.name)}">${esc(p.name)}</h3><p>${p.scenes.length} scene${p.scenes.length === 1 ? '' : 's'} · ${esc(p.aspect)} · edited ${ago(p.updatedAt)}</p></div>
       </div>`; }).join('');
-    list.forEach((p) => { const cv = $(`[data-id="${p.id}"] canvas`, grid); if (cv) drawMapThumb(cv, p).catch(() => drawThumb(cv, p)); });
+    list.forEach((p) => { const cv = $(`[data-id="${p.id}"] canvas`, grid); if (cv) Promise.resolve().then(() => drawMapThumb(cv, p)).catch(() => { try { drawThumb(cv, p); } catch { /* */ } }); });
     grid.onclick = async (e) => {
       const card = e.target.closest('.project-card');
       if (!card) return;
