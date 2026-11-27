@@ -422,3 +422,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Map theme defaults: place names on, names in English (new scenes and auto-built scenes).
 - New 'Map poster' section: map-art poster element (find a place, name, colour, full / circle / circle-focus / rounded / heart, wall + frame, build / print-and-frame animations) and Poster map themes (one colour on paper, any colour).
 - Tutorials: Map poster card.
+- Fix: Map poster buttons did nothing (grid not wired).

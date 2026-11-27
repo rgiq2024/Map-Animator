@@ -2026,6 +2026,7 @@ export function createEditor() {
   document.addEventListener('click', (e) => { if (e.target.closest('[data-sar-library]')) openSarAdd(); });
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-milgfx')?.addEventListener('click', cartoAdd);
+  $('#add-poster')?.addEventListener('click', cartoAdd);
   $('#add-milgfx-type')?.addEventListener('click', cartoAdd);
   $('#add-docu')?.addEventListener('click', cartoAdd);
   $('#add-earth')?.addEventListener('click', cartoAdd);
