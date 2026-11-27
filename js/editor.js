@@ -2027,6 +2027,7 @@ export function createEditor() {
   $('#add-carto')?.addEventListener('click', cartoAdd);
   $('#add-milgfx')?.addEventListener('click', cartoAdd);
   $('#add-poster')?.addEventListener('click', cartoAdd);
+  $('#add-msg')?.addEventListener('click', cartoAdd);
   $('#add-milgfx-type')?.addEventListener('click', cartoAdd);
   $('#add-docu')?.addEventListener('click', cartoAdd);
   $('#add-earth')?.addEventListener('click', cartoAdd);

@@ -6,6 +6,8 @@ import { placeAt } from './place.js';
 import { parseTable, dataOf, SAMPLE_NAMES } from './geodata.js';
 import { zoomRefFor } from './scene.js';
 import { THEMES } from './themes.js';
+import { imageFor as msgImage } from './geoimage.js';
+
 
 const { clamp, ease, UI, polysOf, pathPolys, labelPoint, hashStr, off } = H;
 const D2R = Math.PI / 180;
@@ -18,6 +20,7 @@ export const MX_KINDS = {
   dofblur: { name: 'Depth of field', icon: '◎', geom: null, desc: 'A camera focus band across the map — everything above and below goes soft, like a tilted lens; the focus can rack from near to far, labels can blur with it. Pair it with “Make the camera drift” for a continuous pan' },
   inkreveal: { name: 'Ink-spread reveal', icon: '🩸', geom: 'polygon', desc: 'An area fills like ink spreading on paper from a starting point, with smoky edges that settle into a clean shape' },
   flickerzones: { name: 'Flickering districts', icon: '▦', geom: null, desc: 'Districts, regions or countries flash bright and dark like a failing light, then settle into an outlined map' },
+  msgchat: { name: 'Messages (chat bubbles)', icon: '💬', geom: null, desc: 'Text messages popping up on screen — glassy, iMessage, WhatsApp, pill, thread, holographic or notification look — with names, times, profile pictures, typing dots and sounds' },
   mapposter: { name: 'Map poster', icon: '🖼', geom: 'point', desc: 'Map-art print: find your place, name it, pick a colour — full, circle or circle-focus poster with spaced-out title, country and coordinates; it builds, prints and frames itself' },
   shipsink: { name: 'Ship sinking', icon: '🚢', geom: 'point', desc: 'A ship seen from above in rough sea: distress flare and MAYDAY rings, it lists over and goes down, leaving foam, bubbles, debris and life rafts — with storm and horn sounds' },
   layerswipe: { name: 'Layer swipe (compare two layers)', icon: '◧', geom: null, desc: 'Compare any two layers you added — two road networks (GeoJSON, shapefile, KML), two GeoTIFF / raster images, or any elements — with a divider that slides across the map: one dataset on each side, labelled' },
@@ -27,6 +30,7 @@ export const MX_ANIMS = {
   dofblur: { rack: 'Focus racks from one place to another', breathe: 'Focus drifts back and forth', fade: 'Blur fades in', none: 'Fixed focus' },
   inkreveal: { spread: 'Ink spreads from the start point', fade: 'Fade in', none: 'Shown' },
   flickerzones: { flicker: 'Flicker, then settle', strobe: 'Keep flickering', fade: 'Fade in', none: 'Shown' },
+  msgchat: { pop: 'Pop in one by one', typing: 'Typing dots, then pop', slide: 'Slide in from the side', type: 'Text types itself', float: 'Float up', fade: 'Fade in' },
   mapposter: { build: 'Builds: map opens, title spaces in', print: 'Prints and frames: page slides in, frame closes', still: 'Still' },
   shipsink: { sink: 'Lists over, then sinks', list: 'Lists over (stays afloat)', afloat: 'Afloat in rough sea', gone: 'After the sinking (foam, debris, rafts)' },
   layerswipe: { sweep: 'Swipe across and back', once: 'Swipe once (A → B)', hold: 'Fixed divider (no movement)', blink: 'Cross-fade A ↔ B (no divider)' },
@@ -36,12 +40,13 @@ export const MX_DEFAULTS = {
   dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient-2' },
   inkreveal: { snd: 'inkbleed', sndDur: 2, color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
   flickerzones: { from: 'countries', layerId: '', countries: 'France, Germany, Italy, Spain, Poland, Belgium, Netherlands, Switzerland, Austria, Czechia', data: '', sample: '', color: '#ffffff', fill: 0.18, stroke: '#ffffff', strokeWidth: 1.2, rate: 12, flickerFor: 2.2, maxA: 0.9, sound: true, soundVol: 1 },
+  msgchat: { look: 'glass', thread: 'Jane | 1:50 AM | How are you?\nMe | 1:52 AM | I am fine!\nJane | 1:53 AM | That’s good. See you tomorrow?\nMe | 1:53 AM | Yes 👍', me: 'Me', avatarMe: '', avatarThem: '', avatars: true, names: true, times: true, interval: 1.6, typing: true, typingSec: 0.9, cps: 28, keep: 6, fadeOld: true, size: 1, width: 0.36, gap: 0.5, anchor: 'right', bottom: 0.82, font: 'Inter', bold: false, tail: true, shadow: true, blur: 14, tint: '', colorMe: '', colorThem: '', textMe: '', textThem: '', headColor: '', sound: true, soundVol: 0.7 },
   mapposter: { query: '', title: 'YOUR CITY', sub: 'COUNTRY', coords: '', color: '#5f8a48', paper: '#ffffff', titleColor: '', subColor: '', coordsColor: '', showTitle: true, showSub: true, showCoords: true, dashes: true, titleWeight: 600, subSize: 1, coordsSize: 1, textPos: 'bottom', textY: 0, textBand: false, mapColor: '', waterColor: '', parkColor: '', buildingColor: '', roadColor: '', showBuildings: true, showMinor: true, showWater: true, showParks: true, roadWidth: 1, shape: 'full', circle: 0.86, veil: 0.75, fade: 0.38, page: 'portrait', ratio: '4:5', wall: '#e9e5df', frame: 'none', font: 'Jost', titleSize: 1, spacing: 0.28, grain: true, syncMap: true, autoTheme: true },
   shipsink: { type: 'tanker', name: 'MED EMRE', size: 1, heading: 35, listSide: 1, maxList: 90, storm: 1, flare: true, mayday: true, maydayText: 'MAYDAY', rafts: 3, sheen: false, nameTag: true, sound: true, soundVol: 0.7 },
   layerswipe: { layerA: '', layerB: '', dir: 'lr', split: 0.5, cycles: 1, hold: 0.12, labels: true, labelA: 'Dataset A', labelB: 'Dataset B', labelPos: 'top', textSize: 1, lineColor: '#ffffff', lineWidth: 3, knob: true, chips: true },
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
 };
-const DUR = { mapposter: 4, shipsink: 12, layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
+const DUR = { msgchat: 8, mapposter: 4, shipsink: 12, layerswipe: 8, dofblur: 10, inkreveal: 5, flickerzones: 4, softlabel: 1.6 };
 export const MX_LAYER_DEFAULTS = Object.fromEntries(Object.keys(MX_KINDS).map((k) => [k, { anim: Object.keys(MX_ANIMS[k])[0], duration: DUR[k], style: MX_DEFAULTS[k] }]));
 export const MX_FORMS = {
   dofblur: [
@@ -62,6 +67,23 @@ export const MX_FORMS = {
     ['style.data', 'Your file with areas', 'datafile', null, (L) => L.style.from === 'data'],
     ['style.color', 'Flash colour', 'color'], ['style.maxA', 'Brightest flash', 'range', [0.1, 1, 0.01]], ['style.rate', 'Flicker speed (flashes / s)', 'range', [1, 40, 0.5]], ['style.flickerFor', 'Flicker for (s)', 'range', [0.2, 10, 0.1]],
     ['style.fill', 'Fill after settling', 'range', [0, 1, 0.01]], ['style.stroke', 'Outline colour', 'color'], ['style.strokeWidth', 'Outline width', 'range', [0, 6, 0.1]], ...SND,
+  ],
+  msgchat: [
+    ['style.look', 'Look', 'select', { glass: 'Glass — frosted, see-through', imessage: 'iMessage — blue and grey', whatsapp: 'WhatsApp — green and white', pill: 'Pill — round labels with “Me // time”', thread: 'Thread — boxes with name // time', dark: 'Dark mode', holo: 'Holographic — glowing cyan', notify: 'Notification cards (lock screen)' }],
+    ['', 'One message per line:  Name | time | message   (time can be left out: Name | message, or Name: message). Messages from the name below go on the right.', 'note'],
+    ['style.thread', 'Messages', 'textarea'], ['style.me', 'Your name (right side)', 'text'],
+    ['style.avatars', 'Profile pictures', 'switch'], ['style.avatarMe', 'Your profile picture', 'image', null, (L) => L.style.avatars !== false], ['style.avatarThem', 'Their profile picture', 'image', null, (L) => L.style.avatars !== false],
+    ['style.names', 'Show names', 'switch'], ['style.times', 'Show times', 'switch'],
+    ['style.interval', 'Seconds between messages', 'range', [0.3, 6, 0.1]], ['style.typing', 'Typing dots before their messages', 'switch'], ['style.typingSec', 'Typing dots last (s)', 'range', [0.3, 3, 0.1], (L) => L.style.typing !== false],
+    ['style.cps', 'Typing speed (letters / s)', 'range', [5, 80, 1], (L) => L.anim === 'type'],
+    ['style.keep', 'Messages on screen at once', 'range', [1, 12, 1]], ['style.fadeOld', 'Older messages fade', 'switch'],
+    ['style.anchor', 'Sits at', 'select', { right: 'Right', left: 'Left', center: 'Centre' }], ['style.bottom', 'Bottom edge (up ↔ down)', 'range', [0.2, 0.98, 0.01]],
+    ['style.width', 'Width', 'range', [0.15, 0.95, 0.01]], ['style.size', 'Text size', 'range', [0.4, 3, 0.05]], ['style.gap', 'Space between messages', 'range', [0, 3, 0.05]],
+    ['style.font', 'Font', 'select', { Inter: 'Inter (like iOS)', Montserrat: 'Montserrat', Jost: 'Jost', Raleway: 'Raleway', Oswald: 'Oswald', 'IBM Plex Mono': 'Mono' }], ['style.bold', 'Bold text', 'switch'],
+    ['style.colorMe', 'Your bubble colour (empty = from the look)', 'color'], ['style.textMe', 'Your text colour', 'color'], ['style.colorThem', 'Their bubble colour', 'color'], ['style.textThem', 'Their text colour', 'color'], ['style.headColor', 'Name / time colour', 'color'],
+    ['style.blur', 'Glass blur', 'range', [0, 40, 1], (L) => L.style.look === 'glass' || L.style.look === 'notify'], ['style.tint', 'Glass tint', 'color', null, (L) => L.style.look === 'glass' || L.style.look === 'notify'],
+    ['style.tail', 'Bubble tail', 'switch'], ['style.shadow', 'Shadow', 'switch'],
+    ['style.sound', 'Send / receive sounds', 'switch'], ['style.soundVol', 'Sound volume', 'range', [0, 2, 0.05], (L) => L.style.sound !== false],
   ],
   mapposter: [
     ['', 'Find your special place, name it, pick a colour — then print it, frame it, gift it.', 'note'],
@@ -121,6 +143,162 @@ export const MX_FORMS = {
 };
 export const MX_SET = new Set(Object.keys(MX_KINDS));
 export const mxPhases = (k) => (k === 'inkreveal' || k === 'flickerzones' ? ['below'] : ['captions']);
+
+// ---------------------------------------------------------------- messages (chat bubbles / notifications)
+const MSG_LOOKS = {
+  glass: { me: 'rgba(255,255,255,0.16)', them: 'rgba(255,255,255,0.10)', txMe: '#ffffff', txThem: '#ffffff', glass: true },
+  imessage: { me: '#1f8bff', them: '#e9e9eb', txMe: '#ffffff', txThem: '#111111' },
+  whatsapp: { me: '#2fdc4c', them: '#ffffff', txMe: '#ffffff', txThem: '#111111' },
+  pill: { me: '#1f6f63', them: '#9d8cf0', txMe: '#ffffff', txThem: '#ffffff', pill: true },
+  thread: { me: '#3d8bd4', them: '#c9c9c9', txMe: '#ffffff', txThem: '#333333', square: true },
+  dark: { me: '#2c2c2e', them: '#1c1c1e', txMe: '#ffffff', txThem: '#ffffff' },
+  holo: { me: 'rgba(80,220,255,0.12)', them: 'rgba(80,220,255,0.12)', txMe: '#c8f6ff', txThem: '#c8f6ff', holo: true },
+  notify: { me: 'rgba(245,245,247,0.78)', them: 'rgba(245,245,247,0.78)', txMe: '#111111', txThem: '#111111', notify: true, glass: true },
+};
+function parseMsgs(s) {
+  const me = String(s.me || 'Me').trim().toLowerCase();
+  return String(s.thread || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    let p = l.split('|').map((x) => x.trim());
+    if (p.length === 1) { const m = l.match(/^([^:]{1,30}):\s*(.+)$/); p = m ? [m[1], '', m[2]] : [s.them || 'Them', '', l]; }
+    else if (p.length === 2) p = [p[0], '', p[1]];
+    const [name, time, ...rest] = p;
+    return { name, time, text: rest.join(' | '), mine: name.toLowerCase() === me };
+  });
+}
+function wrapText(ctx, text, maxW) {
+  const out = []; for (const para of String(text).split('\n')) { let line = ''; for (const w of para.split(/\s+/)) { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; } out.push(line); }
+  return out;
+}
+/** blurred copy of what is behind a rectangle (map + overlay so far), for frosted glass */
+function backdrop(ctx, o, x, y, w, h, blur) {
+  const T = ctx.getTransform(), S = Math.abs(T.a) || 1, k = 0.35;
+  const cw = Math.max(2, Math.round(w * S * k)), ch = Math.max(2, Math.round(h * S * k)), pad = Math.ceil(blur * S * k * 2);
+  const key = 'msgbd'; let C = backdrop[key]; if (!C || C.width < cw + 2 * pad || C.height < ch + 2 * pad) { C = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(cw + 2 * pad, ch + 2 * pad) : Object.assign(document.createElement('canvas'), { width: cw + 2 * pad, height: ch + 2 * pad }); backdrop[key] = C; }
+  const g = C.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, C.width, C.height);
+  const W2 = cw + 2 * pad, H2 = ch + 2 * pad, ox = x - pad / (S * k), oy = y - pad / (S * k), ow = W2 / (S * k), oh = H2 / (S * k);
+  const m = o.map, mc = m?.getCanvas?.();
+  if (mc && mc.width && mc !== ctx.canvas) {
+    try {
+      const c = m.getCenter(), a = m.project(c), pa = o.proj([c.lng, c.lat]), q = m.unproject([a.x + 100, a.y]), pq = o.proj([q.lng, q.lat]);
+      const kk = Math.hypot(pq[0] - pa[0], pq[1] - pa[1]) / 100 || 1, pr = mc.width / (mc.clientWidth || mc.width);
+      g.drawImage(mc, (a.x + (ox - pa[0]) / kk) * pr, (a.y + (oy - pa[1]) / kk) * pr, (ow / kk) * pr, (oh / kk) * pr, 0, 0, W2, H2);
+    } catch { /* */ }
+  }
+  try { g.drawImage(ctx.canvas, T.a * ox + T.e, T.d * oy + T.f, ow * T.a, oh * T.d, 0, 0, W2, H2); } catch { /* */ }
+  const B = backdrop.b2 && backdrop.b2.width >= W2 && backdrop.b2.height >= H2 ? backdrop.b2 : (backdrop.b2 = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W2, H2) : Object.assign(document.createElement('canvas'), { width: W2, height: H2 }));
+  const b = B.getContext('2d'); b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, B.width, B.height); try { b.filter = `blur(${Math.max(1, blur * S * k)}px) saturate(1.4)`; } catch { /* */ }
+  b.drawImage(C, 0, 0, W2, H2, 0, 0, W2, H2); b.filter = 'none';
+  return { cv: B, sx: pad, sy: pad, sw: cw, sh: ch };
+}
+function avatar(ctx, id, name, x, y, r, col) {
+  const im = id ? msgImage(id) : null;
+  ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.closePath();
+  if (im?.ready) { ctx.clip(); const k = Math.max(2 * r / im.w, 2 * r / im.h); ctx.drawImage(im.bmp, x - im.w * k / 2, y - im.h * k / 2, im.w * k, im.h * k); }
+  else { ctx.fillStyle = col; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = `700 ${r}px Inter, system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(name || '?').trim().slice(0, 1).toUpperCase(), x, y + r * 0.05); }
+  ctx.restore();
+  ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = Math.max(1, r * 0.1); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+}
+function msgTimes(L) {
+  const s = L.style, list = parseMsgs(s), iv = Math.max(0.3, +s.interval || 1.6), ty = s.typing !== false && L.anim !== 'type' ? Math.max(0.3, +s.typingSec || 0.9) : 0;
+  let t = +L.start || 0; return list.map((m, i) => { const typeAt = t + (i ? 0 : 0.2); const at = typeAt + (!m.mine && ty ? ty : 0); t = at + iv; return { ...m, typeAt, at }; });
+}
+function drawMessages(ctx, L, tm, o) {
+  const s = L.style, fr = o.frame; if (!fr) return;
+  const A = tm.alpha ?? 1; if (A <= 0) return;
+  const lk = { ...(MSG_LOOKS[s.look] || MSG_LOOKS.glass) };
+  if (s.colorMe) lk.me = s.colorMe; if (s.colorThem) lk.them = s.colorThem; if (s.textMe) lk.txMe = s.textMe; if (s.textThem) lk.txThem = s.textThem;
+  const u = fr.w / 1920, sz = clamp(+s.size || 1, 0.4, 3), fs = 32 * u * sz, font = s.font || 'Inter';
+  const W = fr.w * clamp(+s.width || 0.36, 0.15, 0.95), maxB = W * (lk.notify ? 1 : 0.78), padX = fs * 0.85, padY = fs * 0.55, lh = fs * 1.28, gap = fs * clamp(+(s.gap ?? 0.5), 0, 3);
+  const av = s.avatars !== false && !lk.pill && !lk.thread, ar = fs * 1.05, showName = s.names !== false, showTime = s.times !== false;
+  const now = o.time == null || tm.edit ? Infinity : o.time;
+  const list = msgTimes(L), keep = Math.max(1, Math.round(+s.keep || 6));
+  const an = L.anim || 'pop';
+  // which messages are on screen (in the editor: all)
+  const vis = list.filter((m) => now >= m.typeAt);
+  // layout every visible message (bottom-up)
+  ctx.save(); ctx.font = `${s.bold ? 700 : 500} ${fs}px "${font}", Inter, system-ui, sans-serif`;
+  const items = vis.map((m) => {
+    const shown = now >= m.at; const typing = !shown;
+    const txt = an === 'type' && shown ? m.text.slice(0, Math.max(0, Math.floor((now - m.at) * (+s.cps || 28)))) : m.text;
+    const lines = typing ? [] : wrapText(ctx, m.text, maxB - padX * 2 - (lk.notify ? ar * 2.4 : 0));
+    const tw = typing ? fs * 3 : Math.max(...lines.map((l) => ctx.measureText(l).width));
+    const head = (lk.pill || lk.thread || lk.notify || (showName && !m.mine && s.look === 'glass')) && (showName || showTime) ? fs * (lk.notify ? 1.25 : 1.1) : 0;
+    const bw = lk.notify ? maxB : Math.min(maxB, tw + padX * 2), bh = (typing ? fs * 1.4 : lines.length * lh) + padY * 2 + (lk.notify ? head : 0);
+    const k = an === 'fade' ? 1 : ease(clamp((now - (typing ? m.typeAt : m.at)) / 0.35, 0, 1));
+    return { m, typing, txt, lines, bw, bh, head: lk.notify ? 0 : head, k, pr: clamp((now - m.typeAt) / 0.4, 0, 1) };
+  });
+  const shownItems = items.slice(-keep);
+  const totalH = shownItems.reduce((a, it) => a + (it.bh + it.head + gap) * (an === 'fade' ? 1 : Math.min(1, it.pr * 1.3)), 0);
+  // anchor box (draggable)
+  const anchor = s.anchor || 'right';
+  const bx = anchor === 'left' ? fr.x + fr.w * 0.05 : anchor === 'center' ? fr.x + (fr.w - W) / 2 : fr.x + fr.w * 0.95 - W;
+  const by = fr.y + fr.h * clamp(+(s.bottom ?? 0.82), 0.2, 0.98);
+  const boxH = Math.max(totalH, fs * 4);
+  placeAt(ctx, L, fr, bx, by - boxH, W, boxH, { key: 'chat' });
+  let y = by; const bob = lk.holo ? Math.sin((o.time || 0) * 1.6) * 4 * u : 0;
+  for (let i = shownItems.length - 1; i >= 0; i--) {
+    const it = shownItems[i], m = it.m, grow = an === 'fade' ? 1 : Math.min(1, it.pr * 1.3);
+    const hgt = (it.bh + it.head + gap) * grow; y -= hgt;
+    const old = shownItems.length - 1 - i; const fadeOld = s.fadeOld === false ? 1 : clamp(1 - (old - (keep - 2)) * 0.5, 0.25, 1);
+    const right = m.mine && !lk.notify;
+    const xL = right ? bx + W - it.bw - (av ? ar * 2.6 : 0) : bx + (av && !lk.notify ? ar * 2.6 : 0);
+    const yT = y + it.head + bob;
+    let a = A * fadeOld * (an === 'fade' ? ease(clamp(it.pr * 1.5, 0, 1)) : clamp(it.k * 1.4, 0, 1));
+    if (lk.holo && it.k < 1) a *= 0.5 + 0.5 * Math.round(Math.random() * 0.6 + it.k);
+    if (a <= 0.005) continue;
+    ctx.save(); ctx.globalAlpha *= a;
+    // entrance
+    const cx = right ? xL + it.bw : xL, cy = yT + it.bh;
+    if (an === 'pop' || an === 'type') { const sc = 0.4 + 0.6 * it.k + Math.sin(it.k * Math.PI) * 0.08; ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-cx, -cy); }
+    else if (an === 'slide') ctx.translate((right ? 1 : -1) * (1 - it.k) * fs * 6, 0);
+    else if (an === 'float') ctx.translate(0, (1 - it.k) * fs * 2.5);
+    // header (name // time)
+    if (it.head && (showName || showTime)) {
+      const ht = [showName ? (m.mine && lk.pill ? (s.me || 'Me') : m.name) : '', showTime ? m.time : ''].filter(Boolean).join(lk.pill ? '// ' : '  //  ');
+      ctx.font = `${lk.pill ? 800 : 600} ${fs * (lk.pill ? 0.72 : 0.62)}px "${font}", Inter, sans-serif`; ctx.textBaseline = 'alphabetic'; ctx.textAlign = right ? 'right' : 'left';
+      ctx.fillStyle = s.headColor || (lk.thread ? '#ffffff' : 'rgba(255,255,255,0.92)'); ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4 * u;
+      ctx.fillText(ht, right ? xL + it.bw - fs * 0.2 : xL + fs * 0.2, yT - fs * 0.32); ctx.shadowBlur = 0;
+    }
+    // bubble
+    const r = lk.square ? fs * 0.25 : lk.pill ? it.bh / 2 : lk.notify ? fs * 0.9 : fs * 0.95;
+    const shape = () => { ctx.beginPath(); ctx.roundRect(xL, yT, it.bw, it.bh, Math.min(r, it.bh / 2));
+      if (s.tail !== false && !lk.pill && !lk.notify && !lk.square && !lk.holo) { const tx = right ? xL + it.bw : xL, d = right ? 1 : -1, ty = yT + it.bh; const P1 = [tx - d * fs * 0.6, ty - fs * 0.9], C1 = [tx + d * fs * 0.05, ty - fs * 0.1], P2 = [tx + d * fs * 0.45, ty + fs * 0.02], C2 = [tx - d * fs * 0.2, ty], P3 = [tx - d * fs * 0.9, ty - fs * 0.3];
+        if (d > 0) { ctx.moveTo(...P1); ctx.quadraticCurveTo(...C1, ...P2); ctx.quadraticCurveTo(...C2, ...P3); } else { ctx.moveTo(...P3); ctx.quadraticCurveTo(...C2, ...P2); ctx.quadraticCurveTo(...C1, ...P1); } ctx.closePath(); } };
+    const fill = right ? lk.me : lk.them;
+    if (s.shadow !== false && !lk.holo) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 18 * u; ctx.shadowOffsetY = 5 * u; shape(); ctx.fillStyle = lk.glass ? 'rgba(0,0,0,0.001)' : fill; ctx.fill(); ctx.restore(); }
+    if (lk.glass) {
+      const bd = backdrop(ctx, o, xL, yT, it.bw, it.bh, clamp(+(s.blur ?? 14), 0, 40) * u);
+      ctx.save(); shape(); ctx.clip(); ctx.drawImage(bd.cv, bd.sx, bd.sy, bd.sw, bd.sh, xL, yT, it.bw, it.bh);
+      ctx.fillStyle = fill; ctx.fillRect(xL, yT, it.bw, it.bh);
+      if (s.tint) { ctx.globalAlpha *= 0.35; ctx.fillStyle = s.tint; ctx.fillRect(xL, yT, it.bw, it.bh); ctx.globalAlpha /= 0.35; }
+      const hl = ctx.createLinearGradient(0, yT, 0, yT + it.bh); hl.addColorStop(0, 'rgba(255,255,255,0.28)'); hl.addColorStop(0.45, 'rgba(255,255,255,0.04)'); hl.addColorStop(1, 'rgba(255,255,255,0.08)'); ctx.fillStyle = hl; ctx.fillRect(xL, yT, it.bw, it.bh);
+      ctx.restore();
+      ctx.save(); shape(); const st = ctx.createLinearGradient(xL, yT, xL + it.bw, yT + it.bh); st.addColorStop(0, 'rgba(255,255,255,0.7)'); st.addColorStop(0.5, 'rgba(255,255,255,0.15)'); st.addColorStop(1, 'rgba(255,255,255,0.45)'); ctx.strokeStyle = st; ctx.lineWidth = 1.3 * u; ctx.stroke(); ctx.restore();
+    } else if (lk.holo) {
+      ctx.save(); shape(); ctx.fillStyle = fill; ctx.fill(); ctx.shadowColor = 'rgba(80,220,255,0.9)'; ctx.shadowBlur = 16 * u; ctx.strokeStyle = 'rgba(120,235,255,0.85)'; ctx.lineWidth = 1.4 * u; ctx.stroke(); ctx.shadowBlur = 0; ctx.clip();
+      ctx.fillStyle = 'rgba(120,235,255,0.07)'; for (let sy = yT; sy < yT + it.bh; sy += 3 * u) ctx.fillRect(xL, sy, it.bw, 1 * u); ctx.restore();
+    } else { shape(); ctx.fillStyle = fill; ctx.fill(); }
+    // avatar
+    if (av && !lk.notify) avatar(ctx, right ? s.avatarMe : s.avatarThem, m.name, right ? bx + W - ar * 1.1 : bx + ar * 1.1, yT + it.bh - ar, ar, right ? '#5b6cff' : '#ff7a59');
+    // text / typing dots
+    const tx0 = lk.notify ? xL + padX + ar * 2.4 : xL + padX;
+    ctx.fillStyle = right ? lk.txMe : lk.txThem; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    if (lk.holo) { ctx.shadowColor = 'rgba(80,220,255,0.9)'; ctx.shadowBlur = 8 * u; }
+    if (it.typing) { for (let d = 0; d < 3; d++) { const ph = ((o.time || 0) * 3 - d * 0.35) % 1.2; const up = ph > 0 && ph < 0.6 ? Math.sin(ph / 0.6 * Math.PI) : 0; ctx.globalAlpha *= 1; ctx.beginPath(); ctx.arc(xL + padX + fs * 0.4 + d * fs * 0.85, yT + it.bh / 2 - up * fs * 0.25, fs * 0.22, 0, Math.PI * 2); ctx.fill(); } }
+    else {
+      if (lk.notify) {
+        avatar(ctx, right ? s.avatarMe : s.avatarThem, m.name, xL + padX + ar, yT + padY + ar * 1.05, ar, right ? '#5b6cff' : '#34c759');
+        ctx.font = `700 ${fs * 0.82}px "${font}", Inter, sans-serif`; ctx.fillText(m.name, tx0, yT + padY + fs * 0.5);
+        ctx.font = `500 ${fs * 0.62}px "${font}", Inter, sans-serif`; ctx.textAlign = 'right'; ctx.globalAlpha *= 0.6; ctx.fillText(m.time || s.app || 'now', xL + it.bw - padX, yT + padY + fs * 0.5); ctx.globalAlpha /= 0.6; ctx.textAlign = 'left';
+      }
+      ctx.font = `${s.bold || lk.pill ? 700 : 500} ${fs}px "${font}", Inter, system-ui, sans-serif`;
+      let left = it.txt.length; const y0 = yT + padY + lh / 2 + (lk.notify ? fs * 1.25 : 0);
+      it.lines.forEach((ln, li) => { if (left <= 0) return; const part = ln.slice(0, left); left -= ln.length + 1; ctx.fillText(part, tx0, y0 + li * lh); });
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
 
 // ---------------------------------------------------------------- map poster
 const dms = (v, pos, neg) => { const a = Math.abs(v), d = Math.floor(a), m = Math.floor((a - d) * 60), sec = Math.round(((a - d) * 60 - m) * 60); return `${d}°${m}'${sec}"${v >= 0 ? pos : neg}`; };
@@ -598,9 +776,11 @@ export function drawMapFx(ctx, L, tm, o, phase) {
   if (L.kind === 'layerswipe' && phase === 'captions') return drawSwipe(ctx, L, tm, o);
   if (L.kind === 'shipsink' && phase === 'captions') return drawShipSink(ctx, L, tm, o);
   if (L.kind === 'mapposter' && phase === 'captions') return drawPoster(ctx, L, tm, o);
+  if (L.kind === 'msgchat' && phase === 'captions') return drawMessages(ctx, L, tm, o);
   return undefined;
 }
 export function mxSoundEvents(L) {
+  if (L.kind === 'msgchat') { const st = L.style || {}; if (st.sound === false) return []; const v = st.soundVol ?? 0.7; return msgTimes(L).map((m) => ({ t: m.at, type: m.mine ? 'msgsend' : 'msgrecv', p: { vol: v } })); }
   if (L.kind === 'shipsink') { const st = L.style || {}; if (st.sound === false) return []; const t0 = +L.start || 0, D = Math.max(1, +L.duration || 12), v = st.soundVol ?? 0.7; return [{ t: t0, type: 'storm', p: { dur: D + (+L.hold || 0), vol: v * 0.7 } }, { t: t0 + D * 0.05, type: 'horn', p: { vol: v } }, { t: t0 + D * 0.15, type: 'horn', p: { vol: v * 0.8 } }]; }
   const s = L.style || {}; if (s.sound === false) return [];
   const t0 = +L.start || 0, D = Math.max(0.3, +L.duration || 2), v = s.soundVol ?? 1;

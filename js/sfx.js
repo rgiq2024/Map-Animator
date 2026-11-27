@@ -608,13 +608,16 @@ SYN.fire = (ctx, out, w, p) => {
     t += 0.03 + r2 * r2 * 0.32; i++;
   }
 };
+// message sounds (made here): a soft upward swoosh for sent, a two-note chime for received
+SYN.msgsend = (ctx, out, w, p) => { const v = p.vol ?? 1; const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(420, w); o.frequency.exponentialRampToValueAtTime(1350, w + 0.12); const g = env(ctx, w, [[0.01, 0.16 * v], [0.16, 0.0001, 1]]); o.connect(g).connect(out); o.start(w); o.stop(w + 0.2); const n = src(ctx, 'white', w, 0.15, false), f = filt(ctx, 'bandpass', 3000, 0.8), ng = env(ctx, w, [[0.02, 0.05 * v], [0.14, 0.0001, 1]]); n.connect(f).connect(ng).connect(out); };
+SYN.msgrecv = (ctx, out, w, p) => { const v = p.vol ?? 1; for (const [dt, fq] of [[0, 1318.5], [0.11, 1760]]) { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = fq; const g = env(ctx, w + dt, [[0.006, 0.15 * v], [0.45, 0.0001, 1]]); o.connect(g).connect(out); o.start(w + dt); o.stop(w + dt + 0.5); } };
 export const SOUND_LIBRARY = {
   'Ink & liquid reveals': { inkbleed: 'Ink bleed (swell + crackle)', inksizzle: 'Ink sizzle (bright crackle)', inkliquid: 'Liquid spread (bubbly)', clipink: 'Ink spreading (recorded, 2 s)' },
   'Recorded clips': { clipdof2: 'Map drift ambience (depth of field)', clipink: 'Ink spreading', clipflicker: 'Electrical flicker' },
   'Cinematic': { braam: 'Braam (trailer horn)', hit: 'Impact hit', riser: 'Riser (build-up)', sub: 'Sub boom', whoosh: 'Whoosh', swoosh: 'Swoosh (short)', heartbeat: 'Heartbeat' },
   'Action': { fire: 'Fire (roar + crackle)', explosion: 'Explosion', whistle: 'Bomb whistle', missile: 'Missile launch', gunshot: 'Gunshot', thunder: 'Thunder' },
   'Vehicles': { jet: 'Jet fly-by', airliner: 'Airliner', heli: 'Helicopter', drone: 'Drone', engine: 'Engine rumble', horn: 'Train / ship horn', rocket: 'Rocket launch' },
-  'HUD & tech': { glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
+  'HUD & tech': { msgsend: 'Message sent (swoosh)', msgrecv: 'Message received (chime)', glitch: 'Glitch', static: 'Radio static', radio: 'Radio chirp', beep: 'Beep', ping: 'Ping', sonar: 'Sonar', lock: 'Target lock', hudboot: 'HUD boot', type: 'Typing', click: 'UI click', shutter: 'Camera shutter', alarm: 'Alarm' },
   'Military & radar': { radar: 'Radar sweep', acquire: 'Missile seeker growl', lockon: 'Lock-on tone', missilewarn: 'Missile warning', morse: 'Morse code (SOS)', comms: 'Radio chatter', teletype: 'Teletype', datalink: 'Data link', servo: 'Camera gimbal', klaxon: 'Klaxon', siren: 'Air-raid siren', countdown: 'Countdown beeps' },
   'Text & titles': { typewriter: 'Typewriter (keys, bell, carriage return)', ticks: 'Typing ticks (location slate)', keys: 'Keyboard typing', boom: 'Trailer boom (title card)', decode: 'Data decode (glitch type-on)', digital: 'Digital interface typing', granted: 'Access granted' },
   'Ambience': { wind: 'Wind', rain: 'Rain', storm: 'Storm (wind, rain, thunder)', crowd: 'Crowd murmur' },
