@@ -17,7 +17,30 @@ export const NEWS_CATS = {
   drought: { name: 'Drought / heat', icon: '☀', event: 'place', q: '(drought OR heatwave OR "heat wave")' },
   manmade: { name: 'Man-made disaster', icon: '🏭', event: 'place', q: '(explosion OR "chemical spill" OR "oil spill" OR "building collapse" OR "dam collapse" OR "bridge collapse" OR "train derailment" OR "industrial fire" OR "gas leak")' },
   migration: { name: 'Illegal migration', icon: '🚤', event: 'place', q: '("illegal migration" OR "migrant boat" OR "migrants drowned" OR "migrant smuggling" OR "irregular migrants" OR "border crossing" migrants)' },
+  // incidents with human and infrastructure losses
+  industrial: { name: 'Refinery / industrial fire', icon: '🏭', event: 'fire', incident: true, q: '("refinery fire" OR "refinery explosion" OR "factory fire" OR "plant explosion" OR "warehouse fire" OR "chemical plant" OR "oil depot" OR "fuel depot" OR "tanker explosion")' },
+  explosion: { name: 'Explosion / blast', icon: '💥', event: 'fire', incident: true, q: '(explosion OR blast OR "gas explosion" OR "gas cylinder" OR "bomb blast" OR "car bomb")' },
+  fireinc: { name: 'Building / city fire', icon: '🔥', event: 'fire', incident: true, q: '("building fire" OR "apartment fire" OR "market fire" OR "hospital fire" OR "hotel fire" OR "nightclub fire" OR blaze OR inferno)' },
+  war: { name: 'War / airstrike', icon: '⚔', event: 'place', incident: true, q: '(airstrike OR "air strike" OR "missile strike" OR "drone strike" OR shelling OR bombardment OR "drone attack")' },
+  train: { name: 'Train accident', icon: '🚆', event: 'place', incident: true, q: '("train crash" OR "train collision" OR derailment OR "train derailed" OR "train accident" OR "trains collide")' },
+  plane: { name: 'Plane / helicopter crash', icon: '✈', event: 'place', incident: true, q: '("plane crash" OR "plane crashed" OR "aircraft crash" OR "helicopter crash" OR "jet crashed" OR "emergency landing")' },
+  road: { name: 'Road / bus accident', icon: '🚌', event: 'place', incident: true, q: '("bus crash" OR "bus accident" OR "bus plunged" OR "road accident" OR "truck crash" OR "pile-up" OR "tanker overturned")' },
+  collapse: { name: 'Building / bridge collapse', icon: '🏚', event: 'place', incident: true, q: '("building collapse" OR "building collapsed" OR "bridge collapse" OR "bridge collapsed" OR "roof collapse" OR "dam burst")' },
+  ship: { name: 'Ship / boat accident', icon: '🚢', event: 'place', incident: true, q: '("ship sank" OR "ferry sank" OR "boat capsized" OR "ship sinking" OR "vessel sank" OR "ship collision" OR "ship fire")' },
+  mine: { name: 'Mine accident', icon: '⛏', event: 'place', incident: true, q: '("mine collapse" OR "mine explosion" OR "mine accident" OR "miners trapped" OR "mine blast")' },
+  stampede: { name: 'Stampede / crowd crush', icon: '👥', event: 'place', incident: true, q: '(stampede OR "crowd crush" OR "crush at")' },
+  search: { name: 'Your search', icon: '🔎', event: 'place', hidden: true, q: '' },
 };
+/** deaths / injuries named in a headline ("31 killed", "at least nine injured") → extra weight for big losses */
+const NUMW = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, dozen: 12, dozens: 24, scores: 40, hundreds: 200, thousands: 2000 };
+export function tollOf(title) {
+  const t = String(title || '').toLowerCase();
+  let dead = 0, hurt = 0;
+  const re = /(\d[\d,]*|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozens?|scores|hundreds|thousands)\s+(?:people\s+|workers\s+|passengers\s+|civilians\s+|others\s+)?(?:are\s+|were\s+|have\s+been\s+)?(killed|dead|die[ds]?|deaths|feared dead|injured|hurt|wounded|missing)/g;
+  for (const m of t.matchAll(re)) { const n = NUMW[m[1]] ?? +m[1].replace(/,/g, ''); if (!Number.isFinite(n)) continue; if (/injured|hurt|wounded/.test(m[2])) hurt = Math.max(hurt, n); else dead = Math.max(dead, n); }
+  return { dead, hurt };
+}
+function tollWeight(it) { const { dead, hurt } = tollOf(it.title); if (!dead && !hurt) return 0; it.toll = { dead, hurt }; return Math.min(2.5, Math.log10(1 + dead * 3 + hurt) * 1.1); }
 const EONET_CAT = { wildfires: 'wildfire', floods: 'flood', landslides: 'landslide', volcanoes: 'volcano', severeStorms: 'storm', drought: 'drought', tempExtremes: 'drought', earthquakes: 'earthquake', manmade: 'manmade' };
 const GDACS_CAT = { EQ: 'earthquake', FL: 'flood', TC: 'storm', VO: 'volcano', DR: 'drought', WF: 'wildfire' };
 
@@ -122,7 +145,7 @@ export async function fetchGDELT(cats, hours = 24, perCat = 40) {
   let first = true, ok = 0, lastErr = null;
   for (const cat of cats) {
     const C = NEWS_CATS[cat];
-    if (!C) continue;
+    if (!C || !C.q) continue;
     if (!first) await sleep(5500); // GDELT asks for one request every 5 seconds
     first = false;
     const q = encodeURIComponent(`${C.q} sourcelang:english`);
@@ -142,6 +165,22 @@ export async function fetchGDELT(cats, hours = 24, perCat = 40) {
   }
   if (!ok && lastErr) throw lastErr;
   return clusterArticles(out);
+}
+/** Any news: a free-text GDELT search (words, "exact phrase", OR). Results get the category whose words match, else “Your search”. */
+export async function searchNews(text, hours = 72, max = 75) {
+  const span = hours <= 24 ? '1d' : `${Math.ceil(hours / 24)}d`;
+  let q = String(text || '').trim(); if (!q) return [];
+  if (/\s/.test(q) && !/["()]|\bOR\b/.test(q)) q = q.split(/\s+/).join(' ');
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(`${q} sourcelang:english`)}&mode=artlist&maxrecords=${max}&timespan=${span}&sort=hybridrel&format=json`;
+  let j; try { j = await getJSON(url); } catch (e) { if (String(e.message) !== '429') throw e; await sleep(6000); j = await getJSON(url); }
+  const kws = Object.entries(NEWS_CATS).filter(([, c]) => c.q).sort((a, b) => (b[1].incident ? 1 : 0) - (a[1].incident ? 1 : 0)).map(([k, c]) => [k, keywordsOf(c.q)]);
+  const out = [];
+  for (const a of j.articles || []) {
+    const title = String(a.title || '').trim(), tl = title.toLowerCase();
+    const hit = kws.find(([, kw]) => kw.some((k) => k.length > 4 && tl.includes(k)));
+    out.push({ id: `gdelt:${a.url}`, cat: hit ? hit[0] : 'search', searched: true, source: a.domain || 'news', title, place: '', country: a.sourcecountry || '', ll: null, time: parseSeen(a.seendate), severity: 0.6, sevText: 'News report', url: a.url, image: a.socialimage || '', facts: {} });
+  }
+  return clusterArticles(out).map((x) => ({ ...x, searched: true }));
 }
 /** the query's words and phrases, for checking that a headline is really about the category */
 function keywordsOf(q) {
@@ -164,7 +203,12 @@ export function clusterArticles(list) {
     g.outlets.add(a.source);
     g.time = Math.max(g.time, a.time);
   }
-  return groups.map(({ w, outlets, ...g }) => ({ ...g, coverage: outlets.size, severity: 0.4 + Math.min(1.1, outlets.size * 0.12), sevText: `${outlets.size} outlet${outlets.size === 1 ? '' : 's'}` }));
+  return groups.map(({ w, outlets, ...g }) => {
+    const tw = Math.max(...g.links.map((l) => tollWeight({ title: l.title })), tollWeight(g));
+    const T = g.links.map((l) => tollOf(l.title)).reduce((a, b) => ({ dead: Math.max(a.dead, b.dead), hurt: Math.max(a.hurt, b.hurt) }), { dead: 0, hurt: 0 });
+    const toll = [T.dead ? `${T.dead} dead` : '', T.hurt ? `${T.hurt} injured` : ''].filter(Boolean).join(', ');
+    return { ...g, toll: T, image: g.image || g.links.find((l) => l.image)?.image || '', coverage: outlets.size, severity: 0.4 + Math.min(1.1, outlets.size * 0.12) + tw, sevText: [toll, `${outlets.size} outlet${outlets.size === 1 ? '' : 's'}`].filter(Boolean).join(' · ') };
+  });
 }
 
 // ---------------------------------------------------------------- everything together

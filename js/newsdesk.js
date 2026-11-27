@@ -1,7 +1,7 @@
 // AI news desk: finds today's disasters and incidents, then builds a whole news video for one of them:
 // fly / zoom to the incident → pre and post satellite images → damage & analysis → photos and videos → end card.
 // Text can be written by AI (your own Anthropic API key, kept in this browser) or by built-in templates.
-import { NEWS_CATS, fetchIncidents, addFireHotspots, rankIncidents } from './newsfeeds.js';
+import { NEWS_CATS, fetchIncidents, addFireHotspots, rankIncidents, searchNews } from './newsfeeds.js';
 import { parseBrief, resolvePlaces, buildStory, defaultBlocks, mkLayer as L, camKey as K, camView as V, destPoint as dest, pointGeom as pt, circleGeom as circle, REF_W, fmtLatLon } from './autostory.js';
 import { newScene, fitCamera } from './scene.js';
 import { pcScenes, pcRenders, pcDayTiles } from './pcsat.js';
@@ -397,21 +397,26 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null, auto = 
   document.querySelector('.nd-modal')?.remove();
   const d = document.createElement('dialog');
   d.className = 'modal wide nd-modal';
-  const saved = LS.get('ma.newsdesk', { cats: Object.keys(NEWS_CATS), hours: 24 });
+  const visCats = Object.keys(NEWS_CATS).filter((k) => !NEWS_CATS[k].hidden);
+  const saved = LS.get('ma.newsdesk', { cats: visCats, hours: 24, known: visCats });
+  for (const k of visCats) if (!(saved.known || []).includes(k) && !saved.cats.includes(k)) saved.cats.push(k);
+  saved.known = visCats;
   d.innerHTML = `
     <div class="modal-head"><h3>📰 News desk <small class="muted">· AI</small></h3><button class="icon-x" data-close>✕</button></div>
     <div class="nd-body">
       <aside class="nd-left">
         <div class="nd-filters">
-          <div class="nd-cats">${Object.entries(NEWS_CATS).map(([k, c]) => `<label class="nd-cat"><input type="checkbox" value="${k}" ${saved.cats.includes(k) ? 'checked' : ''}><span>${c.icon} ${esc(c.name)}</span></label>`).join('')}</div>
-          <div class="nd-row"><select id="nd-hours"><option value="24" ${saved.hours === 24 ? 'selected' : ''}>Last 24 hours</option><option value="72" ${saved.hours === 72 ? 'selected' : ''}>Last 3 days</option><option value="168" ${saved.hours === 168 ? 'selected' : ''}>Last 7 days</option></select>
-          <button class="btn sm primary" id="nd-search">Search now</button></div>
+          <div class="nd-searchbox"><input id="nd-q" type="search" placeholder="Search any news — e.g. refinery fire, train crash Egypt, airstrike Khartoum"><button class="btn sm primary" id="nd-qgo">🔎 Search</button></div>
+          <div class="nd-catbar"><span class="muted small">Disasters</span><span class="nd-catbtns"><button class="linkish" data-catset="all">All</button> · <button class="linkish" data-catset="none">None</button> · <button class="linkish" data-catset="nature">Nature</button> · <button class="linkish" data-catset="incident">Incidents</button></span></div>
+          <div class="nd-cats">${Object.entries(NEWS_CATS).filter(([, c]) => !c.hidden).map(([k, c]) => `<label class="nd-cat"><input type="checkbox" value="${k}" ${saved.cats.includes(k) ? 'checked' : ''}><span>${c.icon} ${esc(c.name)}</span></label>`).join('')}</div>
+          <div class="nd-row"><select id="nd-hours"><option value="24" ${saved.hours === 24 ? 'selected' : ''}>Last 24 hours</option><option value="72" ${saved.hours === 72 ? 'selected' : ''}>Last 3 days</option><option value="168" ${saved.hours === 168 ? 'selected' : ''}>Last 7 days</option><option value="336" ${saved.hours === 336 ? 'selected' : ''}>Last 2 weeks</option></select>
+          <button class="btn sm primary" id="nd-search">Search now</button><span class="nd-view"><button class="btn sm on" data-view="cards" title="Cards">▦</button><button class="btn sm" data-view="list" title="List">☰</button></span></div>
           <div class="nd-row nd-auto"><button class="btn sm" id="nd-autofire" title="Takes the biggest fire story, adds NASA FIRMS hotspots and builds the whole video">🔥 Auto fire video</button><button class="btn sm" id="nd-autoflood" title="Takes the biggest flood story and builds the whole video">🌊 Auto flood video</button></div>
           <p class="muted small" id="nd-feedinfo"></p>
         </div>
         <div class="nd-list" id="nd-list"><p class="muted nd-empty">Loading today’s feed…</p></div>
       </aside>
-      <section class="nd-right" id="nd-right"><div class="nd-placeholder"><b>Pick a story</b><p class="muted">The list shows disasters and incidents from USGS, NASA EONET, GDACS and world news (GDELT), the biggest first. Choose one to build its video:</p><ol class="muted"><li>Intro</li><li>Zoom to location</li><li>Pre and post satellite images (Sentinel)</li><li>Photos</li><li>Analysis — NASA FIRMS fire hotspots for fires, flood extent for floods</li><li>End card</li></ol><p class="muted">Or press <b>🔥 Auto fire video</b> / <b>🌊 Auto flood video</b> to build the biggest story in one go.</p></div></section>
+      <section class="nd-right" id="nd-right"><div class="nd-cards" id="nd-cards"><p class="muted nd-empty">Loading today’s stories…</p></div></section>
     </div>
     <div class="modal-actions nd-actions"><button class="btn sm" id="nd-ai">AI settings</button><span class="muted small" id="nd-status"></span><button class="btn primary" id="nd-make" disabled>Create the video</button></div>`;
   document.body.append(d);
@@ -419,13 +424,26 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null, auto = 
   const status = (t) => { $('#nd-status').textContent = t; };
   let items = [], cur = null, text = null, media = [];
   const catsChecked = () => [...d.querySelectorAll('.nd-cat input:checked')].map((i) => i.value);
+  let view = LS.get('ma.ndview', 'cards'), query = '';
+  const listNow = () => { if (query) return items.filter((x) => x.searched); const want = new Set(catsChecked()); return items.filter((x) => want.has(x.cat)); };
+  const imgOf = (x) => x.image || (x.links || []).find((l) => l.image)?.image || '';
+  function renderCards() {
+    const list = listNow();
+    const el = $('#nd-right'); if (cur) return;
+    const tollChip = (x) => (x.toll && (x.toll.dead || x.toll.hurt) ? `<span class="nd-toll">${[x.toll.dead ? `${x.toll.dead} dead` : '', x.toll.hurt ? `${x.toll.hurt} injured` : ''].filter(Boolean).join(' · ')}</span>` : '');
+    el.innerHTML = `<div class="nd-cards-head"><b>${query ? `Results for “${esc(query)}” <button class="linkish" id="nd-clearq">✕ clear search</button>` : 'Top stories'}</b><span class="muted small">${list.length} stor${list.length === 1 ? 'y' : 'ies'} · biggest losses and coverage first · click a card to build its video</span></div>
+      <div class="nd-cards" id="nd-cards">${list.length ? list.slice(0, 60).map((x, i) => { const im = imgOf(x), C = NEWS_CATS[x.cat] || {}; return `<button class="nd-card" data-i="${items.indexOf(x)}">
+        <span class="nd-card-img" ${im ? `style="background-image:url('${esc(im)}')"` : ''}>${im ? '' : `<span class="nd-card-ico">${C.icon || '•'}</span>`}<span class="nd-card-cat">${C.icon || ''} ${esc(C.name || '')}</span>${i === 0 && !query ? '<em class="nd-top">Top</em>' : ''}${tollChip(x)}</span>
+        <span class="nd-card-body"><b>${esc(x.title)}</b><small>${x.time ? esc(ago(x.time)) : ''} · ${esc(x.source)}${x.coverage > 1 ? ` · ${x.coverage} outlets` : ''}${x.ll ? ' · 📍 located' : ''}</small><span class="nd-card-go">Build video →</span></span></button>`; }).join('') : '<p class="muted nd-empty">Nothing found — try other categories, a longer time window, or the search box.</p>'}</div>`;
+  }
   function renderList() {
-    const want = new Set(catsChecked());
-    const list = items.filter((x) => want.has(x.cat));
+    const list = listNow();
     $('#nd-list').innerHTML = list.length ? list.slice(0, 80).map((x, i) => `<button class="nd-item ${cur === x ? 'on' : ''}" data-i="${items.indexOf(x)}">
       <span class="nd-ico">${NEWS_CATS[x.cat]?.icon || '•'}</span>
       <span class="nd-txt"><b>${esc(x.title)}</b><small>${esc(NEWS_CATS[x.cat]?.name || '')} · ${esc(x.sevText || '')} · ${x.time ? esc(ago(x.time)) : ''} · ${esc(x.source)}${x.alsoIn ? ` +${x.alsoIn.length}` : ''}${x.ll ? '' : ' · place from the headline'}</small></span>
       ${i === 0 ? '<em class="nd-top">Top</em>' : ''}</button>`).join('') : '<p class="muted nd-empty">Nothing found for these filters — try more categories or a longer time window.</p>';
+    d.classList.toggle('nd-cardsview', view === 'cards');
+    if (!cur) renderCards();
   }
   const partsHTML = () => {
     const P = LS.get('ma.newsparts', { fly: true, sat: true, analysis: true, media: true, end: true, commons: true, music: false, length: 60 });
@@ -438,6 +456,7 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null, auto = 
     if (!cur) return;
     const x = cur;
     $('#nd-right').innerHTML = `
+      <button class="btn sm nd-back" id="nd-back">← All stories</button>
       <div class="nd-head"><span class="nd-ico big">${NEWS_CATS[x.cat]?.icon || '•'}</span><div><b>${esc(x.title)}</b><small class="muted">${esc(x.sevText || '')} · ${x.time ? esc(longDate(x.time)) : ''} · ${x.ll ? esc(fmtLatLon(x.ll)) : 'location from the headline'}</small></div></div>
       <div class="nd-links">${(x.links || []).slice(0, 6).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.source)} ↗</a>`).join('')}</div>
       <div class="nd-grid">
@@ -460,8 +479,21 @@ export function openNewsDesk({ onCreate, aspect = 16 / 9, preset = null, auto = 
     status(cur.ll ? 'Ready — check the text, then create the video' : 'The place comes from the headline — check “Place on the map”');
   }
   $('#nd-list').addEventListener('click', (e) => { const b = e.target.closest('.nd-item'); if (b) pick(+b.dataset.i); });
-  d.querySelector('.nd-cats').addEventListener('change', () => { LS.set('ma.newsdesk', { cats: catsChecked(), hours: +$('#nd-hours').value }); renderList(); });
-  $('#nd-hours').addEventListener('change', () => LS.set('ma.newsdesk', { cats: catsChecked(), hours: +$('#nd-hours').value }));
+  $('#nd-right').addEventListener('click', (e) => { const c = e.target.closest('.nd-card'); if (c) pick(+c.dataset.i); if (e.target.id === 'nd-clearq') { $('#nd-q').value = ''; query = ''; items = items.filter((x) => !x.searched); renderList(); status(''); return; }
+    if (e.target.id === 'nd-back') { cur = null; $('#nd-make').disabled = true; renderList(); status(''); } });
+  d.querySelector('.nd-view').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (!b) return; view = b.dataset.view; LS.set('ma.ndview', view); d.querySelectorAll('.nd-view button').forEach((x) => x.classList.toggle('on', x === b)); renderList(); });
+  d.querySelector('.nd-catbtns').addEventListener('click', (e) => { const k = e.target.dataset.catset; if (!k) return; for (const i of d.querySelectorAll('.nd-cat input')) { const c = NEWS_CATS[i.value]; i.checked = k === 'all' || (k === 'nature' && !c.incident) || (k === 'incident' && !!c.incident); } LS.set('ma.newsdesk', { cats: catsChecked(), hours: +$('#nd-hours').value, known: visCats }); renderList(); });
+  async function freeSearch() {
+    const q = $('#nd-q').value.trim(); if (!q) { query = ''; items = items.filter((x) => !x.searched); renderList(); return; }
+    $('#nd-qgo').disabled = true; status(`Searching the news for “${q}”…`); cur = null; $('#nd-make').disabled = true;
+    try { const r = await searchNews(q, Math.max(72, +$('#nd-hours').value)); query = q; items = [...rankIncidents(r), ...items.filter((x) => !x.searched)]; status(`${r.length} stories for “${q}” — click one to build its video`); }
+    catch (e) { status(e.message === '429' ? 'The news search is busy — wait a few seconds and try again' : (e.message || 'Search failed')); }
+    renderList(); $('#nd-qgo').disabled = false;
+  }
+  $('#nd-qgo').onclick = freeSearch;
+  $('#nd-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); freeSearch(); } });
+  d.querySelector('.nd-cats').addEventListener('change', () => { LS.set('ma.newsdesk', { cats: catsChecked(), hours: +$('#nd-hours').value, known: visCats }); renderList(); });
+  $('#nd-hours').addEventListener('change', () => LS.set('ma.newsdesk', { cats: catsChecked(), hours: +$('#nd-hours').value, known: visCats }));
   $('#nd-right').addEventListener('input', (e) => {
     const k = e.target.dataset.t;
     if (k && text) text[k] = k === 'facts' || k === 'analysis' ? e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) : e.target.value;
