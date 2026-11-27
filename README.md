@@ -421,3 +421,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Sound off by default: preview has a 🔇/🔊 sound button (off unless switched on); exports silent unless switched on (old saved export choices reset).
 - Map theme defaults: place names on, names in English (new scenes and auto-built scenes).
 - New 'Map poster' section: map-art poster element (find a place, name, colour, full / circle / circle-focus / rounded / heart, wall + frame, build / print-and-frame animations) and Poster map themes (one colour on paper, any colour).
+- Tutorials: Map poster card.
