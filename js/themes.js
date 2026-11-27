@@ -152,6 +152,15 @@ export function loadBaseStyle() {
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
+/** multiply a line-width (number, zoom stops or expression) by k, keeping zoom expressions valid */
+function scaleWidth(w, k) {
+  if (typeof w === 'number') return w * k;
+  if (w && !Array.isArray(w) && Array.isArray(w.stops)) return { ...w, stops: w.stops.map(([z, v]) => [z, typeof v === 'number' ? v * k : v]) };
+  if (Array.isArray(w) && (w[0] === 'interpolate' || w[0] === 'interpolate-hcl' || w[0] === 'interpolate-lab')) return [...w.slice(0, 3), ...w.slice(3).map((v, i) => (i % 2 ? (typeof v === 'number' ? v * k : ['*', k, v]) : v))];
+  if (Array.isArray(w) && w[0] === 'step') return [w[0], w[1], ...w.slice(2).map((v, i) => (i % 2 === 0 ? (typeof v === 'number' ? v * k : ['*', k, v]) : v))];
+  if (Array.isArray(w)) return ['*', k, w];
+  return w;
+}
 /** one-colour print palette: everything is the ink colour, mixed into the paper for the lighter parts */
 export function posterPal(ink, paper = '#ffffff') {
   const h = (c) => { const m = String(c).replace('#', ''); const v = m.length === 3 ? m.split('').map((x) => x + x).join('') : m; return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16) || 0); };
@@ -201,7 +210,15 @@ function nameField(lang) {
  */
 export async function buildStyle(look) {
   const theme0 = THEMES[look.theme] || THEMES.classic;
-  const theme = theme0.poster ? { ...theme0, pal: posterPal(look.posterColor || theme0.poster, theme0.posterBg || '#ffffff') } : theme0;
+  let theme = theme0;
+  if (theme0.poster) {
+    const pal = posterPal(look.posterColor || theme0.poster, look.posterPaper || theme0.posterBg || '#ffffff');
+    if (look.posterWater) { pal.water = look.posterWater; pal.waterLine = look.posterWater; }
+    if (look.posterPark) { pal.park = look.posterPark; pal.wood = look.posterPark; pal.grass = look.posterPark; }
+    if (look.posterBuilding) pal.building = look.posterBuilding;
+    if (look.posterRoads) { pal.motorway = look.posterRoads; pal.roadMajor = look.posterRoads; pal.roadMid = look.posterRoads; }
+    theme = { ...theme0, pal };
+  }
   const base = await loadBaseStyle();
   const st = clone(base);
   // never let a style move the camera
@@ -297,6 +314,14 @@ export async function buildStyle(look) {
         }
       }
       if (theme.poster && (c.type === 'symbol' || c.id.startsWith('boundary') || c.id.endsWith('_casing') || c.type === 'fill-extrusion')) continue; // a print: no labels, borders, casings or 3D
+      if (theme.poster) {
+        if (look.posterNoBuildings && c.id.startsWith('building')) continue;
+        if (look.posterNoMinor && c.type === 'line' && /minor|service|path|track|pedestrian/.test(c.id)) continue;
+        if (look.posterNoWater && (c.id === 'water' || c.id.startsWith('waterway'))) continue;
+        if (look.posterNoParks && (c.id.startsWith('park') || c.id.startsWith('landcover'))) continue;
+        const k = +look.posterRoadWidth || 1;
+        if (k !== 1 && c.type === 'line' && c.paint?.['line-width'] != null && /road|highway|bridge|tunnel/.test(c.id)) c.paint['line-width'] = scaleWidth(c.paint['line-width'], k);
+      }
       // Toggles shared by all vector themes
       if (c.type === 'symbol' && PLACE_LAYERS.test(c.id) && field) {
         c.layout = { ...(c.layout || {}), 'text-field': field };

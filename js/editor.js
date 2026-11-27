@@ -174,7 +174,7 @@ export function createEditor() {
 
   function lookKey(look) {
     const { theme, placeNames, lang, states, terrain, terrainExaggeration, buildings3d, rasterLabels, rasterRoads, globe, atmosphere, posterColor } = look;
-    return JSON.stringify({ theme, posterColor: THEMES[theme]?.poster ? posterColor : '', placeNames, lang, states, terrain, globe: !!globe, atmosphere: !!atmosphere, buildings3d: !!buildings3d, rasterLabels: rasterLabels !== false, rasterRoads: !!rasterRoads, terrainExaggeration: terrain ? terrainExaggeration : 0 });
+    return JSON.stringify({ theme, poster: THEMES[theme]?.poster ? [posterColor, look.posterPaper, look.posterWater, look.posterPark, look.posterBuilding, look.posterRoads, look.posterNoBuildings, look.posterNoMinor, look.posterNoWater, look.posterNoParks, look.posterRoadWidth] : '', placeNames, lang, states, terrain, globe: !!globe, atmosphere: !!atmosphere, buildings3d: !!buildings3d, rasterLabels: rasterLabels !== false, rasterRoads: !!rasterRoads, terrainExaggeration: terrain ? terrainExaggeration : 0 });
   }
   function applyLook(sc) {
     const key = lookKey(sc.look);

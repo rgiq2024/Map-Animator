@@ -36,7 +36,7 @@ export const MX_DEFAULTS = {
   dofblur: { focusFrom: 0.62, focusTo: 0.42, band: 0.18, feather: 0.32, blur: 9, angle: 0, labels: true, vignette: 0.25, driftKm: 6, driftDir: 90, driftPitch: 55, driftTurn: 6, sound: true, soundVol: 0.8, clip: 'dof-ambient-2' },
   inkreveal: { snd: 'inkbleed', sndDur: 2, color: '#b3121e', opacity: 0.85, seedX: 0.12, seedY: 0.55, rough: 0.35, smoke: 0.7, texture: 0.35, edge: false, edgeColor: '#ff2a3a', sound: true, soundVol: 1 },
   flickerzones: { from: 'countries', layerId: '', countries: 'France, Germany, Italy, Spain, Poland, Belgium, Netherlands, Switzerland, Austria, Czechia', data: '', sample: '', color: '#ffffff', fill: 0.18, stroke: '#ffffff', strokeWidth: 1.2, rate: 12, flickerFor: 2.2, maxA: 0.9, sound: true, soundVol: 1 },
-  mapposter: { query: '', title: 'YOUR CITY', sub: 'COUNTRY', coords: '', color: '#5f8a48', paper: '#ffffff', shape: 'full', circle: 0.86, veil: 0.75, fade: 0.38, page: 'portrait', ratio: '4:5', wall: '#e9e5df', frame: 'none', font: 'Jost', titleSize: 1, spacing: 0.28, grain: true, syncMap: true, autoTheme: true },
+  mapposter: { query: '', title: 'YOUR CITY', sub: 'COUNTRY', coords: '', color: '#5f8a48', paper: '#ffffff', titleColor: '', subColor: '', coordsColor: '', showTitle: true, showSub: true, showCoords: true, dashes: true, titleWeight: 600, subSize: 1, coordsSize: 1, textPos: 'bottom', textY: 0, textBand: false, mapColor: '', waterColor: '', parkColor: '', buildingColor: '', roadColor: '', showBuildings: true, showMinor: true, showWater: true, showParks: true, roadWidth: 1, shape: 'full', circle: 0.86, veil: 0.75, fade: 0.38, page: 'portrait', ratio: '4:5', wall: '#e9e5df', frame: 'none', font: 'Jost', titleSize: 1, spacing: 0.28, grain: true, syncMap: true, autoTheme: true },
   shipsink: { type: 'tanker', name: 'MED EMRE', size: 1, heading: 35, listSide: 1, maxList: 90, storm: 1, flare: true, mayday: true, maydayText: 'MAYDAY', rafts: 3, sheen: false, nameTag: true, sound: true, soundVol: 0.7 },
   layerswipe: { layerA: '', layerB: '', dir: 'lr', split: 0.5, cycles: 1, hold: 0.12, labels: true, labelA: 'Dataset A', labelB: 'Dataset B', labelPos: 'top', textSize: 1, lineColor: '#ffffff', lineWidth: 3, knob: true, chips: true },
   softlabel: { text: 'Track Point 1', size: 1, color: '#ffffff', shadow: 0.6, weight: 500, dot: false, sound: false, soundVol: 0.6 },
@@ -62,6 +62,44 @@ export const MX_FORMS = {
     ['style.data', 'Your file with areas', 'datafile', null, (L) => L.style.from === 'data'],
     ['style.color', 'Flash colour', 'color'], ['style.maxA', 'Brightest flash', 'range', [0.1, 1, 0.01]], ['style.rate', 'Flicker speed (flashes / s)', 'range', [1, 40, 0.5]], ['style.flickerFor', 'Flicker for (s)', 'range', [0.2, 10, 0.1]],
     ['style.fill', 'Fill after settling', 'range', [0, 1, 0.01]], ['style.stroke', 'Outline colour', 'color'], ['style.strokeWidth', 'Outline width', 'range', [0, 6, 0.1]], ...SND,
+  ],
+  mapposter: [
+    ['', 'Find your special place, name it, pick a colour — then print it, frame it, gift it.', 'note'],
+    ['style.query', 'Find a place (city, town, address)', 'text'], ['', '🔍 Find it — sets the map, title, country and coordinates', 'gvaction', 'posterFind'],
+    ['style.title', 'Name (big title)', 'text'], ['style.sub', 'Second line (country / state)', 'text'], ['style.coords', 'Coordinates (empty = from the place)', 'text'],
+    ['style.color', 'Main colour (map and text)', 'color'], ['style.syncMap', 'Map uses these settings', 'switch'], ['style.paper', 'Paper colour (also the map background)', 'color'],
+    ['', 'TEXT', 'note'],
+    ['style.font', 'Font', 'select', { Jost: 'Jost (geometric, like Futura)', Montserrat: 'Montserrat', Raleway: 'Raleway', 'Playfair Display': 'Playfair Display', Cinzel: 'Cinzel', Oswald: 'Oswald', Lora: 'Lora', 'Bebas Neue': 'Bebas Neue' }],
+    ['style.showTitle', 'Show the title', 'switch'], ['style.titleColor', 'Title colour (empty = main colour)', 'color', null, (L) => L.style.showTitle !== false],
+    ['style.titleSize', 'Title size', 'range', [0.4, 2.5, 0.05], (L) => L.style.showTitle !== false], ['style.titleWeight', 'Title weight', 'select', { 400: 'Regular', 500: 'Medium', 600: 'Semi-bold', 700: 'Bold', 800: 'Extra bold' }, (L) => L.style.showTitle !== false],
+    ['style.spacing', 'Title letter spacing', 'range', [0, 0.8, 0.01], (L) => L.style.showTitle !== false],
+    ['style.showSub', 'Show the second line', 'switch'], ['style.subColor', 'Second line colour', 'color', null, (L) => L.style.showSub !== false], ['style.subSize', 'Second line size', 'range', [0.4, 2.5, 0.05], (L) => L.style.showSub !== false], ['style.dashes', 'Dashes around the second line', 'switch', null, (L) => L.style.showSub !== false],
+    ['style.showCoords', 'Show the coordinates', 'switch'], ['style.coordsColor', 'Coordinates colour', 'color', null, (L) => L.style.showCoords !== false], ['style.coordsSize', 'Coordinates size', 'range', [0.4, 2.5, 0.05], (L) => L.style.showCoords !== false],
+    ['style.textPos', 'Text position', 'select', { bottom: 'Bottom', middle: 'Middle', top: 'Top' }], ['style.textY', 'Nudge text up / down', 'range', [-0.3, 0.3, 0.005]], ['style.textBand', 'Paper band behind the text', 'switch'],
+    ['', 'MAP', 'note'],
+    ['style.mapColor', 'Streets colour (empty = main colour)', 'color', null, (L) => L.style.syncMap !== false], ['style.roadColor', 'Main roads colour', 'color', null, (L) => L.style.syncMap !== false],
+    ['style.roadWidth', 'Road thickness', 'range', [0.3, 4, 0.05], (L) => L.style.syncMap !== false], ['style.showMinor', 'Small streets', 'switch', null, (L) => L.style.syncMap !== false],
+    ['style.showWater', 'Water', 'switch', null, (L) => L.style.syncMap !== false], ['style.waterColor', 'Water colour', 'color', null, (L) => L.style.syncMap !== false && L.style.showWater !== false],
+    ['style.showParks', 'Parks and woods', 'switch', null, (L) => L.style.syncMap !== false], ['style.parkColor', 'Parks colour', 'color', null, (L) => L.style.syncMap !== false && L.style.showParks !== false],
+    ['style.showBuildings', 'Buildings', 'switch', null, (L) => L.style.syncMap !== false], ['style.buildingColor', 'Buildings colour', 'color', null, (L) => L.style.syncMap !== false && L.style.showBuildings !== false],
+    ['', 'SHAPE AND PAGE', 'note'],
+    ['style.shape', 'Shape', 'select', { full: 'Full page (like Boston)', circle: 'Circle only (like Leeds)', circlefade: 'Circle focus, faded map around (like Rome, Tokyo)', rounded: 'Rounded square', heart: 'Heart' }],
+    ['style.circle', 'Circle size', 'range', [0.4, 1.2, 0.01], (L) => L.style.shape !== 'full'], ['style.veil', 'Fade around the circle', 'range', [0, 1, 0.01], (L) => L.style.shape === 'circlefade'],
+    ['style.fade', 'White fade at the bottom', 'range', [0, 0.7, 0.01]],
+    ['style.page', 'Page', 'select', { portrait: 'Poster page on a wall', fill: 'Whole video frame' }], ['style.ratio', 'Poster size', 'select', { '4:5': '4 : 5 (8×10, 16×20)', '3:4': '3 : 4 (18×24)', '2:3': '2 : 3 (24×36)', A: 'A-series (A4, A3, A2)', '1:1': 'Square' }, (L) => L.style.page !== 'fill'],
+    ['style.wall', 'Wall colour', 'color', null, (L) => L.style.page !== 'fill'], ['style.frame', 'Frame', 'select', { none: 'No frame', black: 'Black', white: 'White', oak: 'Oak', walnut: 'Walnut', gold: 'Gold' }, (L) => L.style.page !== 'fill'],
+    ['style.grain', 'Paper grain', 'switch'],
+  ],
+  shipsink: [
+    ['style.type', 'Ship', 'select', { tanker: 'Tanker (red deck, pipes)', cargo: 'Cargo ship (containers)', ferry: 'Ferry / passenger', fishing: 'Fishing boat', boat: 'Small boat' }],
+    ['style.hull', 'Draw the ship (turn off when a 3D ship model sits here)', 'switch'],
+    ['style.name', 'Ship name', 'text'], ['style.nameTag', 'Name tag', 'switch'],
+    ['style.size', 'Size', 'range', [0.3, 5, 0.05]], ['style.heading', 'Heading (°)', 'range', [0, 359, 1]],
+    ['style.listSide', 'Lists to', 'select', { 1: 'Starboard (right)', '-1': 'Port (left)' }], ['style.maxList', 'Largest list (°)', 'range', [10, 90, 1]],
+    ['style.storm', 'Rough sea (whitecaps)', 'range', [0, 3, 0.05]],
+    ['style.flare', 'Red distress flare', 'switch'], ['style.mayday', 'MAYDAY pulse rings', 'switch'], ['style.maydayText', 'MAYDAY text', 'text', null, (L) => L.style.mayday !== false],
+    ['style.rafts', 'Life rafts after sinking', 'range', [0, 8, 1]], ['style.sheen', 'Fuel sheen on the water', 'switch'],
+    ['style.sound', 'Storm + ship horn sound', 'switch'], ['style.soundVol', 'Sound volume', 'range', [0, 2, 0.05], (L) => L.style.sound !== false],
   ],
   layerswipe: [
     ['', 'Import each road file with the buttons below (GeoJSON, shapefile .zip, KML, GPX — UTM / Web Mercator files are converted automatically), or pick layers you already added. A GeoTIFF: add it with Imagery → Georeferenced image, then pick it. Your imagery underneath stays visible on both sides.', 'note'],
@@ -93,14 +131,20 @@ function grainPattern(ctx) {
   return ctx.createPattern(GRAIN, 'repeat');
 }
 function heartPath(ctx, cx, cy, r) { ctx.moveTo(cx, cy + r * 0.85); ctx.bezierCurveTo(cx - r * 1.35, cy + r * 0.05, cx - r * 0.95, cy - r * 1.05, cx, cy - r * 0.45); ctx.bezierCurveTo(cx + r * 0.95, cy - r * 1.05, cx + r * 1.35, cy + r * 0.05, cx, cy + r * 0.85); ctx.closePath(); }
+const posterLook = (s) => ({ posterColor: s.mapColor || s.color || '', posterPaper: s.paper && s.paper.toLowerCase() !== '#ffffff' ? s.paper : '', posterWater: s.waterColor || '', posterPark: s.parkColor || '', posterBuilding: s.buildingColor || '', posterRoads: s.roadColor || '',
+  posterNoBuildings: s.showBuildings === false, posterNoMinor: s.showMinor === false, posterNoWater: s.showWater === false, posterNoParks: s.showParks === false, posterRoadWidth: +s.roadWidth && +s.roadWidth !== 1 ? +s.roadWidth : '' });
 function drawPoster(ctx, L, tm, o) {
   const s = L.style, fr = o.frame; if (!fr) return;
   const A = tm.alpha ?? 1; if (A <= 0) return;
   // keep the map in the poster's colour (editing only, not while exporting)
   const sc = o.scene;
   if (sc && globalThis.__lookChanged && !globalThis.__exportingNow) {
-    if (s.autoTheme !== false && !THEMES[sc.look.theme]?.poster) { s.autoTheme = false; sc.look.theme = 'postersage'; sc.look.posterColor = s.color; queueMicrotask(() => globalThis.__lookChanged?.()); }
-    else if (s.syncMap !== false && THEMES[sc.look.theme]?.poster && s.color && sc.look.posterColor !== s.color) { sc.look.posterColor = s.color; queueMicrotask(() => globalThis.__lookChanged?.()); }
+    if (s.autoTheme !== false && !THEMES[sc.look.theme]?.poster) { s.autoTheme = false; sc.look.theme = 'postersage'; Object.assign(sc.look, posterLook(s)); queueMicrotask(() => globalThis.__lookChanged?.()); }
+    else if (s.syncMap !== false && THEMES[sc.look.theme]?.poster) {
+      const want = posterLook(s); let ch = false;
+      for (const [k2, v] of Object.entries(want)) if ((sc.look[k2] ?? '') !== (v ?? '')) { sc.look[k2] = v; ch = true; }
+      if (ch) queueMicrotask(() => globalThis.__lookChanged?.());
+    }
   }
   const D = Math.max(0.5, +L.duration || 4), tau = o.time == null || tm.edit ? 99 : o.time - (+L.start || 0), k = clamp(tau / D, 0, 1);
   const an = L.anim || 'build', u = fr.w / 1920;
@@ -142,20 +186,25 @@ function drawPoster(ctx, L, tm, o) {
   // title, second line, coordinates
   const ta = an === 'still' ? 1 : ease(seg(k, an === 'print' ? 0.55 : 0.35, an === 'print' ? 0.9 : 0.8));
   const ts = pg.w * 0.085 * clamp(+s.titleSize || 1, 0.3, 3), font = s.font || 'Jost', sp = clamp(+(s.spacing ?? 0.28), 0, 1);
-  const ty = pg.y + pg.h * (shape === 'circle' ? 0.87 : 0.83);
-  ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  const spaced = (txt, size, weight, y, spacing, a) => {
-    if (!txt || a <= 0) return; ctx.save(); ctx.globalAlpha *= a; ctx.font = `${weight} ${size}px "${font}", Jost, Montserrat, sans-serif`;
+  const tpos = s.textPos || 'bottom';
+  const ty = pg.y + pg.h * ((tpos === 'top' ? 0.14 : tpos === 'middle' ? 0.52 : shape === 'circle' ? 0.87 : 0.83) + (+s.textY || 0));
+  if (s.textBand) { ctx.save(); ctx.globalAlpha *= 0.88 * ta; ctx.fillStyle = paper; ctx.fillRect(pg.x, ty - ts * 1.15, pg.w, ts * 2.25); ctx.restore(); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  const spaced = (txt, size, weight, y, spacing, a, color) => {
+    if (!txt || a <= 0) return; ctx.save(); ctx.globalAlpha *= a; ctx.fillStyle = color || col; ctx.font = `${weight} ${size}px "${font}", Jost, Montserrat, sans-serif`;
     try { ctx.letterSpacing = `${size * spacing}px`; } catch { /* */ }
     ctx.fillText(txt, cx + size * spacing / 2, y); ctx.restore();
   };
-  spaced(String(s.title || ''), ts, 600, ty, sp + (1 - ta) * 0.5, ta);
+  if (s.showTitle !== false) spaced(String(s.title || ''), ts, +s.titleWeight || 600, ty, sp + (1 - ta) * 0.5, ta, s.titleColor);
   const ta2 = an === 'still' ? 1 : ease(seg(k, an === 'print' ? 0.7 : 0.55, 1));
   const sub = String(s.sub || '');
-  if (sub) { const ss = ts * 0.3; spaced(`—  ${sub}  —`, ss, 500, ty + ts * 0.62, 0.3, ta2); }
+  const y0 = s.showTitle === false ? ty - ts * 0.6 : ty;
+  const showSub = sub && s.showSub !== false, ss = ts * 0.3 * clamp(+s.subSize || 1, 0.3, 3);
+  if (showSub) spaced(s.dashes === false ? sub : `—  ${sub}  —`, ss, 500, y0 + ts * 0.3 + ss * 1.1, 0.3, ta2, s.subColor);
   const c0 = L.geom?.coordinates;
   const coords = s.coords || (c0 ? `${dms(c0[0], 'E', 'W')}  ${dms(c0[1], 'N', 'S')}` : '');
-  spaced(coords, ts * 0.28, 500, ty + ts * (sub ? 1.12 : 0.62), 0.36, ta2);
+  const cs = ts * 0.28 * clamp(+s.coordsSize || 1, 0.3, 3);
+  if (s.showCoords !== false) spaced(coords, cs, 500, y0 + ts * 0.3 + (showSub ? ss * 1.65 : 0) + cs * 1.2, 0.36, ta2, s.coordsColor);
   ctx.restore();
   // the frame (and how it closes in when printing)
   if (s.page !== 'fill' && s.frame && s.frame !== 'none') {
