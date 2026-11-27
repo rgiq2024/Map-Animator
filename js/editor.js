@@ -4335,7 +4335,7 @@ export function createEditor() {
     $('#show-credits').checked = !!project.credits;
     $('#resolution').value = String(project.resolution);
     $('#fps').value = String(project.fps);
-    { const ea = { sfx: false, music: false, tracks: false, ...(project.exportAudio || {}) }; for (const k of ['sfx', 'music', 'tracks']) { const el = $(`#exp-${k}`); if (el) el.checked = ea[k] === true; } }
+    { const ea = { sfx: false, music: false, tracks: false, ...(project.exportSound || {}) }; for (const k of ['sfx', 'music', 'tracks']) { const el = $(`#exp-${k}`); if (el) el.checked = ea[k] === true; } }
     $('#join').innerHTML = Object.entries(TRANSITIONS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
     $('#join').value = sc.transition || 'cut';
     $('#join-secs').value = String(sc.transitionSeconds || 0.8);
@@ -4630,7 +4630,7 @@ export function createEditor() {
   $('#resolution').addEventListener('change', (e) => setResolution(e.target.value));
   $('#resolution-top').addEventListener('change', (e) => setResolution(e.target.value));
   $('#fps').addEventListener('change', (e) => { project.fps = +e.target.value; updateEstimate(); save(); });
-  for (const k of ['sfx', 'music', 'tracks']) $(`#exp-${k}`)?.addEventListener('change', (e) => { project.exportAudio = { sfx: false, music: false, tracks: false, ...(project.exportAudio || {}), [k]: e.target.checked }; save(); });
+  for (const k of ['sfx', 'music', 'tracks']) $(`#exp-${k}`)?.addEventListener('change', (e) => { project.exportSound = { sfx: false, music: false, tracks: false, ...(project.exportSound || {}), [k]: e.target.checked }; save(); });
   $('#join').addEventListener('change', (e) => { scene().transition = e.target.value; renderExportSettings(); save(); });
   $('#play-preview').onclick = () => { time = 0; setViewMode('play'); setPlaying(true); };
 
@@ -4726,7 +4726,7 @@ export function createEditor() {
     playing = p;
     document.body.classList.toggle('is-playing', p);
     if (!p) pauseAllVideos();
-    if (p) { playStartNow = performance.now(); playStartTime = time; playStartOut = outOf(time); playFrom(project, sceneOffset() + playStartOut, tl?.state.rate || 1, soundEvents(), playAll ? Infinity : sceneOffset() + model.duration).catch(() => {}); }
+    if (p) { playStartNow = performance.now(); playStartTime = time; playStartOut = outOf(time); if (previewSound()) playFrom(project, sceneOffset() + playStartOut, tl?.state.rate || 1, soundEvents(), playAll ? Infinity : sceneOffset() + model.duration).catch(() => {}); }
     else if (was && !keepAudio) stopPlayback();
     if (!p && !keepAudio && playAll) endPlayAll();
   }
@@ -4848,7 +4848,7 @@ export function createEditor() {
         if (tl.state.loop) { setPlaying(false); playAllScenes(); return; }
         o = model.duration; setPlaying(false);
       } else if (o >= model.duration) {
-        if (tl.state.loop) { o = 0; playStartOut = 0; playStartTime = model.trimIn; playStartNow = now; playFrom(project, sceneOffset(), tl.state.rate, soundEvents(), sceneOffset() + model.duration).catch(() => {}); }
+        if (tl.state.loop) { o = 0; playStartOut = 0; playStartTime = model.trimIn; playStartNow = now; if (previewSound()) playFrom(project, sceneOffset(), tl.state.rate, soundEvents(), sceneOffset() + model.duration).catch(() => {}); }
         else { o = model.duration; setPlaying(false); }
       }
       time = model.srcTime ? model.srcTime(o) : model.trimIn + o;
@@ -5114,6 +5114,10 @@ export function createEditor() {
   $('#new-scene').onclick = () => addScene();
   // briefing projects: add a scene in a chosen briefing layout (same text, same look)
   $('#new-brief-scene')?.addEventListener('change', (e) => { const v = e.target.value; e.target.value = ''; if (v) addScene(v); });
+  // preview sound: off unless switched on (remembered in this browser)
+  function previewSound() { try { return localStorage.getItem('ma.previewSound') === '1'; } catch { return false; } }
+  { const b = $('#tl-sound'); if (b) { b.setAttribute('aria-pressed', String(previewSound()));
+    b.addEventListener('click', () => { const on = !previewSound(); try { localStorage.setItem('ma.previewSound', on ? '1' : '0'); } catch { /* */ } b.setAttribute('aria-pressed', String(on)); if (!on) stopPlayback(); else if (viewMode === 'play') { stopPlayback(); playFrom(project, sceneOffset() + outOf(time), tl?.state.rate || 1, soundEvents(), sceneOffset() + model.duration).catch(() => {}); } toast(on ? 'Preview sound on' : 'Preview sound off — exports are silent unless you switch sound on in Export', 3200); }); } }
   function addScene(briefLayout = null) {
     const last = project.scenes.at(-1);
     const sc = newScene(`Scene ${project.scenes.length + 1}`, last.look);
@@ -5311,7 +5315,7 @@ export function createEditor() {
         mapFilter: (sc, tt) => mapFilterAt(sc, tt),
         background: spaceBg,
         mixAudio: (() => {
-          const ea = { sfx: false, music: false, tracks: false, ...(project.exportAudio || {}) };
+          const ea = { sfx: false, music: false, tracks: false, ...(project.exportSound || {}) };
           const P = { ...project, audio: ea.tracks ? project.audio : [], sound: { ...(project.sound || {}), ...(ea.music ? {} : { music: 'none' }) } };
           const hasT = (P.audio || []).some((t) => !t.muted), hasM = ea.music && hasSound(P) && project.sound?.music && project.sound.music !== 'none';
           if (!hasT && !hasM && !(ea.sfx && hasSound(P))) return null;

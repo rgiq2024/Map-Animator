@@ -1292,3 +1292,5 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 .ls-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; }
 .ls-opts label { display: flex; align-items: center; gap: 4px; }
 .ls-opts input[type=range] { width: 70px; }
+
+#tl-sound .snd-on { display: none; } #tl-sound[aria-pressed="true"] .snd-on { display: inline; } #tl-sound[aria-pressed="true"] .snd-off { display: none; } #tl-sound[aria-pressed="true"] { color: var(--accent); }
