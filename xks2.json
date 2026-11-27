@@ -1,0 +1,529 @@
+{
+ "ok": true,
+ "v": {
+  "yarao_s2": {
+   "bbox": [
+    93.23171132775963,
+    28.681647539204512,
+    93.25628867224037,
+    28.703352460795486
+   ],
+   "frames": [
+    {
+     "day": "2021-12-02",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 0,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-0-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-01-31",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 15,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-1-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-03-07",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 10,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-2-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-04-28",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-3-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-07-07",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-4-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-08-11",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 3,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-5-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-10-30",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 6,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-6-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-11-19",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 0,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-7-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-12-12",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 0,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-8-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-01-08",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 2,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-9-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-02-17",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 4,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-10-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-04-18",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 7,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-11-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-05-23",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 6,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-12-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-09-05",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-13-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-10-13",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 29,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-14-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-11-14",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-15-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-12-22",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-16-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2024-01-13",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 573,
+     "h": 577,
+     "img_b64": "e2e/xks2-v-yarao_s2-frames-17-img.jpg",
+     "img_ext": "jpg"
+    }
+   ]
+  },
+  "zhuang_s2": {
+   "bbox": [
+    93.35921560838774,
+    28.645147539204512,
+    93.38378439161225,
+    28.666852460795486
+   ],
+   "frames": [
+    {
+     "day": "2022-07-07",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 3,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-0-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-08-11",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-1-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-10-30",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-2-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-11-19",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-3-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2022-12-12",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-4-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-01-08",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-5-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-02-17",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-6-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-04-18",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 4,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-7-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-05-23",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 5,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-8-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-09-05",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 2,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-9-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-10-13",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 0,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-10-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-11-19",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-11-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2023-12-22",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-12-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2024-01-13",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 1,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-13-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2024-02-10",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 2,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-14-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2024-03-11",
+     "release": "",
+     "sensor": "Sentinel-2",
+     "cloud": 2,
+     "include": true,
+     "w": 572,
+     "h": 576,
+     "img_b64": "e2e/xks2-v-zhuang_s2-frames-15-img.jpg",
+     "img_ext": "jpg"
+    }
+   ]
+  },
+  "zhuang_wb": {
+   "bbox": [
+    93.36331040559183,
+    28.648765026136342,
+    93.37968959440816,
+    28.663234973863656
+   ],
+   "frames": [
+    {
+     "day": "2018-11-30",
+     "release": "2024-09-19",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-zhuang_wb-frames-0-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2018-11-30",
+     "release": "2023-08-31",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-zhuang_wb-frames-1-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2018-11-30",
+     "release": "2022-09-21",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-zhuang_wb-frames-2-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2018-11-30",
+     "release": "2021-10-13",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-zhuang_wb-frames-3-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2018-11-30",
+     "release": "2021-07-21",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-zhuang_wb-frames-4-img.jpg",
+     "img_ext": "jpg"
+    }
+   ]
+  },
+  "yarao_wb": {
+   "bbox": [
+    93.23580755183976,
+    28.685265026136342,
+    93.25219244816024,
+    28.699734973863656
+   ],
+   "frames": [
+    {
+     "day": "2017-11-18",
+     "release": "2024-09-19",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-yarao_wb-frames-0-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2017-11-18",
+     "release": "2023-08-31",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-yarao_wb-frames-1-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2017-11-18",
+     "release": "2022-09-21",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-yarao_wb-frames-2-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2017-11-18",
+     "release": "2021-10-13",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-yarao_wb-frames-3-img.jpg",
+     "img_ext": "jpg"
+    },
+    {
+     "day": "2017-11-18",
+     "release": "2021-07-21",
+     "sensor": "Maxar",
+     "cloud": 0,
+     "include": true,
+     "w": 993,
+     "h": 1000,
+     "img_b64": "e2e/xks2-v-yarao_wb-frames-4-img.jpg",
+     "img_ext": "jpg"
+    }
+   ]
+  }
+ }
+}
