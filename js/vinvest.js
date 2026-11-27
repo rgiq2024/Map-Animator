@@ -13,6 +13,7 @@ export const VI_KINDS = {
   vitile: { name: 'Image tile on the map', icon: '🖼', geom: 'point', desc: 'A satellite image laid on the map at its real size, with an “Area 1” marker and leader line — for showing where each image was taken' },
   vibox: { name: 'Box callout', icon: '⬜', geom: 'point', desc: 'A square drawn around a feature with a label above it (“Bridge”)' },
   vioutline: { name: 'Site outline', icon: '⬡', geom: 'polygon', desc: 'An outline that draws itself around a site, with a boxed label in the corner (“Imam Khomeini Space Centre”)' },
+  vijourney: { name: 'Fly-over: city → pan → reveal the site', icon: '🛩', geom: 'point', desc: 'Starts on a city with its black label, pans across the land to the site, then zooms in while an outline draws around it with a boxed label — click the site on the map' },
   vilabel: { name: 'Black place label', icon: '🏷', geom: 'point', desc: 'A bold white-on-black place label (“TEHRAN”) with a small pointer' },
 };
 export const VI_ANIMS = {
@@ -20,14 +21,16 @@ export const VI_ANIMS = {
   vitile: { pop: 'Drops onto the map', fade: 'Fade in', none: 'No animation' },
   vibox: { draw: 'Draws itself', pop: 'Pops in', fade: 'Fade in' },
   vioutline: { draw: 'Draws itself', fade: 'Fade in' },
+  vijourney: { journey: 'City → pan → zoom and reveal' },
   vilabel: { pop: 'Pops in', fade: 'Fade in', type: 'Types in' },
 };
-export const VI_DUR = { viframe: 6, vitile: 1, vibox: 1.2, vioutline: 2.2, vilabel: 0.8 };
+export const VI_DUR = { vijourney: 13, viframe: 6, vitile: 1, vibox: 1.2, vioutline: 2.2, vilabel: 0.8 };
 export const VI_DEFAULTS = {
   viframe: { layout: 'side', kicker: 'VISUAL INVESTIGATION', title: 'What satellite images show', sub: '', date: '', credit: 'Satellite images: Maxar Technologies', beforeMedia: '', afterMedia: '', beforeLabel: 'Before', afterLabel: 'After', beforeDate: '', afterDate: '', labelStyle: 'box', gap: 6, bg: '#e8e8e6', titleFont: 'Georgia', titleColor: '#ffffff', shade: 0.55, push: 0.06, focusX: 0, focusY: 0, split: 0.5, cardsBg: true, accent: '#f05a28' },
   vitile: { media: '', label: 'Area 1', widthKm: 1.2, rotate: 0, border: '#ffffff', borderW: 2, shadow: true, marker: true, markerColor: '#f05a28', leader: 34, labelSide: 'below', date: '', opacity: 1 },
   vibox: { label: 'Bridge', sizeM: 120, color: '#ffffff', width: 2.5, labelPos: 'above', fontSize: 1 },
   vioutline: { label: 'Site name', color: '#111111', width: 2.5, dash: false, fill: '', labelPos: 'corner', mono: true },
+  vijourney: { fromPlace: 'Tehran', fromLL: null, fromLabel: 'TEHRAN', siteQuery: '', siteLabel: 'Site name', cityZoom: 10.5, panZoom: 12, endZoom: 14.6, holdCity: 2, panSec: 6, zoomSec: 3, holdEnd: 2, bearing: 0, shape: 'octagon', sizeM: 900, lineColor: '#111111', lineWidth: 2.5, labelSize: 1, mono: true },
   vilabel: { text: 'TEHRAN', size: 1, bg: '#111111', color: '#ffffff', pointer: true },
 };
 const LBL = { box: 'White box, dark text', plain: 'White text (no box)', dark: 'Dark box, white text' };
@@ -57,6 +60,18 @@ export const VI_FORMS = {
   ],
   vibox: [['style.label', 'Label', 'text'], ['style.sizeM', 'Box size on the ground (m)', 'range', [5, 3000, 5]], ['style.color', 'Colour', 'color'], ['style.width', 'Line width', 'range', [0.5, 8, 0.5]], ['style.labelPos', 'Label', 'select', { above: 'Above', below: 'Below', inside: 'Inside, top' }], ['style.fontSize', 'Label size', 'range', [0.5, 2.5, 0.05]]],
   vioutline: [['style.label', 'Label', 'text'], ['style.color', 'Line colour', 'color'], ['style.width', 'Line width', 'range', [0.5, 8, 0.5]], ['style.dash', 'Dashed', 'switch'], ['style.fill', 'Fill (empty = none)', 'color'], ['style.labelPos', 'Label at', 'select', { corner: 'Top-left of the frame', site: 'Top-left of the outline', none: 'No label' }], ['style.mono', 'Typewriter (mono) label', 'switch']],
+  vijourney: [
+    ['', 'Click the site on the map (or type it below), type the city to start from, then press the button.', 'note'],
+    ['style.fromPlace', 'Start from (city, or “lat, lon”)', 'text'], ['style.fromLabel', 'City label', 'text'],
+    ['style.siteQuery', 'Site (empty = where you clicked; or a name / “lat, lon”)', 'text'], ['style.siteLabel', 'Site label (boxed, top-left)', 'text'],
+    ['', '🎬 Set up the camera (city → pan → zoom)', 'gvaction', 'viJourney'],
+    ['style.holdCity', 'Stay on the city (s)', 'range', [0, 6, 0.1]], ['style.panSec', 'Pan takes (s)', 'range', [1, 20, 0.1]], ['style.zoomSec', 'Zoom in takes (s)', 'range', [0.5, 10, 0.1]], ['style.holdEnd', 'Stay on the site (s)', 'range', [0, 8, 0.1]],
+    ['style.cityZoom', 'City zoom', 'range', [5, 16, 0.1]], ['style.panZoom', 'Pan height (zoom — higher = lower and faster)', 'range', [6, 16, 0.1]], ['style.endZoom', 'Final zoom on the site', 'range', [10, 19, 0.1]], ['style.bearing', 'Map rotation (°)', 'range', [-180, 180, 1]],
+    ['', 'After changing these, press the button again.', 'note'],
+    ['style.shape', 'Reveal outline', 'select', { octagon: 'Octagon', square: 'Square', circle: 'Circle', none: 'No outline' }], ['style.sizeM', 'Outline size (m)', 'range', [50, 10000, 10], (L) => L.style.shape !== 'none'],
+    ['style.lineColor', 'Outline colour', 'color', null, (L) => L.style.shape !== 'none'], ['style.lineWidth', 'Outline width', 'range', [0.5, 8, 0.5], (L) => L.style.shape !== 'none'],
+    ['style.labelSize', 'Label size', 'range', [0.5, 2.5, 0.05]], ['style.mono', 'Typewriter (mono) site label', 'switch'],
+  ],
   vilabel: [['style.text', 'Text', 'text'], ['style.size', 'Size', 'range', [0.5, 3, 0.05]], ['style.bg', 'Box colour', 'color'], ['style.color', 'Text colour', 'color'], ['style.pointer', 'Pointer under the box', 'switch']],
 };
 export const VI_SET = new Set(Object.keys(VI_KINDS));
@@ -248,7 +263,47 @@ function drawPlaceLabel(ctx, L, tm, o) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- fly-over: city → pan → reveal
+const jTimes = (s) => { const h = Math.max(0, +s.holdCity || 0), p = Math.max(0.5, +s.panSec || 6), z = Math.max(0.3, +s.zoomSec || 3), e = Math.max(0, +s.holdEnd || 0); return { h, p, z, e, arrive: h + p, done: h + p + z, total: h + p + z + e }; };
+function drawJourney(ctx, L, tm, o) {
+  const s = L.style; if (L.geom?.type !== 'Point') return;
+  const A = tm.alpha ?? 1; if (A <= 0) return;
+  const u = o.unit, T = jTimes(s), t = o.time == null || tm.edit ? null : o.time - (+L.start || 0);
+  const fr = o.frame || { x: 0, y: 0, w: 1920, h: 1080 };
+  // city label: on while the camera is on the city, fades out as the pan starts
+  const ca = t == null ? 1 : clamp(t / 0.5, 0, 1) * (1 - clamp((t - T.h - 0.3) / 0.8, 0, 1));
+  if (Array.isArray(s.fromLL) && s.fromLabel && ca > 0) {
+    const p = o.proj(s.fromLL), fs = 22 * u * clamp(+s.labelSize || 1, 0.4, 3);
+    ctx.save(); ctx.globalAlpha *= A * ca; ctx.font = `800 ${fs}px Inter, Helvetica, Arial, sans-serif`;
+    const txt = String(s.fromLabel).toUpperCase(), w = ctx.measureText(txt).width + fs * 0.9, h = fs * 1.55, x = p[0] - w / 2, y = p[1] - h - fs * 0.45;
+    ctx.fillStyle = '#111'; ctx.fillRect(x, y, w, h); ctx.beginPath(); ctx.moveTo(p[0] - fs * 0.35, y + h); ctx.lineTo(p[0], y + h + fs * 0.45); ctx.lineTo(p[0] + fs * 0.35, y + h); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(txt, x + fs * 0.45, y + h / 2 + fs * 0.04); ctx.restore();
+  }
+  // the reveal: outline draws around the site while the camera zooms in, then the boxed label
+  const rk = t == null ? 1 : ease(clamp((t - T.arrive - T.z * 0.35) / Math.max(0.6, T.z * 0.8), 0, 1));
+  if (rk <= 0) return;
+  const c = L.geom.coordinates, r = clamp(+s.sizeM || 900, 10, 1e5) / 2000, kx = 111.32 * Math.cos(c[1] * D2R), ky = 110.57;
+  ctx.save(); ctx.globalAlpha *= A;
+  if (s.shape !== 'none') {
+    const n = s.shape === 'circle' ? 64 : s.shape === 'square' ? 4 : 8, off = s.shape === 'square' ? Math.PI / 4 : s.shape === 'octagon' ? Math.PI / 8 : 0;
+    const rr = s.shape === 'square' ? r * Math.SQRT2 : r;
+    const pts = []; for (let i = 0; i <= n; i++) { const a = off + (i / n) * Math.PI * 2; pts.push(o.proj([c[0] + (Math.cos(a) * rr) / kx, c[1] + (Math.sin(a) * rr) / ky])); }
+    let per = 0; for (let i = 1; i < pts.length; i++) per += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    ctx.beginPath(); pts.forEach((q, i) => (i ? ctx.lineTo(...q) : ctx.moveTo(...q)));
+    ctx.strokeStyle = s.lineColor || '#111'; ctx.lineWidth = (+s.lineWidth || 2.5) * u; ctx.lineJoin = 'round'; ctx.setLineDash(rk < 1 ? [per * rk, per] : []); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const la = clamp((rk - 0.55) / 0.45, 0, 1);
+  if (s.siteLabel && la > 0) {
+    ctx.globalAlpha *= la; const fs = 16 * u * clamp(+s.labelSize || 1, 0.4, 3);
+    ctx.font = `${s.mono !== false ? '500' : '700'} ${fs}px ${s.mono !== false ? '"IBM Plex Mono", "Courier New", monospace' : 'Inter, sans-serif'}`;
+    const tw = ctx.measureText(s.siteLabel).width + fs, th = fs * 1.7, x = fr.x + 18 * u, y = fr.y + 18 * u;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fillRect(x, y, tw, th); ctx.strokeStyle = '#111'; ctx.lineWidth = 1 * u; ctx.strokeRect(x, y, tw, th);
+    ctx.fillStyle = '#111'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(s.siteLabel, x + fs / 2, y + th / 2 + u);
+  }
+  ctx.restore();
+}
 export function drawVI(ctx, L, tm, o, phase) {
+  if (L.kind === 'vijourney' && phase === 'captions') return drawJourney(ctx, L, tm, o);
   if (phase !== 'captions') return;
   if (L.kind === 'viframe') return drawFrame(ctx, L, tm, o);
   if (L.kind === 'vitile') return drawTile(ctx, L, tm, o);
@@ -257,7 +312,37 @@ export function drawVI(ctx, L, tm, o, phase) {
   if (L.kind === 'vilabel') return drawPlaceLabel(ctx, L, tm, o);
 }
 
+async function placeLL(q) {
+  const m = String(q || '').match(/^\s*(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if (m) return [+m[2], +m[1]];
+  const r = (await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=en&q=' + encodeURIComponent(q))).json())[0];
+  return r ? [+r.lon, +r.lat] : null;
+}
 export const VI_ACTIONS = {
+  /** writes the scene's camera: hold on the city, pan at a steady height to the site, zoom in, hold */
+  async viJourney(L, { scene }) {
+    const s = L.style;
+    if (s.siteQuery) { const p = await placeLL(s.siteQuery).catch(() => null); if (!p) return `“${s.siteQuery}” was not found`; L.geom = { type: 'Point', coordinates: p }; }
+    if (L.geom?.type !== 'Point') return 'Click the site on the map first';
+    const from = s.fromPlace ? await placeLL(s.fromPlace).catch(() => null) : null;
+    if (!from) return `“${s.fromPlace || ''}” was not found — type a city or “lat, lon”`;
+    s.fromLL = from;
+    const to = L.geom.coordinates, T = jTimes(s), b = +s.bearing || 0;
+    const V = (c, z) => ({ center: [+c[0].toFixed(6), +c[1].toFixed(6)], zoomRef: +(+z).toFixed(3), bearing: b, pitch: 0 });
+    const lerp = (u) => [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
+    const cz = +s.cityZoom || 10.5, pz = +s.panZoom || 12, ez = +s.endZoom || 14.6;
+    const keys = [{ t: 0, ease: 'linear', view: V(from, cz) }];
+    if (T.h > 0) keys.push({ t: T.h, ease: 'ease', view: V(from, cz) });
+    // ease into the pan height near the city, constant speed across, then arrive
+    const n = 6; for (let i = 1; i <= n; i++) { const u = i / n; keys.push({ t: +(T.h + T.p * u).toFixed(3), ease: i === n ? 'ease' : 'linear', view: V(lerp(u), i === n ? pz : pz) }); }
+    keys[keys.length - (n)].ease = 'linear';
+    keys.push({ t: +(T.done).toFixed(3), ease: 'linear', view: V(to, ez) });
+    if (T.e > 0) keys.push({ t: +(T.total).toFixed(3), ease: 'linear', view: V(to, ez + 0.15) });
+    if (scene) { scene.camera.mode = 'keyframes'; scene.camera.keys = keys; scene.sceneLength = Math.max(+scene.sceneLength || 0, T.total); }
+    L.start = 0; L.duration = T.total;
+    const km = Math.round(Math.hypot((to[0] - from[0]) * 111.32 * Math.cos(to[1] * D2R), (to[1] - from[1]) * 110.57));
+    return `Camera set: ${s.fromLabel || s.fromPlace} → pan ${km} km → zoom in on the site (${T.total.toFixed(1)} s) — press ▶`;
+  },
   /** clones this scene three times after itself with Before, After and Side-by-side layouts (this one becomes the intro) */
   viMakeSet(L) {
     if (!globalThis.__viMakeSet) return 'Open the project in the editor first';
