@@ -435,3 +435,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Home page: glossy redesign — one-line headline, launch cards, dashboard (projects, videos made, minutes, scenes, categories donut), project cards with map thumbnails / last-export frame, category chips, search and sort.
 - Home: project list can no longer be hidden by an unusual project (safe categories, fallback list); card text aligned left.
 - Editor: panning / zooming a moving-camera scene now sticks exactly — edit view shows the camera's first keyframe, the view is taken from before the drag starts, and the glide after a drag is included.
+- Every slider now shows its value beside it; click the number to type an exact value.

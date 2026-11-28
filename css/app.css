@@ -1429,3 +1429,9 @@ kbd { background: rgba(255,255,255,.06); border-color: var(--line-2); color: var
 :root[data-theme="light"] .dc-bar, :root[data-theme="light"] .dc-row:hover { background: rgba(15,23,42,.06); }
 .pc-body { text-align: left; }
 .project-card.pc-v2 { align-items: stretch; } .pc-v2 .pc-thumb, .pc-v2 .pc-body { width: 100%; box-sizing: border-box; } .pc-v2 .pc-body h3 { text-align: left; -webkit-box-pack: start; }
+/* the value beside each slider */
+output.rv { flex: none; min-width: 34px; padding: 2px 5px; border-radius: 6px; font: 600 11.5px/1.3 var(--mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); cursor: text; user-select: none; }
+output.rv:hover { color: var(--ink); border-color: var(--accent); }
+output.rv .rv-in { width: 56px; padding: 0 2px; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: right; outline: none; }
+.row:has(> output.rv) input[type=range] { width: 112px; }
+:root[data-theme="light"] output.rv { background: rgba(15,23,42,.04); border-color: rgba(15,23,42,.1); }

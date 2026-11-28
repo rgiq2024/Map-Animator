@@ -2,6 +2,7 @@
 import { defaultBrand } from './branding.js';
 import { defaultSound } from './sfx.js';
 import { createEditor, toast } from './editor.js';
+import { startRangeValues } from './rangevals.js';
 import { createHome } from './home.js';
 import { getProject, newProject, saveProject } from './store.js';
 import { openAutoVideo } from './autostory.js';
@@ -11,6 +12,7 @@ const $ = (s) => document.querySelector(s);
 let pendingOpts = {};
 
 const editor = createEditor();
+try { startRangeValues(); } catch (e) { console.warn(e); }
 const home = createHome({
   open(id, opts = {}) {
     pendingOpts = opts;
