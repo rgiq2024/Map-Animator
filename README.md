@@ -434,3 +434,4 @@ The app opens with a sign-in screen. Users and their password hashes (salted PBK
 - Visual investigations: Example “China’s dual-use border villages” (CSIS ChinaPower, May 2024) — 9 ready scenes (intro, fly-over, map of the four sites, Esri Wayback years, Sentinel-2 before/after and swipe, key numbers), added after the current scene.
 - Home page: glossy redesign — one-line headline, launch cards, dashboard (projects, videos made, minutes, scenes, categories donut), project cards with map thumbnails / last-export frame, category chips, search and sort.
 - Home: project list can no longer be hidden by an unusual project (safe categories, fallback list); card text aligned left.
+- Editor: panning / zooming a moving-camera scene now sticks exactly — edit view shows the camera's first keyframe, the view is taken from before the drag starts, and the glide after a drag is included.

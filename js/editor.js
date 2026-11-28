@@ -158,11 +158,15 @@ export function createEditor() {
     map.on('error', (e) => console.warn('map:', e?.error?.message || e));
     map.on('movestart', (e) => {
       if (e.originalEvent && viewMode === 'play' && !exporting) setViewMode('edit');
-      if ((e.originalEvent || userIntent) && !exporting && !viewBefore) viewBefore = currentView();
+      if ((e.originalEvent || userIntent) && !exporting) { userMoving = true; if (!viewBefore) viewBefore = preView || currentView(); }
+      preView = null;
     });
-    map.on('moveend', (e) => {
-      if (exporting) return;
-      if (e.originalEvent || userIntent) { userIntent = false; onUserView(); }
+    // the view just before a drag / wheel starts (movestart fires only after the first step has already moved the map)
+    for (const ev of ['pointerdown', 'wheel', 'touchstart']) map.getCanvasContainer().addEventListener(ev, () => { if (!userMoving && !exporting) preView = currentView(); }, { capture: true, passive: true });
+    map.on('moveend', () => {
+      if (exporting || !userMoving) return;
+      // wait for the drag's glide (inertia) to finish, so the view that is kept is the one you end up seeing
+      setTimeout(() => { if (!userMoving || map.isMoving()) return; userMoving = false; userIntent = false; onUserView(); }, 30);
     });
     map.on('mousedown', onMouseDown);
     map.on('mousemove', onMouseMove);
@@ -228,7 +232,7 @@ export function createEditor() {
   });
   const camOf = (v) => ({ center: v.center, zoom: zoomFor(v.zoomRef, frame.w), bearing: v.bearing || 0, pitch: +scene().camera.tilt || 0 });
 
-  let viewBefore = null;
+  let viewBefore = null, userMoving = false, preView = null;
   function onUserView() {
     const was = viewBefore; viewBefore = null;
     if (!project || viewMode !== 'edit') return;
@@ -261,6 +265,8 @@ export function createEditor() {
     let v = null;
     if (cam.mode === 'fixed') v = cam.fixed;
     else if (cam.mode === 'startEnd') v = cam.start || cam.fixed;
+    // a moving camera: show where the video really starts, so a pan / zoom here moves the path from what you see
+    else if (cam.mode === 'keyframes' && cam.keys?.length) v = [...cam.keys].sort((x, y) => x.t - y.t)[0].view || cam.fixed;
     else v = cam.fixed;
     v = v || model?.fit;
     if (v) map.jumpTo(camOf(v));
